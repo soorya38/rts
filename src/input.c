@@ -11,6 +11,7 @@
  *   Box-drag                             → multi-select
  *=============================================================*/
 #include "game.h"
+#include "ui_state.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -22,8 +23,8 @@
 #define ZOOM_MAX 2.8f
 
 /* ─── Camera ─────────────────────────────────────────────── */
-static void update_camera(GameState *gs, float dt) {
-  Camera2D *cam = &gs->camera;
+static void update_camera(GameState *gs, UIState *ui, float dt) {
+  Camera2D *cam = &ui->camera;
   Vector2 mp = GetMousePosition();
   float speed = CAM_SPEED / cam->zoom;
 
@@ -37,7 +38,7 @@ static void update_camera(GameState *gs, float dt) {
     cam->target.x += speed * dt;
 
   /* Edge scrolling (only in normal mode) */
-  if (!gs->build_mode.active && !gs->build_panel_open) {
+  if (!gs->build_mode.active && !ui->build_panel_open) {
     if (mp.x < CAM_EDGE)
       cam->target.x -= speed * dt;
     if (mp.x > SCREEN_W - CAM_EDGE)
@@ -85,35 +86,35 @@ static void update_camera(GameState *gs, float dt) {
 
 /* ─── Selection helpers ───────────────────────────────────── */
 static bool point_in_unit(Unit *u, Vector2 wp) {
-  Vector2 p = world_to_iso(u->wx, u->wy);
+  Vector2 p = to_rvec2(world_to_iso(u->wx, u->wy));
   return fabsf(p.x - wp.x) < 15 && fabsf((p.y - 10) - wp.y) < 15;
 }
 static bool rect_intersects_unit(Unit *u, float x0, float y0, float x1,
                                  float y1) {
-  Vector2 p = world_to_iso(u->wx, u->wy);
+  Vector2 p = to_rvec2(world_to_iso(u->wx, u->wy));
   return p.x >= x0 && p.x <= x1 && p.y >= y0 && p.y <= y1;
 }
-static void clear_selection(GameState *gs) {
-  for (int i = 0; i < gs->sel_count; i++)
-    gs->units[gs->sel_units[i]].selected = false;
-  gs->sel_count = 0;
-  if (gs->sel_building >= 0) {
-    gs->buildings[gs->sel_building].selected = false;
-    gs->sel_building = -1;
+static void clear_selection(GameState *gs, UIState *ui) {
+  for (int i = 0; i < ui->sel_count; i++)
+    gs->units[ui->sel_units[i]].selected = false;
+  ui->sel_count = 0;
+  if (ui->sel_building >= 0) {
+    gs->buildings[ui->sel_building].selected = false;
+    ui->sel_building = -1;
   }
 }
-static void select_unit(GameState *gs, int uid) {
-  if (gs->sel_count >= MAX_UNITS)
+static void select_unit(GameState *gs, UIState *ui, int uid) {
+  if (ui->sel_count >= MAX_UNITS)
     return;
   gs->units[uid].selected = true;
-  gs->sel_units[gs->sel_count++] = uid;
+  ui->sel_units[ui->sel_count++] = uid;
 }
 
 /* ─── World-hit testers ───────────────────────────────────── */
 static bool hit_building_iso(Building *b, Vector2 wp) {
   float bx = (float)b->tx * TILE_SIZE, by = (float)b->ty * TILE_SIZE;
   float bw = (float)b->tw * TILE_SIZE, bh = (float)b->th * TILE_SIZE;
-  Vector2 p = world_to_iso(bx + bw * 0.5f, by + bh * 0.5f);
+  Vector2 p = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh * 0.5f));
   float hit_w = (bw + bh) * 0.7f;
   float hit_h = (bw + bh) * 0.5f + 30; // Vertical extrusion
   return (wp.x >= p.x - hit_w / 2 && wp.x <= p.x + hit_w / 2 &&
@@ -192,8 +193,8 @@ static int find_friendly_dropoff_at(GameState *gs, Vector2 wp) {
 }
 
 /* ─── Issue context command to all selected units ─────────── */
-static void issue_command_at(GameState *gs, Vector2 world) {
-  Vector2 cart = iso_to_world(world.x, world.y);
+static void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
+  Vector2 cart = to_rvec2(iso_to_world(world.x, world.y));
   int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
   if (!map_in_bounds(tx, ty))
     return;
@@ -217,13 +218,13 @@ static void issue_command_at(GameState *gs, Vector2 world) {
   }
 
   /* Formation constants */
-  int width = gs->sel_count < 5 ? gs->sel_count : 5;
+  int width = ui->sel_count < 5 ? ui->sel_count : 5;
   if (width < 1)
     width = 1;
-  int height = (gs->sel_count + width - 1) / width;
+  int height = (ui->sel_count + width - 1) / width;
 
-  for (int i = 0; i < gs->sel_count; i++) {
-    Unit *u = &gs->units[gs->sel_units[i]];
+  for (int i = 0; i < ui->sel_count; i++) {
+    Unit *u = &gs->units[ui->sel_units[i]];
     if (!u->active || u->player != 0)
       continue;
 
@@ -250,7 +251,7 @@ static void issue_command_at(GameState *gs, Vector2 world) {
 }
 
 /* ─── Build ghost placement ───────────────────────────────── */
-static void update_build_mode(GameState *gs) {
+static void update_build_mode(GameState *gs, UIState *ui) {
   if (!gs->build_mode.active)
     return;
   Vector2 mp = GetMousePosition();
@@ -261,8 +262,8 @@ static void update_build_mode(GameState *gs) {
   if (mp.y < 42 || mp.y > SCREEN_H - 130)
     return;
 
-  Vector2 wp = GetScreenToWorld2D(mp, gs->camera);
-  Vector2 cart = iso_to_world(wp.x, wp.y);
+  Vector2 wp = GetScreenToWorld2D(mp, ui->camera);
+  Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
   int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
   int tw = building_tw(gs->build_mode.type),
       th = building_th(gs->build_mode.type);
@@ -279,8 +280,8 @@ static void update_build_mode(GameState *gs) {
     if (bid >= 0) {
       /* Assign SELECTED villager(s) first – that's who the player picked */
       bool any = false;
-      for (int i = 0; i < gs->sel_count; i++) {
-        Unit *u = &gs->units[gs->sel_units[i]];
+      for (int i = 0; i < ui->sel_count; i++) {
+        Unit *u = &gs->units[ui->sel_units[i]];
         if (u->active && u->player == 0 && u->type == UNIT_VILLAGER) {
           unit_give_build_order(gs, u, bid);
           any = true;
@@ -302,37 +303,37 @@ static void update_build_mode(GameState *gs) {
 }
 
 /* ─── Hotkeys ─────────────────────────────────────────────── */
-static void update_hotkeys(GameState *gs) {
+static void update_hotkeys(GameState *gs, UIState *ui) {
   /* ESC: cancel build ghost → close picker → deselect */
   if (IsKeyPressed(KEY_ESCAPE)) {
     if (gs->build_mode.active) {
       gs->build_mode.active = false;
       return;
     }
-    if (gs->build_panel_open) {
-      gs->build_panel_open = false;
+    if (ui->build_panel_open) {
+      ui->build_panel_open = false;
       return;
     }
-    clear_selection(gs);
+    clear_selection(gs, ui);
   }
   /* B: toggle build picker (need villager) */
   if (IsKeyPressed(KEY_B)) {
     bool vil = false;
-    for (int i = 0; i < gs->sel_count; i++)
-      if (gs->units[gs->sel_units[i]].type == UNIT_VILLAGER) {
+    for (int i = 0; i < ui->sel_count; i++)
+      if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) {
         vil = true;
         break;
       }
     if (vil) {
-      bool any = gs->build_panel_open || gs->build_mode.active;
-      gs->build_panel_open = any ? false : true;
+      bool any = ui->build_panel_open || gs->build_mode.active;
+      ui->build_panel_open = any ? false : true;
       gs->build_mode.active = false;
     }
   }
   /* Quick-build hotkeys → straight to ghost placement */
   bool vil = false;
-  for (int i = 0; i < gs->sel_count; i++)
-    if (gs->units[gs->sel_units[i]].type == UNIT_VILLAGER) {
+  for (int i = 0; i < ui->sel_count; i++)
+    if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) {
       vil = true;
       break;
     }
@@ -351,7 +352,7 @@ static void update_hotkeys(GameState *gs) {
     if (qt != BLD_COUNT && res_can_afford(&gs->res[0], building_cost(qt))) {
       gs->build_mode.type = qt;
       gs->build_mode.active = true;
-      gs->build_panel_open = false;
+      ui->build_panel_open = false;
       static const char *BN[BLD_COUNT] = {
           "Town Center",   "House",       "Barracks",
           "Archery Range", "Stable",      "Mill",
@@ -365,17 +366,17 @@ static void update_hotkeys(GameState *gs) {
     gs->phase = PHASE_PAUSED;
   else if (IsKeyPressed(KEY_P) && gs->phase == PHASE_PAUSED)
     gs->phase = PHASE_PLAYING;
-  if (IsKeyPressed(KEY_DELETE) && gs->sel_building >= 0) {
-    Building *b = &gs->buildings[gs->sel_building];
+  if (IsKeyPressed(KEY_DELETE) && ui->sel_building >= 0) {
+    Building *b = &gs->buildings[ui->sel_building];
     if (b->player == 0) {
       map_clear_building(gs, b->tx, b->ty, b->tw, b->th);
       b->active = false;
-      gs->sel_building = -1;
+      ui->sel_building = -1;
     }
   }
   if (IsKeyPressed(KEY_S) && IsKeyDown(KEY_LEFT_SHIFT)) {
-    for (int i = 0; i < gs->sel_count; i++) {
-      Unit *u = &gs->units[gs->sel_units[i]];
+    for (int i = 0; i < ui->sel_count; i++) {
+      Unit *u = &gs->units[ui->sel_units[i]];
       u->state = US_IDLE;
       u->path_len = 0;
     }
@@ -383,28 +384,28 @@ static void update_hotkeys(GameState *gs) {
 }
 
 /* ─── Left-click start (box-select anchor) ────────────────── */
-static void handle_left_down(GameState *gs) {
+static void handle_left_down(GameState *gs, UIState *ui) {
   Vector2 mp = GetMousePosition();
   bool over_hud =
       mp.y < 42 || mp.y > SCREEN_H - 130 ||
       (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
   if (over_hud)
     return;
-  if (gs->build_mode.active || gs->build_panel_open)
+  if (gs->build_mode.active || ui->build_panel_open)
     return;
-  gs->box_selecting = true;
-  gs->box_start = mp;
+  ui->box_selecting = true;
+  ui->box_start = mp;
 }
 
 /* ─── Left-click release (main logic) ────────────────────── */
-static void handle_left_up(GameState *gs) {
-  if (!gs->box_selecting)
+static void handle_left_up(GameState *gs, UIState *ui) {
+  if (!ui->box_selecting)
     return;
-  gs->box_selecting = false;
+  ui->box_selecting = false;
 
   Vector2 mp = GetMousePosition();
-  Vector2 ws = GetScreenToWorld2D(gs->box_start, gs->camera);
-  Vector2 we = GetScreenToWorld2D(mp, gs->camera);
+  Vector2 ws = GetScreenToWorld2D(ui->box_start, ui->camera);
+  Vector2 we = GetScreenToWorld2D(mp, ui->camera);
 
   /* HUD guard on release too */
   bool over_hud =
@@ -421,7 +422,7 @@ static void handle_left_up(GameState *gs) {
   if (is_box) {
     bool shift = IsKeyDown(KEY_LEFT_SHIFT);
     if (!shift)
-      clear_selection(gs);
+      clear_selection(gs, ui);
     float x0 = ws.x < we.x ? ws.x : we.x, x1 = ws.x > we.x ? ws.x : we.x;
     float y0 = ws.y < we.y ? ws.y : we.y, y1 = ws.y > we.y ? ws.y : we.y;
     for (int i = 0; i < MAX_UNITS; i++) {
@@ -429,7 +430,7 @@ static void handle_left_up(GameState *gs) {
       if (!u->active || u->player != 0 || u->state == US_DEAD)
         continue;
       if (rect_intersects_unit(u, x0, y0, x1, y1))
-        select_unit(gs, i);
+        select_unit(gs, ui, i);
     }
     return;
   }
@@ -441,9 +442,9 @@ static void handle_left_up(GameState *gs) {
   int dropoff = find_friendly_dropoff_at(gs, we);
 
   bool is_villager_carrying = false;
-  for (int i = 0; i < gs->sel_count; i++) {
-    if (gs->units[gs->sel_units[i]].type == UNIT_VILLAGER &&
-        gs->units[gs->sel_units[i]].carry_amt > 0) {
+  for (int i = 0; i < ui->sel_count; i++) {
+    if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER &&
+        gs->units[ui->sel_units[i]].carry_amt > 0) {
       is_villager_carrying = true;
       break;
     }
@@ -452,78 +453,78 @@ static void handle_left_up(GameState *gs) {
   if (fu >= 0) {
     /* Clicked a friendly unit → select it */
     if (!shift)
-      clear_selection(gs);
-    select_unit(gs, fu);
-    gs->sel_tile_x = -1;
-    gs->sel_tile_y = -1;
+      clear_selection(gs, ui);
+    select_unit(gs, ui, fu);
+    ui->sel_tile_x = -1;
+    ui->sel_tile_y = -1;
   } else if (is_villager_carrying && dropoff >= 0) {
-    issue_command_at(gs, we);
+    issue_command_at(gs, ui, we);
   } else if (fb >= 0 && gs->buildings[fb].complete) {
     /* Clicked a complete friendly building → select it */
-    clear_selection(gs);
-    gs->sel_building = fb;
+    clear_selection(gs, ui);
+    ui->sel_building = fb;
     gs->buildings[fb].selected = true;
-    gs->sel_tile_x = -1;
-    gs->sel_tile_y = -1;
-  } else if (gs->sel_count > 0) {
+    ui->sel_tile_x = -1;
+    ui->sel_tile_y = -1;
+  } else if (ui->sel_count > 0) {
     /* Units already selected, clicked on world → context command */
-    issue_command_at(gs, we);
+    issue_command_at(gs, ui, we);
     /* Also record the tile they were commanded to (for gather info) */
-    Vector2 cart = iso_to_world(we.x, we.y);
+    Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));
     int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
     if (map_in_bounds(tx, ty)) {
       TileType tt = gs->map[ty][tx].type;
       if (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE ||
           tt == TILE_BERRIES || tt == TILE_FARM) {
-        gs->sel_tile_x = tx;
-        gs->sel_tile_y = ty;
+        ui->sel_tile_x = tx;
+        ui->sel_tile_y = ty;
       } else {
-        gs->sel_tile_x = -1;
-        gs->sel_tile_y = -1;
+        ui->sel_tile_x = -1;
+        ui->sel_tile_y = -1;
       }
     }
   } else {
     /* Nothing selected → inspect the clicked tile */
-    Vector2 cart = iso_to_world(we.x, we.y);
+    Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));
     int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
     if (map_in_bounds(tx, ty)) {
       TileType tt = gs->map[ty][tx].type;
       if (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE ||
           tt == TILE_BERRIES || tt == TILE_FARM) {
-        gs->sel_tile_x = tx;
-        gs->sel_tile_y = ty;
+        ui->sel_tile_x = tx;
+        ui->sel_tile_y = ty;
       } else {
-        gs->sel_tile_x = -1;
-        gs->sel_tile_y = -1;
-        clear_selection(gs);
+        ui->sel_tile_x = -1;
+        ui->sel_tile_y = -1;
+        clear_selection(gs, ui);
       }
     }
   }
 }
 
 /* ─── Hover detection ─────────────────────────────────────── */
-static void update_hover(GameState *gs) {
+static void update_hover(GameState *gs, UIState *ui) {
   Vector2 mp = GetMousePosition();
   bool over_hud =
       mp.y < 42 || mp.y > SCREEN_H - 130 ||
       (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
 
-  gs->hover_unit = -1;
-  gs->hover_building = -1;
-  gs->hover_tile_x = -1;
-  gs->hover_tile_y = -1;
+  ui->hover_unit = -1;
+  ui->hover_building = -1;
+  ui->hover_tile_x = -1;
+  ui->hover_tile_y = -1;
 
   if (over_hud || gs->phase != PHASE_PLAYING)
     return;
 
-  Vector2 wp = GetScreenToWorld2D(mp, gs->camera);
+  Vector2 wp = GetScreenToWorld2D(mp, ui->camera);
 
   /* 1. Units */
   int u = find_friendly_unit_at(gs, wp);
   if (u < 0)
     u = find_enemy_unit_at(gs, wp);
   if (u >= 0) {
-    gs->hover_unit = u;
+    ui->hover_unit = u;
     return;
   }
 
@@ -532,42 +533,42 @@ static void update_hover(GameState *gs) {
   if (b < 0)
     b = find_enemy_building_at(gs, wp);
   if (b >= 0) {
-    gs->hover_building = b;
+    ui->hover_building = b;
     return;
   }
 
   /* 3. Tiles (only interested in resources for hover highlighting usually) */
-  Vector2 cart = iso_to_world(wp.x, wp.y);
+  Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
   int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
   if (map_in_bounds(tx, ty) && gs->map[ty][tx].fog[0] == FOG_VISIBLE) {
     TileType tt = gs->map[ty][tx].type;
     if (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE ||
         tt == TILE_BERRIES || tt == TILE_FARM) {
-      gs->hover_tile_x = tx;
-      gs->hover_tile_y = ty;
+      ui->hover_tile_x = tx;
+      ui->hover_tile_y = ty;
     }
   }
 }
 
 /* ─── Master input update ─────────────────────────────────── */
-void input_update(GameState *gs) {
+void input_update(GameState *gs, UIState *ui) {
   float dt = GetFrameTime();
-  update_hover(gs);
-  update_camera(gs, dt);
+  update_hover(gs, ui);
+  update_camera(gs, ui, dt);
 
   /* Build ghost takes over left-click entirely while active */
   if (gs->build_mode.active) {
-    update_build_mode(gs);
-    update_hotkeys(gs);
+    update_build_mode(gs, ui);
+    update_hotkeys(gs, ui);
     return;
   }
 
-  update_hotkeys(gs);
+  update_hotkeys(gs, ui);
 
   if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
-    handle_left_down(gs);
+    handle_left_down(gs, ui);
   if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))
-    handle_left_up(gs);
+    handle_left_up(gs, ui);
 
   /* Minimap click → pan (handled inside hud_draw) */
 

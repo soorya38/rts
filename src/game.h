@@ -5,7 +5,7 @@
  *             All shared types, constants, and function decls.
  *=============================================================*/
 
-#include "raylib.h"
+typedef struct { float x, y; } Vec2;
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -72,14 +72,14 @@ static inline float dist2f(float ax,float ay,float bx,float by){
  * Cartesian Y goes down-left
  * Scale is exactly 2:1 (width:height)
  */
-static inline Vector2 world_to_iso(float wx, float wy) {
-    return (Vector2){
+static inline Vec2 world_to_iso(float wx, float wy) {
+    return (Vec2){
         (wx - wy),
         (wx + wy) * 0.5f
     };
 }
-static inline Vector2 iso_to_world(float ix, float iy) {
-    return (Vector2){
+static inline Vec2 iso_to_world(float ix, float iy) {
+    return (Vec2){
         iy + ix * 0.5f,
         iy - ix * 0.5f
     };
@@ -239,21 +239,6 @@ typedef struct {
 
     PlayerRes  res[NUM_PLAYERS];
 
-    Camera2D   camera;
-
-    /* Selection */
-    bool       box_selecting;
-    Vector2    box_start;
-    int        sel_units[MAX_UNITS];
-    int        sel_count;
-    int        sel_building;        /* -1 = none */
-    int        sel_tile_x, sel_tile_y; /* -1 = none; last clicked resource tile */
-
-    /* Hover state */
-    int        hover_unit;          /* -1 = none */
-    int        hover_building;      /* -1 = none */
-    int        hover_tile_x, hover_tile_y; /* -1 = none */
-
 
     BuildMode  build_mode;
 
@@ -266,10 +251,6 @@ typedef struct {
     /* Alert banner */
     char       alert[64];
     float      alert_timer;
-
-    /* Menu */
-    bool       menu_start_hover;
-    bool       build_panel_open;  /* build type picker UI open */
 } GameState;
 
 /* ─── Resource cost table helper ────────────────────────────── */
@@ -331,15 +312,6 @@ int   pop_cap_from_buildings(GameState *gs,int player);
 
 /* ai.c */
 void ai_update(GameState *gs,float dt);
-
-/* input.c */
-void input_update(GameState *gs);
-
-/* renderer.c */
-void renderer_draw_world(GameState *gs);
-
-/* hud.c */
-void hud_draw(GameState *gs);
 
 /* game.c */
 void game_init(GameState *gs);

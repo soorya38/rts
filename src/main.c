@@ -5,10 +5,10 @@
 #include "raylib.h"
 #include <stdio.h>
 
+#include "ui_state.h"
+#include <stdio.h>
+
 /* Forward declarations from other modules */
-void renderer_draw_world(GameState *gs);
-void hud_draw(GameState *gs);
-void input_update(GameState *gs);
 void game_init(GameState *gs);
 void game_update(GameState *gs, float dt);
 
@@ -21,12 +21,14 @@ int main(void){
 
     /* ── Game state ── */
     GameState *gs = malloc(sizeof(GameState));
-    if (!gs) {
-        fprintf(stderr, "Failed to allocate memory for GameState\n");
+    UIState *ui = malloc(sizeof(UIState));
+    if (!gs || !ui) {
+        fprintf(stderr, "Failed to allocate memory for GameState / UIState\n");
         CloseWindow();
         return 1;
     }
     game_init(gs);
+    ui_state_init(ui);
 
     /* ── Main loop ── */
     while(!WindowShouldClose()){
@@ -34,7 +36,7 @@ int main(void){
         if(dt>0.05f) dt=0.05f;   /* cap dt to avoid spiral of death */
 
         /* Input */
-        input_update(gs);
+        input_update(gs, ui);
 
         /* Update */
         game_update(gs,dt);
@@ -45,13 +47,13 @@ int main(void){
 
         if(gs->phase==PHASE_PLAYING || gs->phase==PHASE_PAUSED ||
            gs->phase==PHASE_VICTORY || gs->phase==PHASE_DEFEAT){
-            BeginMode2D(gs->camera);
-                renderer_draw_world(gs);
+            BeginMode2D(ui->camera);
+                renderer_draw_world(gs, ui);
             EndMode2D();
         }
 
         /* HUD / overlay (screen-space) */
-        hud_draw(gs);
+        hud_draw(gs, ui);
 
         /* FPS counter (debug) */
         DrawFPS(SCREEN_W-70,4);
@@ -61,5 +63,6 @@ int main(void){
 
     CloseWindow();
     free(gs);
+    free(ui);
     return 0;
 }

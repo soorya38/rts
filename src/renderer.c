@@ -2,6 +2,7 @@
  * renderer.c  –  All world-space drawing (map, units, buildings)
  *=============================================================*/
 #include "game.h"
+#include "ui_state.h"
 #include <stdio.h>
 
 /* ─── Color palette ───────────────────────────────────────── */
@@ -47,19 +48,19 @@ static Color player_color_alpha(int p, unsigned char a){
 /* ─── Isometric Helpers ──────────────────────────────────── */
 
 static void draw_iso_quad(float bx, float by, float bw, float bh, Color c) {
-    Vector2 p1 = world_to_iso(bx, by);
-    Vector2 p2 = world_to_iso(bx + bw, by);
-    Vector2 p3 = world_to_iso(bx + bw, by + bh);
-    Vector2 p4 = world_to_iso(bx, by + bh);
+    Vector2 p1 = to_rvec2(world_to_iso(bx, by));
+    Vector2 p2 = to_rvec2(world_to_iso(bx + bw, by));
+    Vector2 p3 = to_rvec2(world_to_iso(bx + bw, by + bh));
+    Vector2 p4 = to_rvec2(world_to_iso(bx, by + bh));
     DrawTriangle(p1, p4, p2, c);
     DrawTriangle(p4, p3, p2, c);
 }
 
 static void draw_iso_box(float bx, float by, float bw, float bh, float h, Color top, Color left, Color right) {
-    Vector2 p1 = world_to_iso(bx, by);
-    Vector2 p2 = world_to_iso(bx + bw, by);
-    Vector2 p3 = world_to_iso(bx + bw, by + bh);
-    Vector2 p4 = world_to_iso(bx, by + bh);
+    Vector2 p1 = to_rvec2(world_to_iso(bx, by));
+    Vector2 p2 = to_rvec2(world_to_iso(bx + bw, by));
+    Vector2 p3 = to_rvec2(world_to_iso(bx + bw, by + bh));
+    Vector2 p4 = to_rvec2(world_to_iso(bx, by + bh));
     
     Vector2 t1 = {p1.x, p1.y - h};
     Vector2 t2 = {p2.x, p2.y - h};
@@ -80,12 +81,12 @@ static void draw_iso_box(float bx, float by, float bw, float bh, float h, Color 
 
 static const Color GRASS_COLS[4]={C_GRASS1,C_GRASS2,C_GRASS3,C_GRASS4};
 
-static void draw_tile(GameState *gs, int x, int y){
+static void draw_tile(GameState *gs, UIState *ui, int x, int y){
     Tile *t=&gs->map[y][x];
     float px=(float)(x*TILE_SIZE), py=(float)(y*TILE_SIZE);
     float s=TILE_SIZE;
 
-    Vector2 cp = world_to_iso(px + s * 0.5f, py + s * 0.5f);
+    Vector2 cp = to_rvec2(world_to_iso(px + s * 0.5f, py + s * 0.5f));
 
     switch(t->type){
         case TILE_GRASS:
@@ -148,11 +149,11 @@ static void draw_tile(GameState *gs, int x, int y){
     }
 
     /* Hover highlight */
-    if (gs->hover_tile_x == x && gs->hover_tile_y == y) {
-        Vector2 p1 = world_to_iso(px, py);
-        Vector2 p2 = world_to_iso(px + s, py);
-        Vector2 p3 = world_to_iso(px + s, py + s);
-        Vector2 p4 = world_to_iso(px, py + s);
+    if (ui->hover_tile_x == x && ui->hover_tile_y == y) {
+        Vector2 p1 = to_rvec2(world_to_iso(px, py));
+        Vector2 p2 = to_rvec2(world_to_iso(px + s, py));
+        Vector2 p3 = to_rvec2(world_to_iso(px + s, py + s));
+        Vector2 p4 = to_rvec2(world_to_iso(px, py + s));
         DrawLineEx(p1, p2, 2, C_HOVER);
         DrawLineEx(p2, p3, 2, C_HOVER);
         DrawLineEx(p3, p4, 2, C_HOVER);
@@ -164,7 +165,7 @@ static void draw_tile(GameState *gs, int x, int y){
 
 static void draw_hp_bar(float wx, float wy, float w, int hp, int max_hp, float above){
     if(hp==max_hp) return;
-    Vector2 p = world_to_iso(wx, wy);
+    Vector2 p = to_rvec2(world_to_iso(wx, wy));
     float bw=w, bh=4;
     float bx=p.x-bw*0.5f, by=p.y-above;
     DrawRectangleRec((Rectangle){bx,by,bw,bh},C_HP_BG);
@@ -178,19 +179,19 @@ static void draw_construction(float px,float py,float w,float h,float prog,Color
 }
 
 static void draw_shadow(float wx, float wy, float rw, float rh) {
-    Vector2 p = world_to_iso(wx, wy);
+    Vector2 p = to_rvec2(world_to_iso(wx, wy));
     DrawEllipse((int)p.x, (int)p.y, (int)rw, (int)(rh * 0.5f), (Color){0, 0, 0, 60});
 }
 
 static void draw_flag(float fx, float fy, int player){
-    Vector2 p = world_to_iso(fx, fy);
+    Vector2 p = to_rvec2(world_to_iso(fx, fy));
     DrawLineEx((Vector2){p.x,p.y},(Vector2){p.x,p.y-15},2,(Color){80,60,40,255});
     Color fc=player_color(player);
     DrawTriangle((Vector2){p.x,p.y-15},(Vector2){p.x+10,p.y-10},(Vector2){p.x,p.y-5},fc);
 }
 
 static void draw_smoke(float bx, float by, float time, int seed) {
-    Vector2 p = world_to_iso(bx, by);
+    Vector2 p = to_rvec2(world_to_iso(bx, by));
     for (int i = 0; i < 3; i++) {
         float f = fmodf(time * 0.7f + (float)i * 0.33f + (float)seed * 0.1f, 1.0f);
         float ox = sinf(time * 2.0f + (float)i + (float)seed) * 5.0f;
@@ -201,7 +202,7 @@ static void draw_smoke(float bx, float by, float time, int seed) {
     }
 }
 
-static void draw_building(GameState *gs, Building *b){
+static void draw_building(GameState *gs, UIState *ui, Building *b){
     float px=(float)(b->tx*TILE_SIZE), py=(float)(b->ty*TILE_SIZE);
     float w=(float)(b->tw*TILE_SIZE), h=(float)(b->th*TILE_SIZE);
     Color mc=player_color(b->player);
@@ -275,10 +276,10 @@ static void draw_building(GameState *gs, Building *b){
 
     /* Selection box */
     if(b->selected && b->player==0){
-        Vector2 p1 = world_to_iso(px - 2, py - 2);
-        Vector2 p2 = world_to_iso(px + w + 2, py - 2);
-        Vector2 p3 = world_to_iso(px + w + 2, py + h + 2);
-        Vector2 p4 = world_to_iso(px - 2, py + h + 2);
+        Vector2 p1 = to_rvec2(world_to_iso(px - 2, py - 2));
+        Vector2 p2 = to_rvec2(world_to_iso(px + w + 2, py - 2));
+        Vector2 p3 = to_rvec2(world_to_iso(px + w + 2, py + h + 2));
+        Vector2 p4 = to_rvec2(world_to_iso(px - 2, py + h + 2));
         DrawLineEx(p1, p2, 2, C_SEL);
         DrawLineEx(p2, p3, 2, C_SEL);
         DrawLineEx(p3, p4, 2, C_SEL);
@@ -287,12 +288,12 @@ static void draw_building(GameState *gs, Building *b){
 
     /* Hover box */
     bool hovered = false;
-    for (int i = 0; i < MAX_BUILDINGS; i++) if (&gs->buildings[i] == b && gs->hover_building == i) hovered = true;
+    for (int i = 0; i < MAX_BUILDINGS; i++) if (&gs->buildings[i] == b && ui->hover_building == i) hovered = true;
     if (hovered) {
-        Vector2 p1 = world_to_iso(px, py);
-        Vector2 p2 = world_to_iso(px + w, py);
-        Vector2 p3 = world_to_iso(px + w, py + h);
-        Vector2 p4 = world_to_iso(px, py + h);
+        Vector2 p1 = to_rvec2(world_to_iso(px, py));
+        Vector2 p2 = to_rvec2(world_to_iso(px + w, py));
+        Vector2 p3 = to_rvec2(world_to_iso(px + w, py + h));
+        Vector2 p4 = to_rvec2(world_to_iso(px, py + h));
         DrawLineEx(p1, p2, 1.5f, C_HOVER);
         DrawLineEx(p2, p3, 1.5f, C_HOVER);
         DrawLineEx(p3, p4, 1.5f, C_HOVER);
@@ -304,7 +305,7 @@ static void draw_building(GameState *gs, Building *b){
     /* Production progress arc */
     if(b->queue_len>0){
         float progress=1.0f-(b->train_timer/building_train_time(b->queue[0]));
-        Vector2 p = world_to_iso(px + w*0.5f, py + h*0.5f);
+        Vector2 p = to_rvec2(world_to_iso(px + w*0.5f, py + h*0.5f));
         DrawRectangleRec((Rectangle){p.x-w*0.4f, p.y-40, w*0.8f, 4}, C_HP_BG);
         DrawRectangleRec((Rectangle){p.x-w*0.4f, p.y-40, w*0.8f*progress, 4}, C_HP_GREEN);
     }
@@ -313,10 +314,10 @@ static void draw_building(GameState *gs, Building *b){
 
 /* ─── Unit rendering ─────────────────────────────────────── */
 
-static void draw_unit(GameState *gs, Unit *u, float t){
+static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
     if(u->state==US_DEAD) return;
     float wx=u->wx, wy=u->wy;
-    Vector2 p = world_to_iso(wx, wy);
+    Vector2 p = to_rvec2(world_to_iso(wx, wy));
 
     float alpha = u->state==US_DYING ? clampf(u->death_timer/0.8f,0,1)*255 : 255;
     Color mc = player_color_alpha(u->player,(unsigned char)alpha);
@@ -333,7 +334,7 @@ static void draw_unit(GameState *gs, Unit *u, float t){
 
     /* Hover circle */
     bool u_hovered = false;
-    for (int i = 0; i < MAX_UNITS; i++) if (&gs->units[i] == u && gs->hover_unit == i) u_hovered = true;
+    for (int i = 0; i < MAX_UNITS; i++) if (&gs->units[i] == u && ui->hover_unit == i) u_hovered = true;
     if (u_hovered && !u->selected) {
         DrawEllipseLines((int)p.x, (int)p.y, 11, 6, C_HOVER);
     }
@@ -428,10 +429,10 @@ static void draw_fog(GameState *gs, int x, int y){
 
 /* ─── Selection box ───────────────────────────────────────── */
 
-static void draw_selection_box(GameState *gs){
-    if(!gs->box_selecting) return;
-    Vector2 a=GetScreenToWorld2D(gs->box_start,gs->camera);
-    Vector2 b=GetScreenToWorld2D(GetMousePosition(),gs->camera);
+static void draw_selection_box(GameState *gs, UIState *ui){
+    if(!ui->box_selecting) return;
+    Vector2 a=GetScreenToWorld2D(ui->box_start,ui->camera);
+    Vector2 b=GetScreenToWorld2D(GetMousePosition(),ui->camera);
     float x=a.x<b.x?a.x:b.x, y=a.y<b.y?a.y:b.y;
     float w=fabsf(b.x-a.x), h=fabsf(b.y-a.y);
     DrawRectangleRec((Rectangle){x,y,w,h},CLITERAL(Color){80,220,100,25});
@@ -455,11 +456,11 @@ static void draw_build_ghost(GameState *gs){
 /* ─── Attack-move cursor indicator ──────────────────────────── */
 
 /* ─── Master render ───────────────────────────────────────── */
-void renderer_draw_world(GameState *gs){
+void renderer_draw_world(GameState *gs, UIState *ui){
     /* 1. Tiles */
     for(int y=0;y<MAP_H;y++) {
         for(int x=0;x<MAP_W;x++){
-            if(gs->map[y][x].fog[0]!=FOG_HIDDEN) draw_tile(gs,x,y);
+            if(gs->map[y][x].fog[0]!=FOG_HIDDEN) draw_tile(gs, ui, x, y);
         }
     }
 
@@ -469,7 +470,7 @@ void renderer_draw_world(GameState *gs){
         if(!b->active) continue;
         int bx=b->tx+b->tw/2, by=b->ty+b->th/2;
         if(gs->map[clampi(by,0,MAP_H-1)][clampi(bx,0,MAP_W-1)].fog[0]==FOG_HIDDEN) continue;
-        draw_building(gs, b);
+        draw_building(gs, ui, b);
     }
 
     /* 3. Units */
@@ -482,7 +483,7 @@ void renderer_draw_world(GameState *gs){
         /* Hide enemy units in fog */
         if(u->player==1 && fs!=FOG_VISIBLE) continue;
 
-        draw_unit(gs, u, gs->game_time);
+        draw_unit(gs, ui, u, gs->game_time);
     }
 
     /* 4. Fog overlay */
@@ -494,5 +495,5 @@ void renderer_draw_world(GameState *gs){
     draw_build_ghost(gs);
 
     /* 6. Selection box */
-    draw_selection_box(gs);
+    draw_selection_box(gs, ui);
 }

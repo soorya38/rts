@@ -2,6 +2,7 @@
  * hud.c  –  HUD overlay: resources, age, unit info, minimap
  *=============================================================*/
 #include "game.h"
+#include "ui_state.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -72,7 +73,7 @@ static void draw_tooltip(const char *text, int x, int y) {
 }
 
 /* ─── Top resource bar ────────────────────────────────────── */
-static void draw_top_bar(GameState *gs){
+static void draw_top_bar(GameState *gs, UIState *ui){
     PlayerRes *pr=&gs->res[0];
     DrawRectangle(0,0,SCREEN_W,HUD_TOP_H,C_HUD_BG);
     DrawRectangle(0,HUD_TOP_H-1,SCREEN_W,2,C_HUD_LINE);
@@ -168,7 +169,7 @@ static void draw_top_bar(GameState *gs){
 }
 
 /* ─── Bottom panel ────────────────────────────────────────── */
-static void draw_bottom_panel(GameState *gs){
+static void draw_bottom_panel(GameState *gs, UIState *ui){
     DrawRectangle(0,HUD_BOT_Y,SCREEN_W-MINI_SIZE-16,HUD_BOT_H,C_HUD_BG);
     DrawRectangle(0,HUD_BOT_Y,SCREEN_W-MINI_SIZE-16,2,C_HUD_LINE);
 
@@ -176,9 +177,9 @@ static void draw_bottom_panel(GameState *gs){
     char buf[64];
 
     /* ── Selected Building ── */
-    if(gs->sel_building>=0){
-        Building *b=&gs->buildings[gs->sel_building];
-        if(!b->active){gs->sel_building=-1;return;}
+    if(ui->sel_building>=0){
+        Building *b=&gs->buildings[ui->sel_building];
+        if(!b->active){ui->sel_building=-1;return;}
 
         static const char *BLD_NAMES[BLD_COUNT]={
             "Town Center","House","Barracks","Archery Range","Stable",
@@ -260,11 +261,11 @@ static void draw_bottom_panel(GameState *gs){
     }
 
     /* ── Selected Units ── */
-    if(gs->sel_count==0){
+    if(ui->sel_count==0){
         /* ── Resource tile inspection ── */
-        if(gs->sel_building<0 && gs->sel_tile_x>=0 && gs->sel_tile_y>=0 &&
-           map_in_bounds(gs->sel_tile_x,gs->sel_tile_y)){
-            Tile *t=&gs->map[gs->sel_tile_y][gs->sel_tile_x];
+        if(ui->sel_building<0 && ui->sel_tile_x>=0 && ui->sel_tile_y>=0 &&
+           map_in_bounds(ui->sel_tile_x,ui->sel_tile_y)){
+            Tile *t=&gs->map[ui->sel_tile_y][ui->sel_tile_x];
             if(t->type==TILE_FOREST||t->type==TILE_GOLD||
                t->type==TILE_STONE||t->type==TILE_BERRIES||t->type==TILE_FARM){
                 static const char *TILE_LABEL[]={"Grass","Water","Forest","Gold Deposit",
@@ -310,8 +311,8 @@ static void draw_bottom_panel(GameState *gs){
         return;
     }
 
-    if(gs->sel_count==1){
-        Unit *u=&gs->units[gs->sel_units[0]];
+    if(ui->sel_count==1){
+        Unit *u=&gs->units[ui->sel_units[0]];
         static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
         static const char *ST[]={"Idle","Moving","Gathering","Returning","Building","Attacking","Dying","Dead"};
         DrawText(UN[u->type],12,HUD_BOT_Y+8,16,CLITERAL(Color){220,200,155,255});
@@ -331,11 +332,11 @@ static void draw_bottom_panel(GameState *gs){
         Color mc={30,110,220,255}; if(u->player==1) mc=(Color){210,50,40,255};
         DrawRectangle(panel_w-42,HUD_BOT_Y+35,12,14,mc);
     } else {
-        snprintf(buf,sizeof(buf),"%d units selected",gs->sel_count);
+        snprintf(buf,sizeof(buf),"%d units selected",ui->sel_count);
         DrawText(buf,12,HUD_BOT_Y+8,14,C_HUD_TXT);
         /* Show small color squares per unit */
-        for(int i=0;i<gs->sel_count&&i<12;i++){
-            Unit *u=&gs->units[gs->sel_units[i]];
+        for(int i=0;i<ui->sel_count&&i<12;i++){
+            Unit *u=&gs->units[ui->sel_units[i]];
             Color mc=(u->player==0)?CLITERAL(Color){30,110,220,255}:CLITERAL(Color){210,50,40,255};
             DrawRectangle(12+i*22,HUD_BOT_Y+30,18,18,mc);
             DrawRectangleLinesEx((Rectangle){12.0f+i*22,HUD_BOT_Y+30.0f,18,18},1,C_HUD_LINE);
@@ -347,18 +348,18 @@ static void draw_bottom_panel(GameState *gs){
         }
     }
     /* Build menu button (bottom-left) */
-    if(gs->sel_count>=1){
+    if(ui->sel_count>=1){
         bool vil=false;
-        for(int i=0;i<gs->sel_count;i++)
-            if(gs->units[gs->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
+        for(int i=0;i<ui->sel_count;i++)
+            if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
         if(vil){
-            bool menu_active = gs->build_panel_open || gs->build_mode.active;
+            bool menu_active = ui->build_panel_open || gs->build_mode.active;
             if(draw_button(menu_active?"[B] Cancel":"[B] Build",12,HUD_BOT_Y+80,90,36,true)){
                 if(menu_active){
-                    gs->build_panel_open=false;
+                    ui->build_panel_open=false;
                     gs->build_mode.active=false;
                 } else {
-                    gs->build_panel_open=true;
+                    ui->build_panel_open=true;
                     gs->build_mode.active=false;  /* show picker first */
                 }
             }
@@ -367,15 +368,15 @@ static void draw_bottom_panel(GameState *gs){
 }
 
 /* ─── Build type picker panel ────────────────────────────── */
-static void draw_build_menu(GameState *gs){
+static void draw_build_menu(GameState *gs, UIState *ui){
     /* Guard: only show when picker panel is open */
-    if(!gs->build_panel_open) return;
+    if(!ui->build_panel_open) return;
 
     /* Cancel if no villager selected anymore */
     bool vil=false;
-    for(int i=0;i<gs->sel_count;i++)
-        if(gs->units[gs->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
-    if(!vil){gs->build_panel_open=false;return;}
+    for(int i=0;i<ui->sel_count;i++)
+        if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
+    if(!vil){ui->build_panel_open=false;return;}
 
     static const char *BLD_NAMES[BLD_COUNT]={
         "Town Center","House","Barracks","Archery Range","Stable",
@@ -422,7 +423,7 @@ static void draw_build_menu(GameState *gs){
             /* ── KEY TRANSITION: picker → ghost placement ── */
             gs->build_mode.type=items[i].t;
             gs->build_mode.active=true;      /* start ghost placement   */
-            gs->build_panel_open=false;  /* close the picker panel  */
+            ui->build_panel_open=false;  /* close the picker panel  */
             /* Notify */
             char msg[48];
             snprintf(msg,sizeof(msg),"Placing: %s",BLD_NAMES[items[i].t]);
@@ -439,7 +440,7 @@ static void draw_build_menu(GameState *gs){
 }
 
 /* ─── Minimap ─────────────────────────────────────────────── */
-static void draw_minimap(GameState *gs){
+static void draw_minimap(GameState *gs, UIState *ui){
     /* Background */
     DrawRectangle(MINI_X-2,MINI_Y-2,MINI_SIZE+4,MINI_SIZE+4,C_HUD_BG);
     DrawRectangleLinesEx((Rectangle){MINI_X-2.0f,MINI_Y-2.0f,MINI_SIZE+4.0f,MINI_SIZE+4.0f},
@@ -491,10 +492,10 @@ static void draw_minimap(GameState *gs){
     }
 
     /* Camera viewport rectangle (clamped to minimap bounds) */
-    float cam_w=SCREEN_W/gs->camera.zoom;
-    float cam_h=SCREEN_H/gs->camera.zoom;
-    float cam_l=gs->camera.target.x - cam_w*0.5f;
-    float cam_t=gs->camera.target.y - cam_h*0.5f;
+    float cam_w=SCREEN_W/ui->camera.zoom;
+    float cam_h=SCREEN_H/ui->camera.zoom;
+    float cam_l=ui->camera.target.x - cam_w*0.5f;
+    float cam_t=ui->camera.target.y - cam_h*0.5f;
 
     float rl = (cam_l/TILE_SIZE)*sx;
     float rt = (cam_t/TILE_SIZE)*sy;
@@ -520,12 +521,12 @@ static void draw_minimap(GameState *gs){
        mp.y>=MINI_Y && mp.y<=MINI_Y+MINI_SIZE){
         float rx=(mp.x-MINI_X)/MINI_SIZE;
         float ry=(mp.y-MINI_Y)/MINI_SIZE;
-        gs->camera.target=(Vector2){rx*MAP_W*TILE_SIZE, ry*MAP_H*TILE_SIZE};
+        ui->camera.target=(Vector2){rx*MAP_W*TILE_SIZE, ry*MAP_H*TILE_SIZE};
     }
 }
 
 /* ─── Alert banner ────────────────────────────────────────── */
-static void draw_alert(GameState *gs){
+static void draw_alert(GameState *gs, UIState *ui){
     if(gs->alert_timer<=0) return;
     float alpha=clampf(gs->alert_timer/1.5f,0,1)*255;
     int tw=MeasureText(gs->alert,22);
@@ -538,7 +539,7 @@ static void draw_alert(GameState *gs){
 }
 
 /* ─── Victory / Defeat screen ────────────────────────────── */
-static void draw_end_screen(GameState *gs){
+static void draw_end_screen(GameState *gs, UIState *ui){
     if(gs->phase!=PHASE_VICTORY&&gs->phase!=PHASE_DEFEAT) return;
     DrawRectangle(0,0,SCREEN_W,SCREEN_H,CLITERAL(Color){0,0,0,180});
     bool win=(gs->phase==PHASE_VICTORY);
@@ -555,7 +556,7 @@ static void draw_end_screen(GameState *gs){
 }
 
 /* ─── Menu screen ────────────────────────────────────────── */
-static void draw_menu(GameState *gs){
+static void draw_menu(GameState *gs, UIState *ui){
     /* Gradient background */
     DrawRectangleGradientV(0,0,SCREEN_W,SCREEN_H,
         CLITERAL(Color){8,12,22,255},CLITERAL(Color){18,28,48,255});
@@ -605,14 +606,14 @@ static void draw_menu(GameState *gs){
     if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         gs->phase = PHASE_PLAYING;
     }
-    gs->menu_start_hover=hover;
+    ui->menu_start_hover=hover;
 
     /* Copyright */
     DrawText("Built with Raylib 5.5",8,SCREEN_H-20,10,CLITERAL(Color){60,55,40,200});
 }
 
 /* ─── Ghost placement status bar ─────────────────────────── */
-static void draw_placement_bar(GameState *gs){
+static void draw_placement_bar(GameState *gs, UIState *ui){
     if(!gs->build_mode.active) return;
     static const char *BLD_NAMES[BLD_COUNT]={
         "Town Center","House","Barracks","Archery Range","Stable",
@@ -633,18 +634,18 @@ static void draw_placement_bar(GameState *gs){
 }
 
 /* ─── Master HUD draw ─────────────────────────────────────── */
-void hud_draw(GameState *gs){
-    if(gs->phase==PHASE_MENU){ draw_menu(gs); return; }
-    if(gs->phase==PHASE_VICTORY||gs->phase==PHASE_DEFEAT){ draw_end_screen(gs); return; }
+void hud_draw(GameState *gs, UIState *ui){
+    if(gs->phase==PHASE_MENU){ draw_menu(gs, ui); return; }
+    if(gs->phase==PHASE_VICTORY||gs->phase==PHASE_DEFEAT){ draw_end_screen(gs, ui); return; }
 
-    draw_top_bar(gs);
-    draw_bottom_panel(gs);
-    draw_minimap(gs);
+    draw_top_bar(gs, ui);
+    draw_bottom_panel(gs, ui);
+    draw_minimap(gs, ui);
     /* Type picker (choose which building) */
-    if(gs->build_panel_open) draw_build_menu(gs);
+    if(ui->build_panel_open) draw_build_menu(gs, ui);
     /* Ghost placement bar (after type chosen, click to place) */
-    if(gs->build_mode.active) draw_placement_bar(gs);
-    draw_alert(gs);
+    if(gs->build_mode.active) draw_placement_bar(gs, ui);
+    draw_alert(gs, ui);
 
     /* Pause overlay */
     if(gs->phase==PHASE_PAUSED){
