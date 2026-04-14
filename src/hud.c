@@ -166,8 +166,28 @@ static void draw_bottom_panel(GameState *gs){
         DrawText(buf,12,HUD_BOT_Y+28,12,CLITERAL(Color){180,165,130,255});
 
         if(!b->complete){
-            snprintf(buf,sizeof(buf),"Under construction: %.0f%%",b->construction*100);
-            DrawText(buf,12,HUD_BOT_Y+44,12,CLITERAL(Color){200,180,100,255});
+            /* Count how many villagers are actively building this building */
+            int builders=0;
+            for(int i=0;i<MAX_UNITS;i++){
+                Unit *u=&gs->units[i];
+                if(u->active && u->build_id==b->id) builders++;
+            }
+            /* Progress bar */
+            DrawRectangle(12,HUD_BOT_Y+44,200,7,CLITERAL(Color){35,28,16,255});
+            DrawRectangle(12,HUD_BOT_Y+44,(int)(200*b->construction),7,
+                          CLITERAL(Color){200,160,40,255});
+            snprintf(buf,sizeof(buf),"Construction: %.0f%%",b->construction*100);
+            DrawText(buf,12,HUD_BOT_Y+56,12,CLITERAL(Color){200,180,100,255});
+            if(builders==0){
+                DrawText("No builders!  Select a villager and click this building",
+                         12,HUD_BOT_Y+72,11,CLITERAL(Color){220,100,60,230});
+            } else {
+                snprintf(buf,sizeof(buf),"%d builder%s  (%dx speed)",
+                         builders, builders>1?"s":"", builders);
+                DrawText(buf,12,HUD_BOT_Y+72,11,CLITERAL(Color){120,200,100,220});
+                DrawText("Select more villagers + click building to build faster",
+                         12,HUD_BOT_Y+86,10,CLITERAL(Color){100,140,80,180});
+            }
             return;
         }
 
