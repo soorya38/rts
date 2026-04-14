@@ -5,6 +5,8 @@
 #include <string.h>
 #include <stdio.h>
 
+uint32_t _rng = 12345;
+
 /* Forward declare the building init helper from building.c */
 void buildings_init_player(GameState *gs,int player,int tc_tx,int tc_ty);
 

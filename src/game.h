@@ -66,7 +66,7 @@ static inline float dist2f(float ax,float ay,float bx,float by){
 }
 
 /* ─── RNG ────────────────────────────────────────────────────── */
-static uint32_t _rng = 12345;
+extern uint32_t _rng;
 static inline uint32_t rng_next(void){
     _rng ^= _rng<<13; _rng ^= _rng>>17; _rng ^= _rng<<5; return _rng;
 }
