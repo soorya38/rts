@@ -138,6 +138,16 @@ static int find_unfinished_building_at(GameState *gs, Vector2 wp){
     }
     return -1;
 }
+static int find_friendly_dropoff_at(GameState *gs, Vector2 wp){
+    int fb = find_friendly_building_at(gs, wp);
+    if(fb >= 0 && gs->buildings[fb].complete) {
+        int t = gs->buildings[fb].type;
+        if(t == BLD_TOWN_CENTER || t == BLD_MILL || t == BLD_LUMBER_CAMP || t == BLD_MINING_CAMP){
+            return fb;
+        }
+    }
+    return -1;
+}
 
 /* ─── Issue context command to all selected units ─────────── */
 static void issue_command_at(GameState *gs, Vector2 world){
@@ -147,13 +157,14 @@ static void issue_command_at(GameState *gs, Vector2 world){
     int eu = find_enemy_unit_at(gs,world);
     int eb = (eu<0) ? find_enemy_building_at(gs,world) : -1;
     int ub = find_unfinished_building_at(gs,world);
+    int dropoff = find_friendly_dropoff_at(gs,world);
 
     TileType tt=gs->map[ty][tx].type;
     bool is_resource=(tt==TILE_FOREST||tt==TILE_GOLD||
                       tt==TILE_STONE||tt==TILE_BERRIES||tt==TILE_FARM);
 
     int ftx=tx, fty=ty;
-    bool must_be_passable = (!is_resource && eu<0 && eb<0 && ub<0);
+    bool must_be_passable = (!is_resource && eu<0 && eb<0 && ub<0 && dropoff<0);
     if(must_be_passable){
         if(!map_find_passable_near(gs,tx,ty,&ftx,&fty)) return;
     }
@@ -171,6 +182,8 @@ static void issue_command_at(GameState *gs, Vector2 world){
             unit_give_attack_order(gs,u,eu,eb);
         } else if(ub>=0 && u->type==UNIT_VILLAGER){
             unit_give_build_order(gs,u,ub);
+        } else if(dropoff>=0 && u->type==UNIT_VILLAGER && u->carry_amt>0){
+            unit_give_dropoff_order(gs,u,gs->buildings[dropoff].tx,gs->buildings[dropoff].ty);
         } else if(is_resource && u->type==UNIT_VILLAGER){
             unit_give_gather_order(gs,u,tx,ty);
         } else {
@@ -330,12 +343,22 @@ static void handle_left_up(GameState *gs){
     bool shift=IsKeyDown(KEY_LEFT_SHIFT);
     int fu=find_friendly_unit_at(gs,we);
     int fb=find_friendly_building_at(gs,we);
+    int dropoff = find_friendly_dropoff_at(gs,we);
+
+    bool is_villager_carrying = false;
+    for (int i = 0; i < gs->sel_count; i++) {
+        if (gs->units[gs->sel_units[i]].type == UNIT_VILLAGER && gs->units[gs->sel_units[i]].carry_amt > 0) {
+            is_villager_carrying = true; break;
+        }
+    }
 
     if(fu>=0){
         /* Clicked a friendly unit → select it */
         if(!shift) clear_selection(gs);
         select_unit(gs,fu);
         gs->sel_tile_x=-1; gs->sel_tile_y=-1;
+    } else if (is_villager_carrying && dropoff >= 0) {
+        issue_command_at(gs,we);
     } else if(fb>=0 && gs->buildings[fb].complete){
         /* Clicked a complete friendly building → select it */
         clear_selection(gs);

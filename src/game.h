@@ -274,6 +274,7 @@ void unit_init_stats(Unit *u);
 int  unit_spawn(GameState *gs,int player,UnitType type,float wx,float wy);
 void unit_give_move_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_gather_order(GameState *gs,Unit *u,int tx,int ty);
+void unit_give_dropoff_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_attack_order(GameState *gs,Unit *u,int target_unit,int target_bld);
 void unit_give_build_order(GameState *gs,Unit *u,int bld_id);
 void unit_update(GameState *gs,Unit *u,float dt);

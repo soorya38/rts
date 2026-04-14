@@ -3,6 +3,17 @@
  *=============================================================*/
 #include "game.h"
 
+static ResType tile_to_res(TileType t){
+    switch(t){
+        case TILE_FOREST:  return RES_WOOD;
+        case TILE_GOLD:    return RES_GOLD;
+        case TILE_STONE:   return RES_STONE;
+        case TILE_BERRIES:
+        case TILE_FARM:    return RES_FOOD;
+        default:           return RES_FOOD;
+    }
+}
+
 /* ─── Stat table ─────────────────────────────────────────── */
 typedef struct {
     int   hp, attack_dmg, armor;
@@ -92,6 +103,16 @@ void unit_give_move_order(GameState *gs, Unit *u, int tx, int ty){
 
 void unit_give_gather_order(GameState *gs, Unit *u, int tx, int ty){
     if(u->type!=UNIT_VILLAGER) return;
+
+    /* Discard carried resource if switching to a different type without dropping off */
+    if (map_in_bounds(tx, ty)) {
+        ResType target_res = tile_to_res(gs->map[ty][tx].type);
+        if (u->carry_amt > 0 && u->carry_type != target_res) {
+            u->carry_amt = 0; /* Discard */
+        }
+        u->carry_type = target_res;
+    }
+
     u->gather_tx=tx; u->gather_ty=ty;
     int bx,by;
     find_adjacent_tile(gs,tx,ty,1,1,u->wx,u->wy,&bx,&by);
@@ -101,6 +122,27 @@ void unit_give_gather_order(GameState *gs, Unit *u, int tx, int ty){
     u->path_idx=0;
     u->state=(u->path_len>0)?US_MOVING:US_GATHERING;
     u->target_unit=-1; u->target_bld=-1;
+}
+
+void unit_give_dropoff_order(GameState *gs, Unit *u, int tx, int ty){
+    if(u->type!=UNIT_VILLAGER || u->carry_amt == 0) return;
+    int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
+    
+    /* Find adjacent tile to the drop-off building */
+    int bx, by;
+    find_adjacent_tile(gs,tx,ty,1,1,u->wx,u->wy,&bx,&by);
+    
+    if(bx<0){
+        u->state = US_RETURNING;
+        u->path_len = 0;
+        return;
+    }
+    
+    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,MAX_PATH);
+    u->path_idx=0;
+    u->state=(u->path_len>0)?US_RETURNING:US_IDLE;
+    u->target_unit=-1; u->target_bld=-1;
+    u->gather_tx=-1; /* Cancel gather target on manual drop-off to stay idle */
 }
 
 void unit_give_attack_order(GameState *gs, Unit *u, int tunit, int tbld){
@@ -153,17 +195,6 @@ static void unit_step_path(Unit *u, float dt){
 /* ─── Gather ───────────────────────────────────────────────── */
 static const float GATHER_RATE[RES_COUNT]={0.4f,0.5f,0.33f,0.28f};
 
-static ResType tile_to_res(TileType t){
-    switch(t){
-        case TILE_FOREST:  return RES_WOOD;
-        case TILE_GOLD:    return RES_GOLD;
-        case TILE_STONE:   return RES_STONE;
-        case TILE_BERRIES:
-        case TILE_FARM:    return RES_FOOD;
-        default:           return RES_FOOD;
-    }
-}
-
 static void unit_do_gather(GameState *gs, Unit *u, float dt){
     if(!map_in_bounds(u->gather_tx,u->gather_ty)){u->state=US_IDLE;return;}
     Tile *t=&gs->map[u->gather_ty][u->gather_tx];
@@ -182,6 +213,7 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
         unit_give_gather_order(gs,u,u->gather_tx,u->gather_ty); return;
     }
     ResType rt=tile_to_res(t->type);
+    if(u->carry_amt>0 && u->carry_type!=rt) u->carry_amt=0;
     u->carry_type=rt;
     u->anim_timer += GATHER_RATE[rt]*dt;
     int gained=(int)u->anim_timer;
