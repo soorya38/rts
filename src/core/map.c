@@ -163,9 +163,9 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
      *   corner 2: bottom-left   corner 3: bottom-right
      * opposite pairs: (0,3)  (1,2)
      * ─────────────────────────────────────────────────────────── */
-    /* TC is 4x4; keep it at least 4 tiles from the edge */
-    static const int CX[4] = { 6,          MAP_W-7,    6,          MAP_W-7 };
-    static const int CY[4] = { 6,          6,          MAP_H-7,    MAP_H-7 };
+    /* TC is 4x4; keep it well away from the edge so we don't start the game staring at the void */
+    static const int CX[4] = { 15,          MAP_W-16,   15,          MAP_W-16 };
+    static const int CY[4] = { 15,          15,         MAP_H-16,    MAP_H-16 };
     static const int OPP[4]= { 3,          2,          1,          0       };
 
     int corner      = (int)(rng_next() % 4);

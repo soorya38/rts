@@ -28,7 +28,7 @@ int main(void){
         return 1;
     }
     game_init(gs);
-    ui_state_init(ui);
+    ui_state_init(ui, gs);
 
     /* ── Main loop ── */
     while(!WindowShouldClose()){
