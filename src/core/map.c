@@ -10,10 +10,15 @@ bool map_in_bounds(int x,int y){
 bool map_is_passable(GameState *gs,int x,int y){
     if(!map_in_bounds(x,y)) return false;
     Tile *t = &gs->map[y][x];
-    if(t->type == TILE_WATER) return false;
+    /* Terrain blockers */
+    if(t->type == TILE_WATER)   return false;
+    if(t->type == TILE_FOREST)  return false;
+    if(t->type == TILE_GOLD)    return false;
+    if(t->type == TILE_STONE)   return false;
+    if(t->type == TILE_BERRIES) return false;
+    /* Buildings – farms are passable so villagers can gather; others block */
     if(t->building_id >= 0){
         Building *b = &gs->buildings[t->building_id];
-        /* Farms are passable; other completed buildings are not */
         if(b->active && b->complete && b->type != BLD_FARM) return false;
     }
     return true;
