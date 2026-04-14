@@ -8,7 +8,7 @@
 #define CAM_SPEED 280.0f
 #define CAM_EDGE  12
 #define ZOOM_SPEED 0.12f
-#define ZOOM_MIN 0.35f
+#define ZOOM_MIN 0.8f
 #define ZOOM_MAX 2.8f
 
 void update_camera(GameState *gs, UIState *ui, float dt) {
