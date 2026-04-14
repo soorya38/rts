@@ -262,7 +262,8 @@ typedef struct { int food,wood,gold,stone; } Cost;
  * ────────────────────────────────────────────────────────────── */
 
 /* map.c */
-void map_init(GameState *gs);
+/* p1_x/p1_y and p2_x/p2_y receive the TC tile centres chosen for each player */
+void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y);
 bool map_in_bounds(int x,int y);
 bool map_is_passable(GameState *gs,int x,int y);
 bool map_is_buildable(GameState *gs,int x,int y,int w,int h);

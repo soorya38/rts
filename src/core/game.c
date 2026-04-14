@@ -44,41 +44,54 @@ void game_init(GameState *gs){
     gs->res[1].age    = 0;
     gs->res[1].pop_cap = 5;
 
-    /* Generate map with a random seed based on current time */
+    /* Generate map with a random seed based on current time.
+     * map_init picks a random corner for P1 and the opposite for AI,
+     * and returns the chosen tile centres so we can place units correctly. */
     _rng = (uint32_t)time(NULL);
-    map_init(gs);
+    int p1x, p1y, p2x, p2y;
+    map_init(gs, &p1x, &p1y, &p2x, &p2y);
 
-    /* ── Player 1 start (top-left) ── */
-    buildings_init_player(gs,0,4,4);   /* Town Center at tile (4,4) */
-    gs->res[0].pop_cap=pop_cap_from_buildings(gs,0);
+    /* ── Player 1 start (random corner) ── */
+    /* TC occupies tiles [p1x-2 .. p1x+1][p1y-2 .. p1y+1] (4x4, centred on p1x,p1y) */
+    int p1_tc_tx = p1x - 2, p1_tc_ty = p1y - 2;
+    buildings_init_player(gs, 0, p1_tc_tx, p1_tc_ty);
+    gs->res[0].pop_cap = pop_cap_from_buildings(gs, 0);
 
-    /* 3 starting villagers */
-    unit_spawn(gs,0,UNIT_VILLAGER,(8.0f*TILE_SIZE)+16,(4.0f*TILE_SIZE)+16);
-    unit_spawn(gs,0,UNIT_VILLAGER,(8.0f*TILE_SIZE)+16,(6.0f*TILE_SIZE)+16);
-    unit_spawn(gs,0,UNIT_VILLAGER,(8.0f*TILE_SIZE)+16,(8.0f*TILE_SIZE)+16);
-    /* 1 scout */
-    unit_spawn(gs,0,UNIT_SCOUT,   (10.0f*TILE_SIZE)+16,(6.0f*TILE_SIZE)+16);
+    /* Villagers spawn 4 tiles to the right (+x) of the TC centre */
+    float p1_vx = (p1x + 2) * TILE_SIZE + 16.0f;
+    float p1_v0y = (p1y - 2) * TILE_SIZE + 16.0f;
+    float p1_v1y = (p1y)     * TILE_SIZE + 16.0f;
+    float p1_v2y = (p1y + 2) * TILE_SIZE + 16.0f;
+    unit_spawn(gs, 0, UNIT_VILLAGER, p1_vx, p1_v0y);
+    unit_spawn(gs, 0, UNIT_VILLAGER, p1_vx, p1_v1y);
+    unit_spawn(gs, 0, UNIT_VILLAGER, p1_vx, p1_v2y);
+    unit_spawn(gs, 0, UNIT_SCOUT,   p1_vx + TILE_SIZE, p1_v1y);
 
     /* Send villagers to nearest resource slots */
-    int wood_x,wood_y, food_x,food_y;
-    if(map_find_resource(gs,0,RES_WOOD,8,6,&wood_x,&wood_y)){
-        unit_give_gather_order(gs,&gs->units[0],wood_x,wood_y);
-        unit_give_gather_order(gs,&gs->units[1],wood_x,wood_y);
+    int wood_x, wood_y, food_x, food_y;
+    if(map_find_resource(gs, 0, RES_WOOD, p1x + 2, p1y, &wood_x, &wood_y)){
+        unit_give_gather_order(gs, &gs->units[0], wood_x, wood_y);
+        unit_give_gather_order(gs, &gs->units[1], wood_x, wood_y);
     }
-    if(map_find_resource(gs,0,RES_FOOD,8,6,&food_x,&food_y)){
-        unit_give_gather_order(gs,&gs->units[2],food_x,food_y);
+    if(map_find_resource(gs, 0, RES_FOOD, p1x + 2, p1y, &food_x, &food_y)){
+        unit_give_gather_order(gs, &gs->units[2], food_x, food_y);
     }
 
-    /* ── AI start (bottom-right) ── */
-    buildings_init_player(gs,1,54,54); /* Town Center at tile (54,54) */
-    gs->res[1].pop_cap=pop_cap_from_buildings(gs,1);
+    /* ── AI start (opposite corner) ── */
+    int p2_tc_tx = p2x - 2, p2_tc_ty = p2y - 2;
+    buildings_init_player(gs, 1, p2_tc_tx, p2_tc_ty);
+    gs->res[1].pop_cap = pop_cap_from_buildings(gs, 1);
 
-    unit_spawn(gs,1,UNIT_VILLAGER,(58.0f*TILE_SIZE)+16,(54.0f*TILE_SIZE)+16);
-    unit_spawn(gs,1,UNIT_VILLAGER,(58.0f*TILE_SIZE)+16,(56.0f*TILE_SIZE)+16);
-    unit_spawn(gs,1,UNIT_VILLAGER,(58.0f*TILE_SIZE)+16,(58.0f*TILE_SIZE)+16);
-    unit_spawn(gs,1,UNIT_SCOUT,   (60.0f*TILE_SIZE)+16,(56.0f*TILE_SIZE)+16);
+    float p2_vx = (p2x + 2) * TILE_SIZE + 16.0f;
+    float p2_v0y = (p2y - 2) * TILE_SIZE + 16.0f;
+    float p2_v1y = (p2y)     * TILE_SIZE + 16.0f;
+    float p2_v2y = (p2y + 2) * TILE_SIZE + 16.0f;
+    unit_spawn(gs, 1, UNIT_VILLAGER, p2_vx, p2_v0y);
+    unit_spawn(gs, 1, UNIT_VILLAGER, p2_vx, p2_v1y);
+    unit_spawn(gs, 1, UNIT_VILLAGER, p2_vx, p2_v2y);
+    unit_spawn(gs, 1, UNIT_SCOUT,   p2_vx + TILE_SIZE, p2_v1y);
 
-    /* AI fog: mark all tiles as visible for AI from start */
+    /* AI fog: mark all tiles as explored at start */
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++)
         gs->map[y][x].fog[1]=FOG_EXPLORED;
 

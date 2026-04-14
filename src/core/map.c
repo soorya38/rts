@@ -143,7 +143,7 @@ static void clear_zone(GameState *gs,int cx,int cy,int r){
     }
 }
 
-void map_init(GameState *gs){
+void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
     /* Base: all grass */
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
         gs->map[y][x].type         = TILE_GRASS;
@@ -154,9 +154,28 @@ void map_init(GameState *gs){
         gs->map[y][x].fog[1]       = FOG_HIDDEN;
     }
 
-    /* Player start tile centres (TCs placed later by game_init) */
-    const int P1X=6,  P1Y=6;   /* player 1 – upper-left  */
-    const int P2X=57, P2Y=57;  /* AI       – lower-right */
+    /* ── Randomise start corners ──────────────────────────────────
+     * Four corners (centre tile of each corner pocket).
+     * Player 1 gets one at random; AI gets the diagonally opposite
+     * corner so the two starts are always maximally separated.
+     *
+     *   corner 0: top-left      corner 1: top-right
+     *   corner 2: bottom-left   corner 3: bottom-right
+     * opposite pairs: (0,3)  (1,2)
+     * ─────────────────────────────────────────────────────────── */
+    /* TC is 4x4; keep it at least 4 tiles from the edge */
+    static const int CX[4] = { 6,          MAP_W-7,    6,          MAP_W-7 };
+    static const int CY[4] = { 6,          6,          MAP_H-7,    MAP_H-7 };
+    static const int OPP[4]= { 3,          2,          1,          0       };
+
+    int corner      = (int)(rng_next() % 4);
+    int P1X = CX[corner],     P1Y = CY[corner];
+    int P2X = CX[OPP[corner]],P2Y = CY[OPP[corner]];
+
+    /* Return chosen positions to caller */
+    *p1_x = P1X; *p1_y = P1Y;
+    *p2_x = P2X; *p2_y = P2Y;
+
     const int SAFE_R = 10;     /* tiles to keep clear of random features */
 
     /* Helper: is a point safely away from both start zones? */
