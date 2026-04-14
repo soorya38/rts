@@ -198,7 +198,17 @@ static const float GATHER_RATE[RES_COUNT]={0.4f,0.5f,0.33f,0.28f};
 static void unit_do_gather(GameState *gs, Unit *u, float dt){
     if(!map_in_bounds(u->gather_tx,u->gather_ty)){u->state=US_IDLE;return;}
     Tile *t=&gs->map[u->gather_ty][u->gather_tx];
-    if(t->resource_amt<=0){
+
+    /* Check if this tile belongs to a farm building */
+    Building *fb = NULL;
+    if(t->building_id >= 0){
+        Building *b = &gs->buildings[t->building_id];
+        if(b->active && b->type == BLD_FARM) fb = b;
+    }
+
+    int current_amt = fb ? fb->resource_amt : t->resource_amt;
+
+    if(current_amt<=0){
         /* Find another deposit of same kind */
         int nx,ny;
         ResType rt=tile_to_res(t->type);
@@ -207,6 +217,7 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
         else u->state=US_IDLE;
         return;
     }
+
     /* Must be adjacent */
     int utx=(int)(u->wx/TILE_SIZE),uty=(int)(u->wy/TILE_SIZE);
     if(abs(utx-u->gather_tx)>1||abs(uty-u->gather_ty)>1){
@@ -219,13 +230,29 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
     int gained=(int)u->anim_timer;
     if(gained>0){
         u->anim_timer-=gained;
-        if(gained>t->resource_amt) gained=t->resource_amt;
-        t->resource_amt-=gained;
+        
+        if (fb) {
+            /* Gather from farm building */
+            if(gained > fb->resource_amt) gained = fb->resource_amt;
+            fb->resource_amt -= gained;
+            /* Sync tile for visuals if needed (though we'll destroy it soon) */
+            t->resource_amt = fb->resource_amt; 
+        } else {
+            /* Gather from normal tile resource */
+            if(gained>t->resource_amt) gained=t->resource_amt;
+            t->resource_amt-=gained;
+        }
+        
         u->carry_amt+=gained;
-        /* Tile is exhausted: convert to grass so it visually disappears */
-        if(t->resource_amt<=0){
+
+        /* Resource exhausted logic */
+        if(fb && fb->resource_amt <= 0){
+            building_destroy(gs, fb->id);
+            /* Farm destroyed -> deselect target so unit stops or re-tasks */
+            u->gather_tx = -1; u->gather_ty = -1;
+        } else if(!fb && t->resource_amt<=0){
             t->resource_amt=0;
-            /* Farms stay as TILE_FARM (exhausted field look); everything else → grass */
+            /* Normal tiles revert to grass */
             if(t->type!=TILE_FARM) t->type=TILE_GRASS;
         }
     }

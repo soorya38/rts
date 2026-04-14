@@ -210,6 +210,7 @@ typedef struct {
     float    train_timer;
     int      rally_tx, rally_ty;
     bool     selected;
+    int      resource_amt;      /* For farms: remaining food */
 } Building;
 
 /* ─── Build mode ghost ───────────────────────────────────────── */
@@ -290,6 +291,7 @@ int  unit_count_military(GameState *gs,int player);
 
 /* building.c */
 int  building_place(GameState *gs,int player,BldType type,int tx,int ty);
+void building_destroy(GameState *gs, int bid);
 void building_update(GameState *gs,Building *b,float dt);
 void buildings_update_all(GameState *gs,float dt);
 int  building_find(GameState *gs,int player,BldType type,bool complete_only);

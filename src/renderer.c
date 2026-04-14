@@ -260,6 +260,19 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             draw_iso_quad(px, py, w, h, CLITERAL(Color){145,115,55,255});
             for(int r=0;r<3;r++)
                 draw_iso_quad(px+2, py+3+r*8, w-4, 2, CLITERAL(Color){165,135,65,255});
+            
+            /* Small green dots for crops */
+            for(int gy=0; gy<3; gy++) {
+                for(int gx=0; gx<3; gx++) {
+                    float off_x = (gx * TILE_SIZE) + (TILE_SIZE/2);
+                    float off_y = (gy * TILE_SIZE) + (TILE_SIZE/2);
+                    Vector2 dot = to_rvec2(world_to_iso(px + off_x, py + off_y));
+                    DrawCircle(dot.x, dot.y, 2, CLITERAL(Color){60, 180, 40, 255});
+                    /* Add some variation */
+                    DrawCircle(dot.x-4, dot.y+2, 1.5f, CLITERAL(Color){40, 150, 30, 255});
+                    DrawCircle(dot.x+4, dot.y-2, 1.5f, CLITERAL(Color){50, 170, 35, 255});
+                }
+            }
             break;
         }
         default:
@@ -451,6 +464,17 @@ static void draw_build_ghost(GameState *gs){
         CLITERAL(Color){80,220,100,100}:CLITERAL(Color){220,60,60,100};
     
     draw_iso_quad(px, py, w, h, gc);
+    
+    /* Draw outline for better visibility */
+    Color lc=gs->build_mode.valid ? GREEN : RED;
+    Vector2 p1 = to_rvec2(world_to_iso(px, py));
+    Vector2 p2 = to_rvec2(world_to_iso(px + w, py));
+    Vector2 p3 = to_rvec2(world_to_iso(px + w, py + h));
+    Vector2 p4 = to_rvec2(world_to_iso(px, py + h));
+    DrawLineEx(p1, p2, 2.0f, lc);
+    DrawLineEx(p2, p3, 2.0f, lc);
+    DrawLineEx(p3, p4, 2.0f, lc);
+    DrawLineEx(p4, p1, 2.0f, lc);
 }
 
 /* ─── Attack-move cursor indicator ──────────────────────────── */

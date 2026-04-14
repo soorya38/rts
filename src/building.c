@@ -46,10 +46,34 @@ void building_on_complete(GameState *gs, Building *b){
             int x=b->tx+dx, y=b->ty+dy;
             if(map_in_bounds(x,y)){
                 gs->map[y][x].type        = TILE_FARM;
-                gs->map[y][x].resource_amt= 400; /* food supply per farm */
+                gs->map[y][x].resource_amt= 400; /* food supply per tile (sync) */
+            }
+        }
+        b->resource_amt = 400; /* total food supply for the farm building */
+    }
+}
+
+void building_destroy(GameState *gs, int bid){
+    Building *b = &gs->buildings[bid];
+    if(!b->active) return;
+    
+    /* Clear from map */
+    map_clear_building(gs, b->tx, b->ty, b->tw, b->th);
+    
+    /* If it was a farm, revert tiles to grass */
+    if(b->type == BLD_FARM){
+        for(int dy=0;dy<b->th;dy++) for(int dx=0;dx<b->tw;dx++){
+            int x=b->tx+dx, y=b->ty+dy;
+            if(map_in_bounds(x,y)){
+                gs->map[y][x].type = TILE_GRASS;
+                gs->map[y][x].resource_amt = 0;
             }
         }
     }
+    
+    b->active = false;
+    b->complete = false;
+    b->selected = false;
 }
 
 /* Place a pre-built building (for game init) */
