@@ -49,6 +49,47 @@ void map_clear_building(GameState *gs,int tx,int ty,int w,int h){
 
 /* ---------- Map generation ---------- */
 
+/* Forward declaration (defined below) */
+static void force_place_patch(GameState *gs,int cx,int cy,TileType t,int r,int amt);
+
+/* Scatter the 7 guaranteed starting resources around a TC in random
+ * directions. Uses 8 compass-direction unit vectors (x10 integer),
+ * shuffles them, then assigns each resource to a random distance
+ * (7-13 tiles) plus a small positional jitter.
+ */
+static void place_start_resources(GameState *gs, int tc_x, int tc_y){
+    /* Integer unit-vector table (x10) for 8 compass directions */
+    static const int DX[8] = { 10,  7,  0, -7, -10, -7,  0,  7 };
+    static const int DY[8] = {  0,  7, 10,  7,   0, -7, -10, -7 };
+
+    /* Fisher-Yates shuffle of direction indices */
+    int idx[8] = {0,1,2,3,4,5,6,7};
+    for(int i=7;i>0;i--){
+        int j=(int)(rng_next()%(i+1));
+        int tmp=idx[i]; idx[i]=idx[j]; idx[j]=tmp;
+    }
+
+    /* 7 resource slots: 3 forests, 2 berries, 1 gold, 1 stone */
+    TileType types[7]  = {TILE_FOREST, TILE_FOREST, TILE_FOREST,
+                          TILE_BERRIES, TILE_BERRIES, TILE_GOLD, TILE_STONE};
+    int amounts[7]     = {140+(int)(rng_next()%40), 140+(int)(rng_next()%40), 140+(int)(rng_next()%40),
+                          450+(int)(rng_next()%100), 450+(int)(rng_next()%100),
+                          700+(int)(rng_next()%100), 600+(int)(rng_next()%100)};
+    int radii[7]       = {2, 2, 2, 1, 1, 1, 1};
+
+    for(int i=0; i<7; i++){
+        int d    = idx[i];
+        int dist = 7 + (int)(rng_next() % 7);  /* 7-13 tiles */
+        int jx   = (int)(rng_next() % 3) - 1;  /* −1..+1 jitter */
+        int jy   = (int)(rng_next() % 3) - 1;
+        int cx   = tc_x + (DX[d] * dist) / 10 + jx;
+        int cy   = tc_y + (DY[d] * dist) / 10 + jy;
+        cx = clampi(cx, 2, MAP_W-3);
+        cy = clampi(cy, 2, MAP_H-3);
+        force_place_patch(gs, cx, cy, types[i], radii[i], amounts[i]);
+    }
+}
+
 static void place_forest_cluster(GameState *gs,int cx,int cy,int r){
     for(int dy=-r;dy<=r;dy++) for(int dx=-r;dx<=r;dx++){
         if(dx*dx+dy*dy > r*r) continue;
@@ -196,26 +237,10 @@ void map_init(GameState *gs){
     clear_zone(gs, P2X, P2Y, 5);
 
     /* ── GUARANTEED starting resources near each player ──
-         Placed AFTER the general scatter and AFTER the clear zone
-         so they always exist and are within reach of the TCs.       */
-
-    /* Player 1 – TC at (4,4), resources at ~8-14 tiles away */
-    force_place_patch(gs, 13,  5, TILE_FOREST,  2, 160);
-    force_place_patch(gs,  5, 13, TILE_FOREST,  2, 160);
-    force_place_patch(gs, 14, 12, TILE_FOREST,  2, 160);
-    force_place_patch(gs, 12,  4, TILE_BERRIES, 1, 500);
-    force_place_patch(gs,  4, 12, TILE_BERRIES, 1, 500);
-    force_place_patch(gs, 13,  8, TILE_GOLD,    1, 800);
-    force_place_patch(gs,  8, 13, TILE_STONE,   1, 700);
-
-    /* AI – TC at (54,54), mirror layout */
-    force_place_patch(gs, 51, 60, TILE_FOREST,  2, 160);
-    force_place_patch(gs, 60, 51, TILE_FOREST,  2, 160);
-    force_place_patch(gs, 50, 50, TILE_FOREST,  2, 160);
-    force_place_patch(gs, 62, 56, TILE_BERRIES, 1, 500);
-    force_place_patch(gs, 56, 62, TILE_BERRIES, 1, 500);
-    force_place_patch(gs, 51, 62, TILE_GOLD,    1, 800);
-    force_place_patch(gs, 62, 51, TILE_STONE,   1, 700);
+         Random directions each game, but always 3 forests, 2 berries,
+         1 gold and 1 stone within 7-13 tiles of the TC.             */
+    place_start_resources(gs, P1X, P1Y);
+    place_start_resources(gs, P2X, P2Y);
 }
 
 
