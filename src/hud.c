@@ -109,9 +109,31 @@ static void draw_top_bar(GameState *gs){
     if(pr->age<3 && !pr->advancing){
         Cost c=age_advance_cost(pr->age);
         bool can=res_can_afford(pr,c);
-        snprintf(buf,sizeof(buf),"Advance Age (%dF)",c.food);
-        if(draw_button(buf,SCREEN_W-190,6,182,30,can))
+        char label[40];
+        /* Show food+gold requirement */
+        if(c.gold>0)
+            snprintf(label,sizeof(label),"Advance Age: %dF %dG",c.food,c.gold);
+        else
+            snprintf(label,sizeof(label),"Advance Age: %dF",c.food);
+        if(draw_button(label,SCREEN_W-208,6,200,30,can))
             res_try_advance_age(gs,0);
+        /* Show what's missing when greyed */
+        if(!can){
+            char need[48]="Need:";
+            if(pr->amount[RES_FOOD]<c.food){
+                char tmp[20]; snprintf(tmp,sizeof(tmp)," %dF",c.food-pr->amount[RES_FOOD]);
+                strcat(need,tmp);
+            }
+            if(c.gold>0&&pr->amount[RES_GOLD]<c.gold){
+                char tmp[20]; snprintf(tmp,sizeof(tmp)," %dG",c.gold-pr->amount[RES_GOLD]);
+                strcat(need,tmp);
+            }
+            DrawText(need,SCREEN_W-206,38,10,CLITERAL(Color){220,160,80,220});
+        }
+    } else if(pr->advancing){
+        char buf2[48];
+        snprintf(buf2,sizeof(buf2),"Advancing... %.0fs left",pr->advance_timer);
+        DrawText(buf2,SCREEN_W-210,12,11,C_AGE);
     }
 
     /* Game time */
@@ -284,6 +306,9 @@ static void draw_build_menu(GameState *gs){
     DrawText("BUILD MENU  — select a structure",mx,my-22,12,
              CLITERAL(Color){200,180,100,255});
 
+    /* Check prerequisites */
+    bool has_mill=(building_find(gs,0,BLD_MILL,true)>=0);
+
     struct { BldType t; const char *n; Cost c; const char *hot; } items[]={
         {BLD_HOUSE,        "House (H)\n25 Wood",        {0,25, 0,0}, "H"},
         {BLD_MILL,         "Mill (M)\n100 Wood",        {0,100,0,0}, "M"},
@@ -299,8 +324,16 @@ static void draw_build_menu(GameState *gs){
         int col=i%3, row=i/3;
         int bx=mx+col*(bw+gap), by=my+row*(bh+gap);
         bool can=res_can_afford(&gs->res[0],items[i].c);
-        bool pressed=draw_button(items[i].n,bx,by,bw,bh,can);
-        if(pressed && can){
+        /* Farm requires Mill to be built first */
+        bool prereq_ok=true;
+        if(items[i].t==BLD_FARM && !has_mill) prereq_ok=false;
+        bool clickable = can && prereq_ok;
+        bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
+        /* Show prereq hint below Farm button when locked */
+        if(items[i].t==BLD_FARM && !has_mill){
+            DrawText("Needs Mill",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
+        }
+        if(pressed && clickable){
             /* ── KEY TRANSITION: picker → ghost placement ── */
             gs->build_mode.type=items[i].t;
             gs->build_mode.active=true;      /* start ghost placement   */

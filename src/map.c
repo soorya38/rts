@@ -82,9 +82,17 @@ static void force_place_patch(GameState *gs,int cx,int cy,TileType t,int r,int a
         if(dx*dx+dy*dy > r*r) continue;
         int x=cx+dx, y=cy+dy;
         if(!map_in_bounds(x,y)) continue;
-        if(gs->map[y][x].building_id >= 0) continue;  /* never overwrite buildings */
+        if(gs->map[y][x].building_id >= 0) continue;
         gs->map[y][x].type = t;
         gs->map[y][x].resource_amt = amt + rng_range(0,amt/4);
+    }
+}
+
+/* Keep a safe zone clear around a start position */
+static void clear_zone(GameState *gs,int cx,int cy,int r){
+    for(int dy=-r;dy<=r;dy++) for(int dx=-r;dx<=r;dx++){
+        int x=cx+dx, y=cy+dy;
+        if(map_in_bounds(x,y)) gs->map[y][x].type=TILE_GRASS;
     }
 }
 
@@ -195,7 +203,7 @@ int map_find_resource(GameState *gs,int player,ResType res,int ntx,int nty,int *
     (void)player;
     TileType want;
     switch(res){
-        case RES_FOOD:  want=TILE_BERRIES; break;
+        case RES_FOOD:  want=TILE_BERRIES; break;  /* also check TILE_FARM below */
         case RES_WOOD:  want=TILE_FOREST;  break;
         case RES_GOLD:  want=TILE_GOLD;    break;
         case RES_STONE: want=TILE_STONE;   break;
@@ -204,7 +212,9 @@ int map_find_resource(GameState *gs,int player,ResType res,int ntx,int nty,int *
     int best_dist=9999, found=0;
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
         Tile *t=&gs->map[y][x];
-        if(t->type!=want || t->resource_amt<=0) continue;
+        bool match = (t->type==want) ||
+                     (res==RES_FOOD && t->type==TILE_FARM);
+        if(!match || t->resource_amt<=0) continue;
         int d=abs(x-ntx)+abs(y-nty);
         if(d<best_dist){ best_dist=d; *ox=x; *oy=y; found=1; }
     }

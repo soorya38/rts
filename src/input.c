@@ -179,8 +179,20 @@ static void update_build_mode(GameState *gs){
     if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && gs->build_mode.valid){
         int bid=building_place(gs,0,gs->build_mode.type,tx,ty);
         if(bid>=0){
-            int vid=unit_find_idle_villager(gs,0);
-            if(vid>=0) unit_give_build_order(gs,&gs->units[vid],bid);
+            /* Assign SELECTED villager(s) first – that's who the player picked */
+            bool any=false;
+            for(int i=0;i<gs->sel_count;i++){
+                Unit *u=&gs->units[gs->sel_units[i]];
+                if(u->active && u->player==0 && u->type==UNIT_VILLAGER){
+                    unit_give_build_order(gs,u,bid);
+                    any=true;
+                }
+            }
+            /* No villager was selected → fall back to nearest idle one */
+            if(!any){
+                int vid=unit_find_idle_villager(gs,0);
+                if(vid>=0) unit_give_build_order(gs,&gs->units[vid],bid);
+            }
             if(!IsKeyDown(KEY_LEFT_SHIFT)) gs->build_mode.active=false;
         }
     }

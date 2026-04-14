@@ -190,6 +190,12 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
         if(gained>t->resource_amt) gained=t->resource_amt;
         t->resource_amt-=gained;
         u->carry_amt+=gained;
+        /* Tile is exhausted: convert to grass so it visually disappears */
+        if(t->resource_amt<=0){
+            t->resource_amt=0;
+            /* Farms stay as TILE_FARM (exhausted field look); everything else → grass */
+            if(t->type!=TILE_FARM) t->type=TILE_GRASS;
+        }
     }
     if(u->carry_amt>=u->carry_cap){
         int dtx,dty;
