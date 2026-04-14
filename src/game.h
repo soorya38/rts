@@ -264,6 +264,7 @@ void map_clear_building(GameState *gs,int tx,int ty,int w,int h);
 void map_update_fog(GameState *gs);
 int  map_find_resource(GameState *gs,int player,ResType res,int near_tx,int near_ty,int *out_x,int *out_y);
 int  map_find_dropoff(GameState *gs,int player,ResType res,float wx,float wy,int *out_tx,int *out_ty);
+int  map_find_passable_near(GameState *gs, int tx, int ty, int *ox, int *oy);
 
 /* pathfinding.c */
 int pathfind(GameState *gs,int sx,int sy,int ex,int ey,PathCell *out,int max_len);
