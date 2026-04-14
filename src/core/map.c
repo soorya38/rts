@@ -113,47 +113,102 @@ void map_init(GameState *gs){
         gs->map[y][x].fog[1]       = FOG_HIDDEN;
     }
 
-    /* Water lakes (stay away from start corners) */
-    place_water_body(gs, 32,14, 6,4);
-    place_water_body(gs, 20,40, 5,3);
-    place_water_body(gs, 48,40, 5,3);
-    place_water_body(gs, 32,50, 4,3);
+    /* Player start tile centres (TCs placed later by game_init) */
+    const int P1X=6,  P1Y=6;   /* player 1 – upper-left  */
+    const int P2X=57, P2Y=57;  /* AI       – lower-right */
+    const int SAFE_R = 10;     /* tiles to keep clear of random features */
 
-    /* Mid-map forests, gold, stone, berries */
-    int forests[][2]={{20,8},{8,20},{45,12},{52,8},{56,20},
-                      {12,45},{8,52},{20,56},{45,45},{52,56},{56,52},
-                      {30,25},{35,35},{25,35},{38,22}};
-    for(int i=0;i<15;i++)
-        place_forest_cluster(gs,forests[i][0],forests[i][1],3+rng_range(0,2));
+    /* Helper: is a point safely away from both start zones? */
+    #define safe_from_starts(cx,cy) \
+        (abs((cx)-P1X)>SAFE_R || abs((cy)-P1Y)>SAFE_R) && \
+        (abs((cx)-P2X)>SAFE_R || abs((cy)-P2Y)>SAFE_R)
 
-    int golds[][2]={{18,15},{46,15},{15,48},{49,48},{32,32},{24,24},{42,42}};
-    for(int i=0;i<7;i++)
-        place_resource_patch(gs,golds[i][0],golds[i][1],TILE_GOLD,1,800);
+    /* Random int in [lo, hi] */
+    #define rrand(lo,hi) ((int)(rng_next()%((hi)-(lo)+1))+(lo))
 
-    int stones[][2]={{22,18},{42,18},{18,44},{44,44},{28,30},{36,28}};
-    for(int i=0;i<6;i++)
-        place_resource_patch(gs,stones[i][0],stones[i][1],TILE_STONE,1,700);
+    /* ── Water bodies (2-4 lakes) ── */
+    int num_lakes = rrand(2, 4);
+    for(int i=0;i<num_lakes;i++){
+        int cx, cy, tries=0;
+        do {
+            cx = rrand(12, MAP_W-13);
+            cy = rrand(12, MAP_H-13);
+            tries++;
+        } while(!safe_from_starts(cx,cy) && tries<20);
+        int rw = rrand(3, 7), rh = rrand(2, 5);
+        place_water_body(gs, cx, cy, rw, rh);
+    }
 
-    int berries[][2]={{32,18},{18,32},{46,32},{32,46}};
-    for(int i=0;i<4;i++)
-        place_resource_patch(gs,berries[i][0],berries[i][1],TILE_BERRIES,1,500);
+    /* ── Forest clusters (12-18) ── */
+    int num_forests = rrand(12, 18);
+    for(int i=0;i<num_forests;i++){
+        int cx, cy, tries=0;
+        do {
+            cx = rrand(4, MAP_W-5);
+            cy = rrand(4, MAP_H-5);
+            tries++;
+        } while(!safe_from_starts(cx,cy) && tries<20);
+        int r = rrand(2, 4);
+        place_forest_cluster(gs, cx, cy, r);
+    }
 
-    /* ── Clear small start zones (radius 4 only) ── */
-    clear_zone(gs,  7,  7, 4);   /* player 1 TC center ~(6,6) */
-    clear_zone(gs, 57, 57, 4);   /* AI TC center ~(56,56) */
+    /* ── Gold patches (5-8) ── */
+    int num_gold = rrand(5, 8);
+    for(int i=0;i<num_gold;i++){
+        int cx, cy, tries=0;
+        do {
+            cx = rrand(4, MAP_W-5);
+            cy = rrand(4, MAP_H-5);
+            tries++;
+        } while(!safe_from_starts(cx,cy) && tries<20);
+        place_resource_patch(gs, cx, cy, TILE_GOLD, rrand(1,2), rrand(600,900));
+    }
 
-    /* ── GUARANTEED starting resources, placed AFTER clear so they survive ── */
+    /* ── Stone patches (4-6) ── */
+    int num_stone = rrand(4, 6);
+    for(int i=0;i<num_stone;i++){
+        int cx, cy, tries=0;
+        do {
+            cx = rrand(4, MAP_W-5);
+            cy = rrand(4, MAP_H-5);
+            tries++;
+        } while(!safe_from_starts(cx,cy) && tries<20);
+        place_resource_patch(gs, cx, cy, TILE_STONE, rrand(1,2), rrand(500,800));
+    }
 
-    /* Player 1 – TC at tile (4,4).  Trees, berries, gold, stone all within 8-14 tiles */
-    force_place_patch(gs, 13,  5, TILE_FOREST,  2, 160);   /* NE woodline */
-    force_place_patch(gs,  5, 13, TILE_FOREST,  2, 160);   /* S woodline  */
-    force_place_patch(gs, 14, 12, TILE_FOREST,  2, 160);   /* E woodline  */
-    force_place_patch(gs, 12,  4, TILE_BERRIES, 1, 500);   /* NE berries  */
-    force_place_patch(gs,  4, 12, TILE_BERRIES, 1, 500);   /* S berries   */
-    force_place_patch(gs, 13,  8, TILE_GOLD,    1, 800);   /* nearby gold */
-    force_place_patch(gs,  8, 13, TILE_STONE,   1, 700);   /* nearby stone*/
+    /* ── Berry bushes (4-6) ── */
+    int num_berries = rrand(4, 6);
+    for(int i=0;i<num_berries;i++){
+        int cx, cy, tries=0;
+        do {
+            cx = rrand(4, MAP_W-5);
+            cy = rrand(4, MAP_H-5);
+            tries++;
+        } while(!safe_from_starts(cx,cy) && tries<20);
+        place_resource_patch(gs, cx, cy, TILE_BERRIES, 1, rrand(400,600));
+    }
 
-    /* AI – TC at tile (54,54).  Mirror layout */
+    #undef safe_from_starts
+    #undef rrand
+
+    /* ── Clear player start zones so TCs and units spawn on grass ── */
+    clear_zone(gs, P1X, P1Y, 5);
+    clear_zone(gs, P2X, P2Y, 5);
+
+    /* ── GUARANTEED starting resources near each player ──
+         Placed AFTER the general scatter and AFTER the clear zone
+         so they always exist and are within reach of the TCs.       */
+
+    /* Player 1 – TC at (4,4), resources at ~8-14 tiles away */
+    force_place_patch(gs, 13,  5, TILE_FOREST,  2, 160);
+    force_place_patch(gs,  5, 13, TILE_FOREST,  2, 160);
+    force_place_patch(gs, 14, 12, TILE_FOREST,  2, 160);
+    force_place_patch(gs, 12,  4, TILE_BERRIES, 1, 500);
+    force_place_patch(gs,  4, 12, TILE_BERRIES, 1, 500);
+    force_place_patch(gs, 13,  8, TILE_GOLD,    1, 800);
+    force_place_patch(gs,  8, 13, TILE_STONE,   1, 700);
+
+    /* AI – TC at (54,54), mirror layout */
     force_place_patch(gs, 51, 60, TILE_FOREST,  2, 160);
     force_place_patch(gs, 60, 51, TILE_FOREST,  2, 160);
     force_place_patch(gs, 50, 50, TILE_FOREST,  2, 160);
@@ -162,6 +217,7 @@ void map_init(GameState *gs){
     force_place_patch(gs, 51, 62, TILE_GOLD,    1, 800);
     force_place_patch(gs, 62, 51, TILE_STONE,   1, 700);
 }
+
 
 /* ---------- Fog of war ---------- */
 

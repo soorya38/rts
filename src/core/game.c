@@ -4,6 +4,7 @@
 #include "game.h"
 #include <string.h>
 #include <stdio.h>
+#include <time.h>
 
 uint32_t _rng = 12345;
 
@@ -43,8 +44,8 @@ void game_init(GameState *gs){
     gs->res[1].age    = 0;
     gs->res[1].pop_cap = 5;
 
-    /* Generate map */
-    _rng=42;
+    /* Generate map with a random seed based on current time */
+    _rng = (uint32_t)time(NULL);
     map_init(gs);
 
     /* ── Player 1 start (top-left) ── */
