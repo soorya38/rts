@@ -16,7 +16,7 @@ int main(void){
     /* ── Window ── */
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
     InitWindow(SCREEN_W, SCREEN_H, "Age of Empires II  –  Raylib Edition");
-    SetTargetFPS(60);
+    SetTargetFPS(0);
     SetExitKey(KEY_NULL);   /* Don't quit on ESC */
 
     /* ── Game state ── */
