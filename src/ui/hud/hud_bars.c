@@ -208,10 +208,30 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
 }
 
 void draw_minimap(GameState *gs, UIState *ui){
-    DrawRectangle(MINI_X-2,MINI_Y-2,MINI_SIZE+4,MINI_SIZE+4,C_HUD_BG);
-    DrawRectangleLinesEx((Rectangle){MINI_X-2.0f,MINI_Y-2.0f,MINI_SIZE+4.0f,MINI_SIZE+4.0f},1.5f,C_HUD_LINE);
-    float sx=(float)MINI_SIZE/MAP_W, sy=(float)MINI_SIZE/MAP_H;
-    int ps=(int)(sx<1?1:sx), qs=(int)(sy<1?1:sy);
+    float cx = MINI_X + MINI_SIZE / 2.0f;
+    float cy = MINI_Y;
+    float half_w = MINI_SIZE / 2.0f;
+
+    Vector2 pt_top = { cx, cy - 2 };
+    Vector2 pt_right = { cx + half_w + 2, cy + MINI_SIZE / 2.0f };
+    Vector2 pt_bot = { cx, cy + MINI_SIZE + 2 };
+    Vector2 pt_left = { cx - half_w - 2, cy + MINI_SIZE / 2.0f };
+
+    DrawTriangle(pt_top, pt_left, pt_right, BLACK);
+    DrawTriangle(pt_bot, pt_right, pt_left, BLACK);
+    DrawLineEx(pt_top, pt_right, 1.5f, C_HUD_LINE);
+    DrawLineEx(pt_right, pt_bot, 1.5f, C_HUD_LINE);
+    DrawLineEx(pt_bot, pt_left, 1.5f, C_HUD_LINE);
+    DrawLineEx(pt_left, pt_top, 1.5f, C_HUD_LINE);
+
+    /* Helper macro to map world tile coordinates to minimap screen coords */
+    #define MAP_TO_MINI(tx, ty, out_x, out_y) do { \
+        float iso_x = ((tx) - (ty)) / (float)MAP_W; \
+        float iso_y = ((tx) + (ty)) / (float)(MAP_W + MAP_H); \
+        (out_x) = cx + iso_x * half_w; \
+        (out_y) = cy + iso_y * MINI_SIZE; \
+    } while(0)
+
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
         FogState fs=gs->map[y][x].fog[0];
         if(fs==FOG_HIDDEN) continue;
@@ -226,7 +246,9 @@ void draw_minimap(GameState *gs, UIState *ui){
             default:           c=CLITERAL(Color){130,100,50,255};break;
         }
         if(fs==FOG_EXPLORED){ c.r/=2;c.g/=2;c.b/=2; }
-        DrawRectangle(MINI_X+(int)(x*sx),MINI_Y+(int)(y*sy),ps,qs,c);
+        float dx, dy;
+        MAP_TO_MINI(x, y, dx, dy);
+        DrawRectangle((int)dx, (int)dy, 2, 2, c);
     }
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
@@ -234,7 +256,11 @@ void draw_minimap(GameState *gs, UIState *ui){
         FogState fs=gs->map[clampi(b->ty,0,MAP_H-1)][clampi(b->tx,0,MAP_W-1)].fog[0];
         if(fs==FOG_HIDDEN&&b->player!=0) continue;
         Color c=(b->player==0)?CLITERAL(Color){30,110,220,255}:CLITERAL(Color){210,50,40,255};
-        DrawRectangle(MINI_X+(int)(b->tx*sx),MINI_Y+(int)(b->ty*sy),(int)(b->tw*sx)+1,(int)(b->th*sy)+1,c);
+        float dx, dy;
+        MAP_TO_MINI(b->tx + b->tw*0.5f, b->ty + b->th*0.5f, dx, dy);
+        int bw = (int)(b->tw * (half_w / MAP_W));
+        if(bw < 2) bw = 2;
+        DrawRectangle((int)dx - bw/2, (int)dy - bw/2, bw, bw, c);
     }
     for(int i=0;i<MAX_UNITS;i++){
         Unit *u=&gs->units[i];
@@ -243,19 +269,67 @@ void draw_minimap(GameState *gs, UIState *ui){
         FogState fs=gs->map[clampi(uty,0,MAP_H-1)][clampi(utx,0,MAP_W-1)].fog[0];
         if(fs==FOG_HIDDEN&&u->player!=0) continue;
         Color c=(u->player==0)?CLITERAL(Color){80,180,255,255}:CLITERAL(Color){255,100,80,255};
-        DrawRectangle(MINI_X+(int)(u->wx/TILE_SIZE*sx)-1,MINI_Y+(int)(u->wy/TILE_SIZE*sy)-1,2,2,c);
+        float dx, dy;
+        MAP_TO_MINI(utx, uty, dx, dy);
+        DrawRectangle((int)dx, (int)dy, 2, 2, c);
     }
-    float cam_w=SCREEN_W/ui->camera.zoom, cam_h=SCREEN_H/ui->camera.zoom;
-    float cam_l=ui->camera.target.x - cam_w*0.5f, cam_t=ui->camera.target.y - cam_h*0.5f;
-    float rl=(cam_l/TILE_SIZE)*sx, rt=(cam_t/TILE_SIZE)*sy;
-    float rw=(cam_w/TILE_SIZE)*sx, rh=(cam_h/TILE_SIZE)*sy;
-    if(rl<0){rw+=rl;rl=0;} if(rt<0){rh+=rt;rt=0;}
-    if(rl+rw>MINI_SIZE) rw=MINI_SIZE-rl;
-    if(rt+rh>MINI_SIZE) rh=MINI_SIZE-rt;
-    DrawRectangleLinesEx((Rectangle){MINI_X+rl,MINI_Y+rt,rw,rh},1,CLITERAL(Color){220,200,150,200});
+
+    /* Camera view box */
+    float cam_w = SCREEN_W / ui->camera.zoom;
+    float cam_h = SCREEN_H / ui->camera.zoom;
+    
+    /* Calculate corners of the camera view in world coordinates */
+    /* Target in ui->camera.target is already in ISO space!
+       Let's convert it back to world space to map to the minimap. */
+    Vec2 world_center = iso_to_world(ui->camera.target.x, ui->camera.target.y);
+    float t_cx = world_center.x / TILE_SIZE;
+    float t_cy = world_center.y / TILE_SIZE;
+
+    /* To draw a proper camera quad on the minimap, we need the 4 corners of the screen in world coords */
+    Vector2 cam_tl = GetScreenToWorld2D((Vector2){0, 0}, ui->camera);
+    Vector2 cam_tr = GetScreenToWorld2D((Vector2){SCREEN_W, 0}, ui->camera);
+    Vector2 cam_bl = GetScreenToWorld2D((Vector2){0, SCREEN_H}, ui->camera);
+    Vector2 cam_br = GetScreenToWorld2D((Vector2){SCREEN_W, SCREEN_H}, ui->camera);
+
+    Vec2 w_tl = iso_to_world(cam_tl.x, cam_tl.y);
+    Vec2 w_tr = iso_to_world(cam_tr.x, cam_tr.y);
+    Vec2 w_bl = iso_to_world(cam_bl.x, cam_bl.y);
+    Vec2 w_br = iso_to_world(cam_br.x, cam_br.y);
+
+    float mini_tl_x, mini_tl_y; MAP_TO_MINI(w_tl.x / TILE_SIZE, w_tl.y / TILE_SIZE, mini_tl_x, mini_tl_y);
+    float mini_tr_x, mini_tr_y; MAP_TO_MINI(w_tr.x / TILE_SIZE, w_tr.y / TILE_SIZE, mini_tr_x, mini_tr_y);
+    float mini_bl_x, mini_bl_y; MAP_TO_MINI(w_bl.x / TILE_SIZE, w_bl.y / TILE_SIZE, mini_bl_x, mini_bl_y);
+    float mini_br_x, mini_br_y; MAP_TO_MINI(w_br.x / TILE_SIZE, w_br.y / TILE_SIZE, mini_br_x, mini_br_y);
+
+    DrawLineEx((Vector2){mini_tl_x, mini_tl_y}, (Vector2){mini_tr_x, mini_tr_y}, 1.5f, CLITERAL(Color){220,200,150,200});
+    DrawLineEx((Vector2){mini_tr_x, mini_tr_y}, (Vector2){mini_br_x, mini_br_y}, 1.5f, CLITERAL(Color){220,200,150,200});
+    DrawLineEx((Vector2){mini_br_x, mini_br_y}, (Vector2){mini_bl_x, mini_bl_y}, 1.5f, CLITERAL(Color){220,200,150,200});
+    DrawLineEx((Vector2){mini_bl_x, mini_bl_y}, (Vector2){mini_tl_x, mini_tl_y}, 1.5f, CLITERAL(Color){220,200,150,200});
+
+    /* Minimap clicking to move camera */
     Vector2 mp=GetMousePosition();
-    if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)&&mp.x>=MINI_X&&mp.x<=MINI_X+MINI_SIZE&&mp.y>=MINI_Y&&mp.y<=MINI_Y+MINI_SIZE){
-        float rx=(mp.x-MINI_X)/MINI_SIZE, ry=(mp.y-MINI_Y)/MINI_SIZE;
-        ui->camera.target=(Vector2){rx*MAP_W*TILE_SIZE, ry*MAP_H*TILE_SIZE};
+    if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)){
+        /* Check if inside the diamond bounding box */
+        if(mp.x >= MINI_X && mp.x <= MINI_X+MINI_SIZE && mp.y >= MINI_Y && mp.y <= MINI_Y+MINI_SIZE){
+            /* Inverse map the point */
+            float dx = mp.x - cx;
+            float dy = mp.y - cy;
+            /* iso_x = dx / half_w; iso_y = dy / MINI_SIZE; 
+               iso_x = (x - y)/W; iso_y = (x + y)/(W+H); */
+               
+            float iso_x = dx / half_w;
+            float iso_y = dy / MINI_SIZE;
+            
+            float target_tx = (iso_y * (MAP_W + MAP_H) + iso_x * MAP_W) / 2.0f;
+            float target_ty = (iso_y * (MAP_W + MAP_H) - iso_x * MAP_W) / 2.0f;
+
+            /* clamp */
+            target_tx = clampf(target_tx, 0, MAP_W-1);
+            target_ty = clampf(target_ty, 0, MAP_H-1);
+
+            /* set target */
+            Vec2 new_iso = world_to_iso(target_tx * TILE_SIZE, target_ty * TILE_SIZE);
+            ui->camera.target = to_rvec2(new_iso);
+        }
     }
 }
