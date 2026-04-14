@@ -244,3 +244,22 @@ int map_find_dropoff(GameState *gs,int player,ResType res,float wx,float wy,int 
     }
     return found;
 }
+
+int map_find_passable_near(GameState *gs, int tx, int ty, int *ox, int *oy) {
+    if (map_is_passable(gs, tx, ty)) {
+        *ox = tx; *oy = ty; return 1;
+    }
+    /* Search in expanding rings */
+    for (int r = 1; r < 3; r++) {
+        for (int dy = -r; dy <= r; dy++) {
+            for (int dx = -r; dx <= r; dx++) {
+                if (abs(dx) != r && abs(dy) != r) continue;
+                int nx = tx + dx, ny = ty + dy;
+                if (map_is_passable(gs, nx, ny)) {
+                    *ox = nx; *oy = ny; return 1;
+                }
+            }
+        }
+    }
+    return 0;
+}

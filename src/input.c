@@ -140,6 +140,17 @@ static void issue_command_at(GameState *gs, Vector2 world){
     bool is_resource=(tt==TILE_FOREST||tt==TILE_GOLD||
                       tt==TILE_STONE||tt==TILE_BERRIES||tt==TILE_FARM);
 
+    int ftx=tx, fty=ty;
+    bool must_be_passable = (!is_resource && eu<0 && eb<0 && ub<0);
+    if(must_be_passable){
+        if(!map_find_passable_near(gs,tx,ty,&ftx,&fty)) return;
+    }
+
+    /* Formation constants */
+    int width = gs->sel_count < 5 ? gs->sel_count : 5;
+    if (width < 1) width = 1;
+    int height = (gs->sel_count + width - 1) / width;
+
     for(int i=0;i<gs->sel_count;i++){
         Unit *u=&gs->units[gs->sel_units[i]];
         if(!u->active||u->player!=0) continue;
@@ -151,10 +162,13 @@ static void issue_command_at(GameState *gs, Vector2 world){
         } else if(is_resource && u->type==UNIT_VILLAGER){
             unit_give_gather_order(gs,u,tx,ty);
         } else {
-            /* Spread into a loose formation */
-            int col=i%5, row=i/5;
-            int ntx=clampi(tx+(col-2),0,MAP_W-1);
-            int nty=clampi(ty+row,    0,MAP_H-1);
+            /* Spread into a loose formation centered on target */
+            int col = i % width;
+            int row = i / width;
+            int ox = col - (width / 2);
+            int oy = row - (height / 2);
+            int ntx = clampi(ftx + ox, 0, MAP_W - 1);
+            int nty = clampi(fty + oy, 0, MAP_H - 1);
             unit_give_move_order(gs,u,ntx,nty);
         }
     }

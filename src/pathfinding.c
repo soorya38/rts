@@ -60,8 +60,11 @@ int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
             if(ng < g[nc]){
                 g[nc]    = ng;
                 from[nc] = c;
-                float h  = (float)(abs(ex-nx)+abs(ey-ny));
-                pq_push(&open, nc, ng+h);
+                /* Octile distance heuristic for 8-directional grids */
+                int dx = abs(ex - nx);
+                int dy = abs(ey - ny);
+                float h = (dx > dy) ? (0.414f * dy + dx) : (0.414f * dx + dy);
+                pq_push(&open, nc, ng + h);
             }
         }
     }
