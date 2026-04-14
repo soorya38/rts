@@ -227,6 +227,8 @@ typedef struct {
     int        sel_units[MAX_UNITS];
     int        sel_count;
     int        sel_building;        /* -1 = none */
+    int        sel_tile_x, sel_tile_y; /* -1 = none; last clicked resource tile */
+
 
     BuildMode  build_mode;
 

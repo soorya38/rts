@@ -237,6 +237,47 @@ static void draw_bottom_panel(GameState *gs){
 
     /* ── Selected Units ── */
     if(gs->sel_count==0){
+        /* ── Resource tile inspection ── */
+        if(gs->sel_building<0 && gs->sel_tile_x>=0 && gs->sel_tile_y>=0 &&
+           map_in_bounds(gs->sel_tile_x,gs->sel_tile_y)){
+            Tile *t=&gs->map[gs->sel_tile_y][gs->sel_tile_x];
+            if(t->type==TILE_FOREST||t->type==TILE_GOLD||
+               t->type==TILE_STONE||t->type==TILE_BERRIES||t->type==TILE_FARM){
+                static const char *TILE_LABEL[]={"Grass","Water","Forest","Gold Deposit",
+                    "Stone Deposit","Berry Bush","Farmland"};
+                static Color TILE_COLOR[]={
+                    {80,120,60,255},{60,100,170,255},{60,130,50,255},
+                    {210,175,30,255},{160,155,140,255},{180,60,80,255},{160,140,80,255}
+                };
+                Color col=TILE_COLOR[t->type];
+                /* big tile name */
+                DrawText(TILE_LABEL[t->type],12,HUD_BOT_Y+8,18,col);
+                /* resource amount */
+                char rbuf[48];
+                static const char *RNAME[]={"Food","Wood","Gold","Stone"};
+                ResType rtype;
+                switch(t->type){
+                    case TILE_FOREST:  rtype=RES_WOOD;  break;
+                    case TILE_GOLD:    rtype=RES_GOLD;  break;
+                    case TILE_STONE:   rtype=RES_STONE; break;
+                    default:           rtype=RES_FOOD;  break;
+                }
+                snprintf(rbuf,sizeof(rbuf),"%s remaining: %d",RNAME[rtype],t->resource_amt);
+                DrawText(rbuf,12,HUD_BOT_Y+30,12,CLITERAL(Color){200,185,140,220});
+                /* bar */
+                static const int MAX_AMT[]={0,0,250,900,800,500,400}; /* rough max per type */
+                int maxv=MAX_AMT[t->type]; if(maxv<=0) maxv=500;
+                int bar_w=(int)(200.0f*((float)t->resource_amt/(float)maxv));
+                if(bar_w<0)bar_w=0; if(bar_w>200)bar_w=200;
+                DrawRectangle(12,HUD_BOT_Y+46,200,8,CLITERAL(Color){20,18,12,220});
+                DrawRectangle(12,HUD_BOT_Y+46,bar_w,8,col);
+                DrawRectangleLinesEx((Rectangle){12,HUD_BOT_Y+46,200,8},1,
+                                     CLITERAL(Color){80,70,50,200});
+                DrawText("Click to inspect  |  Select villager + click to gather",
+                         12,HUD_BOT_Y+62,10,CLITERAL(Color){90,80,55,180});
+                return;
+            }
+        }
         DrawText("No units selected",12,HUD_BOT_Y+8,13,CLITERAL(Color){100,90,65,200});
         DrawText("Click unit/building to select  |  Drag to box-select",
                  12,HUD_BOT_Y+28,11,CLITERAL(Color){90,80,55,180});

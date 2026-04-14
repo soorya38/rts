@@ -309,17 +309,35 @@ static void handle_left_up(GameState *gs){
         /* Clicked a friendly unit → select it */
         if(!shift) clear_selection(gs);
         select_unit(gs,fu);
+        gs->sel_tile_x=-1; gs->sel_tile_y=-1;
     } else if(fb>=0 && gs->buildings[fb].complete){
         /* Clicked a complete friendly building → select it */
         clear_selection(gs);
         gs->sel_building=fb;
         gs->buildings[fb].selected=true;
+        gs->sel_tile_x=-1; gs->sel_tile_y=-1;
     } else if(gs->sel_count>0){
         /* Units already selected, clicked on world → context command */
         issue_command_at(gs,we);
+        /* Also record the tile they were commanded to (for gather info) */
+        int tx=(int)(we.x/TILE_SIZE), ty=(int)(we.y/TILE_SIZE);
+        if(map_in_bounds(tx,ty)){
+            TileType tt=gs->map[ty][tx].type;
+            if(tt==TILE_FOREST||tt==TILE_GOLD||tt==TILE_STONE||
+               tt==TILE_BERRIES||tt==TILE_FARM)
+            { gs->sel_tile_x=tx; gs->sel_tile_y=ty; }
+            else { gs->sel_tile_x=-1; gs->sel_tile_y=-1; }
+        }
     } else {
-        /* Nothing selected, clicked on empty → just clear */
-        clear_selection(gs);
+        /* Nothing selected → inspect the clicked tile */
+        int tx=(int)(we.x/TILE_SIZE), ty=(int)(we.y/TILE_SIZE);
+        if(map_in_bounds(tx,ty)){
+            TileType tt=gs->map[ty][tx].type;
+            if(tt==TILE_FOREST||tt==TILE_GOLD||tt==TILE_STONE||
+               tt==TILE_BERRIES||tt==TILE_FARM)
+            { gs->sel_tile_x=tx; gs->sel_tile_y=ty; }
+            else { gs->sel_tile_x=-1; gs->sel_tile_y=-1; clear_selection(gs); }
+        }
     }
 }
 

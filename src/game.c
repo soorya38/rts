@@ -20,6 +20,9 @@ void game_init(GameState *gs){
     gs->phase        = PHASE_MENU;
     gs->game_time    = 0.0f;
     gs->sel_building = -1;
+    gs->sel_tile_x   = -1;
+    gs->sel_tile_y   = -1;
+
     gs->ai_phase     = 0;           /* AI starts in GATHER */
     gs->ai_timer     = 0.0f;
     gs->ai_attack_cd = 90.0f;       /* First attack after 90 seconds */

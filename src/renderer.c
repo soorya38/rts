@@ -442,4 +442,42 @@ void renderer_draw_world(GameState *gs){
 
     /* 6. Selection box */
     draw_selection_box(gs);
+
+    /* 7. Resource tile selection indicator */
+    if(gs->sel_tile_x>=0 && gs->sel_tile_y>=0 &&
+       map_in_bounds(gs->sel_tile_x,gs->sel_tile_y)){
+        Tile *t=&gs->map[gs->sel_tile_y][gs->sel_tile_x];
+        /* Only draw if tile is visible and still a resource */
+        if(gs->map[gs->sel_tile_y][gs->sel_tile_x].fog[0]==FOG_VISIBLE &&
+           (t->type==TILE_FOREST||t->type==TILE_GOLD||t->type==TILE_STONE||
+            t->type==TILE_BERRIES||t->type==TILE_FARM)){
+            float px=(float)(gs->sel_tile_x*TILE_SIZE);
+            float py=(float)(gs->sel_tile_y*TILE_SIZE);
+            float s=(float)TILE_SIZE;
+            /* Pulsing selection ring */
+            float pulse=sinf(gs->game_time*5.0f)*0.5f+0.5f;
+            unsigned char palpha=(unsigned char)(140+pulse*100);
+            Color ring=CLITERAL(Color){255,220,60,palpha};
+            DrawRectangleLinesEx((Rectangle){px-1,py-1,s+2,s+2},2,ring);
+            /* Small floating label above the tile */
+            static const char *RTYPE_LABEL[]={"Food","Wood","Gold","Stone"};
+            ResType rtype;
+            switch(t->type){
+                case TILE_FOREST:  rtype=RES_WOOD;  break;
+                case TILE_GOLD:    rtype=RES_GOLD;  break;
+                case TILE_STONE:   rtype=RES_STONE; break;
+                default:           rtype=RES_FOOD;  break;
+            }
+            char lbl[32];
+            snprintf(lbl,sizeof(lbl),"%s: %d",RTYPE_LABEL[rtype],t->resource_amt);
+            int tw2=MeasureText(lbl,10);
+            int lx=(int)(px+s*0.5f)-tw2/2;
+            int ly=(int)(py)-16;
+            DrawRectangle(lx-3,ly-2,tw2+6,14,CLITERAL(Color){10,8,4,210});
+            DrawText(lbl,lx,ly,10,CLITERAL(Color){255,220,80,255});
+        } else {
+            /* Tile depleted or hidden → clear selection */
+            gs->sel_tile_x=-1; gs->sel_tile_y=-1;
+        }
+    }
 }
