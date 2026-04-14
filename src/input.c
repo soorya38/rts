@@ -114,6 +114,12 @@ static void select_unit(GameState *gs, UIState *ui, int uid) {
 static bool hit_building_iso(Building *b, Vector2 wp) {
   float bx = (float)b->tx * TILE_SIZE, by = (float)b->ty * TILE_SIZE;
   float bw = (float)b->tw * TILE_SIZE, bh = (float)b->th * TILE_SIZE;
+
+  Vec2 c = iso_to_world(wp.x, wp.y);
+  if (c.x >= bx && c.x <= bx + bw && c.y >= by && c.y <= by + bh) {
+    return true;
+  }
+
   Vector2 p = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh * 0.5f));
   float hit_w = (bw + bh) * 0.7f;
   float hit_h = (bw + bh) * 0.5f + 30; // Vertical extrusion

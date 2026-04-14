@@ -211,7 +211,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     if(!b->complete){
         draw_shadow(px + w * 0.5f, py + h * 0.5f, w * 0.8f, h * 0.8f);
         draw_construction(px,py,w,h,b->construction,mc);
-        draw_hp_bar(px+w*0.5f,py+h*0.5f,w*0.8f,b->hp,b->max_hp,25);
+        draw_hp_bar(px+w*0.5f,py+h*0.5f,w*0.8f,(int)(b->construction*100),100,25);
         return;
     }
 
