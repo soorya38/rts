@@ -593,12 +593,18 @@ static void draw_menu(GameState *gs){
     int bw=200,bh=52,bx=SCREEN_W/2-bw/2,by=SCREEN_H/2+80;
     Vector2 mp=GetMousePosition();
     bool hover=mp.x>=bx&&mp.x<=bx+bw&&mp.y>=by&&mp.y<=by+bh;
+    
     DrawRectangleRounded((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},0.2f,8,
                          hover?CLITERAL(Color){70,58,28,255}:CLITERAL(Color){45,36,16,255});
     DrawRectangleRoundedLines((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},0.2f,8,
                               CLITERAL(Color){180,155,60,255});
     const char *play="Start Game";
-    DrawText(play,bx+(bw-MeasureText(play,20))/2,by+(bh-20)/2,20,CLITERAL(Color){220,195,100,255});
+    int pfs=20;
+    DrawText(play,bx+(bw-MeasureText(play,pfs))/2,by+(bh-pfs)/2,pfs,CLITERAL(Color){220,195,100,255});
+    
+    if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        gs->phase = PHASE_PLAYING;
+    }
     gs->menu_start_hover=hover;
 
     /* Copyright */

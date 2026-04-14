@@ -24,6 +24,10 @@ void game_init(GameState *gs){
     gs->sel_building = -1;
     gs->sel_tile_x   = -1;
     gs->sel_tile_y   = -1;
+    gs->hover_unit   = -1;
+    gs->hover_building = -1;
+    gs->hover_tile_x = -1;
+    gs->hover_tile_y = -1;
 
     gs->ai_phase     = 0;           /* AI starts in GATHER */
     gs->ai_timer     = 0.0f;

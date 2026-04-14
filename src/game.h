@@ -65,6 +65,26 @@ static inline float dist2f(float ax,float ay,float bx,float by){
     float dx=bx-ax,dy=by-ay; return sqrtf(dx*dx+dy*dy);
 }
 
+/* ─── Isometric Math ──────────────────────────────────────── */
+/* 
+ * Isometric projection where:
+ * Cartesian X goes down-right
+ * Cartesian Y goes down-left
+ * Scale is exactly 2:1 (width:height)
+ */
+static inline Vector2 world_to_iso(float wx, float wy) {
+    return (Vector2){
+        (wx - wy),
+        (wx + wy) * 0.5f
+    };
+}
+static inline Vector2 iso_to_world(float ix, float iy) {
+    return (Vector2){
+        iy + ix * 0.5f,
+        iy - ix * 0.5f
+    };
+}
+
 /* ─── RNG ────────────────────────────────────────────────────── */
 extern uint32_t _rng;
 static inline uint32_t rng_next(void){
@@ -228,6 +248,11 @@ typedef struct {
     int        sel_count;
     int        sel_building;        /* -1 = none */
     int        sel_tile_x, sel_tile_y; /* -1 = none; last clicked resource tile */
+
+    /* Hover state */
+    int        hover_unit;          /* -1 = none */
+    int        hover_building;      /* -1 = none */
+    int        hover_tile_x, hover_tile_y; /* -1 = none */
 
 
     BuildMode  build_mode;
