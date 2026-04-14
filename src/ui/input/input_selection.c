@@ -183,32 +183,31 @@ void handle_left_up(GameState *gs, UIState *ui) {
     bool shift = IsKeyDown(KEY_LEFT_SHIFT);
     int fu = find_friendly_unit_at(gs, we);
     int fb = find_friendly_building_at(gs, we);
-    int dropoff = find_friendly_dropoff_at(gs, we);
 
-    bool is_villager_carrying = false, has_villagers = false;
-    for (int i = 0; i < ui->sel_count; i++) {
-        if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) {
-            has_villagers = true;
-            if (gs->units[ui->sel_units[i]].carry_amt > 0) is_villager_carrying = true;
-        }
-    }
+    bool has_villagers = false;
+    for (int i = 0; i < ui->sel_count; i++)
+        if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { has_villagers = true; break; }
 
     if (fu >= 0) {
+        /* Clicked a friendly unit → select it */
         if (!shift) clear_selection(gs, ui);
         select_unit(gs, ui, fu);
         ui->sel_tile_x = -1; ui->sel_tile_y = -1;
-    } else if (is_villager_carrying && dropoff >= 0) {
-        issue_command_at(gs, ui, we);
     } else if (fb >= 0 && gs->buildings[fb].complete) {
+        /* Clicking a completed farm with villagers selected = gather command */
         if (has_villagers && gs->buildings[fb].type == BLD_FARM) {
             issue_command_at(gs, ui, we);
         } else {
+            /* Always select the building — even if a carrying villager is in the selection.
+               Villagers auto-return when full; this prevents the dropoff branch from
+               hijacking a "I want to see this building's panel" click. */
             clear_selection(gs, ui);
             ui->sel_building = fb;
             gs->buildings[fb].selected = true;
             ui->sel_tile_x = -1; ui->sel_tile_y = -1;
         }
     } else if (ui->sel_count > 0) {
+        /* Units selected, clicked on world → context command (move/attack/gather/build/dropoff) */
         issue_command_at(gs, ui, we);
         Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));
         int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
@@ -219,6 +218,7 @@ void handle_left_up(GameState *gs, UIState *ui) {
             else { ui->sel_tile_x = -1; ui->sel_tile_y = -1; }
         }
     } else {
+        /* Nothing selected → inspect the clicked tile */
         Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));
         int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
         if (map_in_bounds(tx, ty)) {
