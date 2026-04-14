@@ -58,10 +58,20 @@ static void draw_tile(GameState *gs, int x, int y){
             break;
 
         case TILE_WATER: {
-            /* Animated ripple using game_time */
-            float wave=sinf(gs->game_time*1.2f+(x+y)*0.4f)*0.5f+0.5f;
-            Color wc=ColorAlphaBlend(C_WATER,C_WATER2,(Color){255,255,255,(unsigned char)(wave*60)});
-            DrawRectangleV((Vector2){px,py},(Vector2){s,s},wc);
+            /* Multi-layered animated ripples */
+            float t = gs->game_time;
+            float wave1 = sinf(t * 1.2f + (x + y) * 0.4f) * 0.5f + 0.5f;
+            float wave2 = sinf(t * 0.8f - (x - y) * 0.3f) * 0.5f + 0.5f;
+            float wave3 = cosf(t * 1.5f + (float)x * 0.5f) * 0.5f + 0.5f;
+            float combined = (wave1 * 0.5f + wave2 * 0.3f + wave3 * 0.2f);
+            
+            Color wc = ColorAlphaBlend(C_WATER, C_WATER2, (Color){255, 255, 255, (unsigned char)(combined * 80)});
+            DrawRectangleV((Vector2){px, py}, (Vector2){s, s}, wc);
+            
+            /* Occasional white foam crests */
+            if (combined > 0.85f) {
+                DrawRectangleV((Vector2){px + s * 0.2f, py + s * 0.2f}, (Vector2){s * 0.6f, 2}, (Color){255, 255, 255, 40});
+            }
             break;
         }
 
@@ -140,23 +150,41 @@ static void draw_construction(float px,float py,float w,float h,float prog,Color
                    CLITERAL(Color){200,180,120,180});
 }
 
+static void draw_shadow(float wx, float wy, float rw, float rh) {
+    DrawEllipse((int)wx, (int)wy, (int)rw, (int)rh, (Color){0, 0, 0, 60});
+}
+
 static void draw_flag(float fx, float fy, int player){
     DrawLineEx((Vector2){fx,fy},(Vector2){fx,fy-10},2,(Color){80,60,40,255});
     Color fc=player_color(player);
     DrawTriangle((Vector2){fx,fy-10},(Vector2){fx+8,fy-6},(Vector2){fx,fy-2},fc);
 }
 
-static void draw_building(Building *b){
+static void draw_smoke(float bx, float by, float time, int seed) {
+    for (int i = 0; i < 3; i++) {
+        float f = fmodf(time * 0.7f + (float)i * 0.33f + (float)seed * 0.1f, 1.0f);
+        float ox = sinf(time * 2.0f + (float)i + (float)seed) * 5.0f;
+        float oy = -f * 30.0f;
+        float size = 4.0f + f * 8.0f;
+        unsigned char alpha = (unsigned char)((1.0f - f) * 160);
+        DrawCircle((int)(bx + ox), (int)(by + oy), size, (Color){60, 60, 60, alpha});
+    }
+}
+
+static void draw_building(GameState *gs, Building *b){
     float px=(float)(b->tx*TILE_SIZE), py=(float)(b->ty*TILE_SIZE);
     float w=(float)(b->tw*TILE_SIZE), h=(float)(b->th*TILE_SIZE);
     Color mc=player_color(b->player);
     Color dc=player_color_dark(b->player);
 
     if(!b->complete){
+        draw_shadow(px + w * 0.5f, py + h * 0.8f, w * 0.5f, h * 0.3f);
         draw_construction(px,py,w,h,b->construction,mc);
         draw_hp_bar(px+w*0.5f,py,w*0.8f,b->hp,b->max_hp,6);
         return;
     }
+
+    draw_shadow(px + w * 0.5f, py + h * 0.9f, w * 0.6f, h * 0.35f);
 
     switch(b->type){
         case BLD_TOWN_CENTER: {
@@ -180,6 +208,21 @@ static void draw_building(Building *b){
             draw_flag(px+w*0.5f,py+h*0.12f,b->player);
             /* Player color band */
             DrawRectangleRec((Rectangle){px+w*0.2f,py+h*0.75f,w*0.6f,5},mc);
+
+            /* Age-specific details */
+            int age = gs->res[b->player].age;
+            if(age >= 1){ /* Feudal + */
+                DrawRectangleRec((Rectangle){px+w*0.2f,py+h*0.35f,5,h*0.4f},dc);
+                DrawRectangleRec((Rectangle){px+w*0.8f-5,py+h*0.35f,5,h*0.4f},dc);
+            }
+            if(age >= 2){ /* Castle + */
+                for(int i=0;i<2;i++)
+                    draw_flag(px+w*0.3f+i*(w*0.4f),py+h*0.3f,b->player);
+            }
+            if(age >= 3){ /* Imperial */
+                DrawRectangleRec((Rectangle){px+w*0.1f,py+h*0.8f,w*0.8f,8},dc);
+                DrawRectangleLinesEx((Rectangle){px+w*0.25f,py+h*0.2f,w*0.5f,h*0.6f},2,mc);
+            }
             break;
         }
         case BLD_HOUSE: {
@@ -240,6 +283,14 @@ static void draw_building(Building *b){
             break;
     }
 
+    /* Smoke if damaged */
+    if (b->hp < b->max_hp * 0.5f) {
+        draw_smoke(px + w * 0.4f, py + h * 0.3f, GetTime(), b->id);
+    }
+    if (b->hp < b->max_hp * 0.25f) {
+        draw_smoke(px + w * 0.7f, py + h * 0.5f, GetTime() + 0.5f, b->id + 13);
+    }
+
     /* Health bar */
     draw_hp_bar(px+w*0.5f,py,w*0.85f,b->hp,b->max_hp,7);
 
@@ -264,9 +315,14 @@ static void draw_unit(Unit *u, float t){
     Color mc = player_color_alpha(u->player,(unsigned char)alpha);
     Color dc = player_color_dark(u->player); dc.a=(unsigned char)alpha;
 
-    /* Selection circle */
-    if(u->selected)
-        DrawEllipse((int)wx,(int)wy,10,5,CLITERAL(Color){80,220,100,140});
+    /* Drop shadow */
+    draw_shadow(wx, wy + 2, 10, 5);
+
+    /* Selection circle (pulsing) */
+    if(u->selected) {
+        float pulse = sinf(t * 8.0f) * 1.5f;
+        DrawEllipse((int)wx,(int)wy,10 + pulse, 5 + pulse * 0.5f, CLITERAL(Color){80,220,100,140});
+    }
 
     float bob=sinf(t*6.0f+(float)(u->id))*1.5f;
 
@@ -402,11 +458,15 @@ static void draw_build_ghost(GameState *gs){
 
 /* ─── Master render ───────────────────────────────────────── */
 void renderer_draw_world(GameState *gs){
-    /* 1. Tiles */
-    int vx0=clampi((int)(gs->camera.target.x/TILE_SIZE)-(SCREEN_W/TILE_SIZE/2)-2,0,MAP_W-1);
-    int vy0=clampi((int)(gs->camera.target.y/TILE_SIZE)-(SCREEN_H/TILE_SIZE/2)-2,0,MAP_H-1);
-    int vx1=clampi(vx0+SCREEN_W/TILE_SIZE+4,0,MAP_W-1);
-    int vy1=clampi(vy0+SCREEN_H/TILE_SIZE+4,0,MAP_H-1);
+    /* 1. Tiles (culling logic must account for zoom) */
+    float zoom = gs->camera.zoom;
+    float vw = SCREEN_W / zoom;
+    float vh = SCREEN_H / zoom;
+
+    int vx0 = clampi((int)((gs->camera.target.x - vw * 0.5f) / TILE_SIZE) - 1, 0, MAP_W - 1);
+    int vy0 = clampi((int)((gs->camera.target.y - vh * 0.5f) / TILE_SIZE) - 1, 0, MAP_H - 1);
+    int vx1 = clampi((int)((gs->camera.target.x + vw * 0.5f) / TILE_SIZE) + 1, 0, MAP_W - 1);
+    int vy1 = clampi((int)((gs->camera.target.y + vh * 0.5f) / TILE_SIZE) + 1, 0, MAP_H - 1);
 
     for(int y=vy0;y<=vy1;y++) for(int x=vx0;x<=vx1;x++){
         if(gs->map[y][x].fog[0]!=FOG_HIDDEN) draw_tile(gs,x,y);
@@ -418,7 +478,7 @@ void renderer_draw_world(GameState *gs){
         if(!b->active) continue;
         int bx=b->tx+b->tw/2, by=b->ty+b->th/2;
         if(gs->map[clampi(by,0,MAP_H-1)][clampi(bx,0,MAP_W-1)].fog[0]==FOG_HIDDEN) continue;
-        draw_building(b);
+        draw_building(gs, b);
     }
 
     /* 3. Units */

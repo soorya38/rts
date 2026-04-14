@@ -42,14 +42,26 @@ static void update_camera(GameState *gs, float dt){
 
     float wheel=GetMouseWheelMove();
     if(wheel!=0.0f){
+        Vector2 mouseWorldBeforeZoom = GetScreenToWorld2D(mp, *cam);
         cam->zoom+=wheel*ZOOM_SPEED*cam->zoom;
         cam->zoom=clampf(cam->zoom,ZOOM_MIN,ZOOM_MAX);
+        Vector2 mouseWorldAfterZoom = GetScreenToWorld2D(mp, *cam);
+        cam->target.x += (mouseWorldBeforeZoom.x - mouseWorldAfterZoom.x);
+        cam->target.y += (mouseWorldBeforeZoom.y - mouseWorldAfterZoom.y);
     }
 
     float hw=(SCREEN_W*0.5f)/cam->zoom, hh=(SCREEN_H*0.5f)/cam->zoom;
-    cam->target.x=clampf(cam->target.x,hw,(float)(MAP_W*TILE_SIZE)-hw);
-    cam->target.y=clampf(cam->target.y,hh,(float)(MAP_H*TILE_SIZE)-hh);
+    float mw = (float)(MAP_W*TILE_SIZE), mh = (float)(MAP_H*TILE_SIZE);
+
+    float min_x = (hw < mw * 0.5f) ? hw : (mw - hw);
+    float max_x = (hw < mw * 0.5f) ? (mw - hw) : hw;
+    cam->target.x = clampf(cam->target.x, min_x, max_x);
+
+    float min_y = (hh < mh * 0.5f) ? hh : (mh - hh);
+    float max_y = (hh < mh * 0.5f) ? (mh - hh) : hh;
+    cam->target.y = clampf(cam->target.y, min_y, max_y);
 }
+
 
 /* ─── Selection helpers ───────────────────────────────────── */
 static bool point_in_unit(Unit *u, Vector2 wp){

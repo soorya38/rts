@@ -62,6 +62,15 @@ static bool draw_button(const char *label, int x, int y, int w, int h, bool enab
     return hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
+static void draw_tooltip(const char *text, int x, int y) {
+    int fs = 11;
+    int tw = MeasureText(text, fs);
+    int th = fs + 6;
+    DrawRectangle(x, y, tw + 10, th, CLITERAL(Color){20, 18, 12, 230});
+    DrawRectangleLines(x, y, tw + 10, th, C_HUD_LINE);
+    DrawText(text, x + 5, y + 3, fs, C_HUD_TXT);
+}
+
 /* ─── Top resource bar ────────────────────────────────────── */
 static void draw_top_bar(GameState *gs){
     PlayerRes *pr=&gs->res[0];
@@ -72,29 +81,44 @@ static void draw_top_bar(GameState *gs){
     int cx=10;
 
     /* Food */
+    int f0=cx;
     draw_food_icon(cx,11); cx+=20;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_FOOD]);
-    DrawText(buf,cx,14,14,C_FOOD); cx+=MeasureText(buf,14)+18;
+    DrawText(buf,cx,14,14,C_FOOD); int f1=cx+MeasureText(buf,14); cx=f1+18;
 
     /* Wood */
+    int w0=cx;
     draw_wood_icon(cx,11); cx+=20;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_WOOD]);
-    DrawText(buf,cx,14,14,C_WOOD); cx+=MeasureText(buf,14)+18;
+    DrawText(buf,cx,14,14,C_WOOD); int w1=cx+MeasureText(buf,14); cx=w1+18;
 
     /* Gold */
+    int g0=cx;
     draw_gold_icon(cx,11); cx+=20;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_GOLD]);
-    DrawText(buf,cx,14,14,C_GOLD); cx+=MeasureText(buf,14)+18;
+    DrawText(buf,cx,14,14,C_GOLD); int g1=cx+MeasureText(buf,14); cx=g1+18;
 
     /* Stone */
+    int s0=cx;
     draw_stone_icon(cx,11); cx+=20;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_STONE]);
-    DrawText(buf,cx,14,14,C_STONE); cx+=MeasureText(buf,14)+18;
+    DrawText(buf,cx,14,14,C_STONE); int s1=cx+MeasureText(buf,14); cx=s1+18;
 
     /* Population */
+    int p0=cx;
     Color pc=(pr->population>=pr->pop_cap)?C_POP_WARN:C_POP_OK;
     snprintf(buf,sizeof(buf),"Pop: %d/%d",pr->population,pr->pop_cap);
-    DrawText(buf,cx,14,13,pc);
+    DrawText(buf,cx,14,13,pc); int p1=cx+MeasureText(buf,13);
+
+    /* Tooltips */
+    Vector2 mp = GetMousePosition();
+    if(mp.y < HUD_TOP_H){
+        if(mp.x >= f0 && mp.x <= f1) draw_tooltip("Food: Used to train villagers and most units", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= w0 && mp.x <= w1) draw_tooltip("Wood: Used for buildings and archers", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= g0 && mp.x <= g1) draw_tooltip("Gold: Used for advanced units and aging up", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= s0 && mp.x <= s1) draw_tooltip("Stone: Used for castles and some defensive buildings", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= p0 && mp.x <= p1) draw_tooltip("Population: Total units vs capacity", (int)mp.x+5, (int)mp.y+15);
+    }
 
     /* Age display (center) */
     const char *an=age_names[pr->age];
@@ -466,16 +490,27 @@ static void draw_minimap(GameState *gs){
                       MINI_Y+(int)(u->wy/TILE_SIZE*sy)-1,2,2,c);
     }
 
-    /* Camera viewport rectangle */
-    float cam_l=gs->camera.target.x - (SCREEN_W/2)/gs->camera.zoom;
-    float cam_t=gs->camera.target.y - (SCREEN_H/2)/gs->camera.zoom;
+    /* Camera viewport rectangle (clamped to minimap bounds) */
     float cam_w=SCREEN_W/gs->camera.zoom;
     float cam_h=SCREEN_H/gs->camera.zoom;
+    float cam_l=gs->camera.target.x - cam_w*0.5f;
+    float cam_t=gs->camera.target.y - cam_h*0.5f;
+
+    float rl = (cam_l/TILE_SIZE)*sx;
+    float rt = (cam_t/TILE_SIZE)*sy;
+    float rw = (cam_w/TILE_SIZE)*sx;
+    float rh = (cam_h/TILE_SIZE)*sy;
+
+    if(rl < 0){ rw += rl; rl = 0; }
+    if(rt < 0){ rh += rt; rt = 0; }
+    if(rl + rw > MINI_SIZE) rw = MINI_SIZE - rl;
+    if(rt + rh > MINI_SIZE) rh = MINI_SIZE - rt;
+
     DrawRectangleLinesEx((Rectangle){
-        MINI_X + cam_l/TILE_SIZE*sx,
-        MINI_Y + cam_t/TILE_SIZE*sy,
-        cam_w/TILE_SIZE*sx,
-        cam_h/TILE_SIZE*sy
+        MINI_X + rl,
+        MINI_Y + rt,
+        rw,
+        rh
     },1,CLITERAL(Color){220,200,150,200});
 
     /* Click on minimap → pan camera */
