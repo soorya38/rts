@@ -448,11 +448,13 @@ static void handle_left_up(GameState *gs, UIState *ui) {
   int dropoff = find_friendly_dropoff_at(gs, we);
 
   bool is_villager_carrying = false;
+  bool has_villagers = false;
   for (int i = 0; i < ui->sel_count; i++) {
-    if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER &&
-        gs->units[ui->sel_units[i]].carry_amt > 0) {
-      is_villager_carrying = true;
-      break;
+    if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) {
+      has_villagers = true;
+      if (gs->units[ui->sel_units[i]].carry_amt > 0) {
+        is_villager_carrying = true;
+      }
     }
   }
 
@@ -466,12 +468,17 @@ static void handle_left_up(GameState *gs, UIState *ui) {
   } else if (is_villager_carrying && dropoff >= 0) {
     issue_command_at(gs, ui, we);
   } else if (fb >= 0 && gs->buildings[fb].complete) {
-    /* Clicked a complete friendly building → select it */
-    clear_selection(gs, ui);
-    ui->sel_building = fb;
-    gs->buildings[fb].selected = true;
-    ui->sel_tile_x = -1;
-    ui->sel_tile_y = -1;
+    if (has_villagers && gs->buildings[fb].type == BLD_FARM) {
+      /* Clicking a farm with villagers selected = gather command */
+      issue_command_at(gs, ui, we);
+    } else {
+      /* Clicked a complete friendly building → select it */
+      clear_selection(gs, ui);
+      ui->sel_building = fb;
+      gs->buildings[fb].selected = true;
+      ui->sel_tile_x = -1;
+      ui->sel_tile_y = -1;
+    }
   } else if (ui->sel_count > 0) {
     /* Units already selected, clicked on world → context command */
     issue_command_at(gs, ui, we);

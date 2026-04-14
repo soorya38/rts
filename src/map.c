@@ -13,7 +13,8 @@ bool map_is_passable(GameState *gs,int x,int y){
     if(t->type == TILE_WATER) return false;
     if(t->building_id >= 0){
         Building *b = &gs->buildings[t->building_id];
-        if(b->active && b->complete) return false;
+        /* Farms are passable; other completed buildings are not */
+        if(b->active && b->complete && b->type != BLD_FARM) return false;
     }
     return true;
 }
