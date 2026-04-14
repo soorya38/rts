@@ -21,7 +21,7 @@ typedef struct { float x, y; } Vec2;
 #define MAX_UNITS       256
 #define MAX_BUILDINGS   128
 #define MAX_PATH        300
-#define NUM_PLAYERS     2
+#define NUM_PLAYERS     4
 #define POP_CAP_MAX     200
 
 /* ─── Priority queue (min-heap) used by A* ─────────────────── */
@@ -249,6 +249,8 @@ typedef struct {
     float      ai_attack_cd;
     int        ai_attack_count;
 
+    int        num_players;     /* Active players in this match (2-4) */
+
     /* Alert banner */
     char       alert[64];
     float      alert_timer;
@@ -318,5 +320,6 @@ void ai_update(GameState *gs,float dt);
 
 /* game.c */
 void game_init(GameState *gs);
+void game_init_started_game(GameState *gs, uint32_t seed, int num_players);
 void game_update(GameState *gs,float dt);
 void game_set_alert(GameState *gs,const char *msg);

@@ -34,6 +34,7 @@ typedef struct {
 } UIState;
 
 void ui_state_init(UIState *ui, GameState *gs);
+void ui_center_on_tc(UIState *ui, GameState *gs);
 
 /* Abstracted prototypes that now take UIState for rendering / input */
 void renderer_draw_world(GameState *gs, UIState *ui);

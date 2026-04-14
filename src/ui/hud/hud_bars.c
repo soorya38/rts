@@ -6,12 +6,15 @@
 #include "hud_common.h"
 #include <stdio.h>
 #include <string.h>
+#include "net.h"
+#include "renderer.h"
 
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
 void draw_top_bar(GameState *gs, UIState *ui){
     (void)ui;
-    PlayerRes *pr=&gs->res[0];
+    int lp = net_get_local_player();
+    PlayerRes *pr=&gs->res[lp];
     DrawRectangle(0,0,SCREEN_W,HUD_TOP_H,C_HUD_BG);
     DrawRectangle(0,HUD_TOP_H-1,SCREEN_W,2,C_HUD_LINE);
     char buf[32];
@@ -53,7 +56,16 @@ void draw_top_bar(GameState *gs, UIState *ui){
         char label[40];
         if(c.gold>0) snprintf(label,sizeof(label),"Advance Age: %dF %dG",c.food,c.gold);
         else         snprintf(label,sizeof(label),"Advance Age: %dF",c.food);
-        if(draw_button(label,SCREEN_W-208,6,200,30,can)) res_try_advance_age(gs,0);
+        if(draw_button(label,SCREEN_W-208,6,200,30,can)) {
+            if (g_net_active) {
+                NetPacket pkt = {0};
+                pkt.type = PKT_AGE_ADVANCE;
+                pkt.player = lp;
+                net_dispatch_packet(gs, &pkt);
+            } else {
+                res_try_advance_age(gs, lp);
+            }
+        }
         if(!can){
             char need[48]="Need:";
             if(pr->amount[RES_FOOD]<c.food){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dF",c.food-pr->amount[RES_FOOD]); strcat(need,tmp); }
@@ -106,20 +118,57 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             DrawRectangle(12,HUD_BOT_Y+60,(int)(160*prog),6,CLITERAL(Color){50,200,60,255});
         }
         int bx=220, by=HUD_BOT_Y+10;
+        int lp = net_get_local_player();
         switch(b->type){
             case BLD_TOWN_CENTER:
-                if(draw_button("Villager\n50F",bx,by,80,50,gs->res[0].amount[RES_FOOD]>=50)) building_enqueue_unit(gs,b,UNIT_VILLAGER);
-                if(draw_button("Scout\n80F",bx+88,by,80,50,gs->res[0].amount[RES_FOOD]>=80)) building_enqueue_unit(gs,b,UNIT_SCOUT);
+                if(draw_button("Villager\n50F",bx,by,80,50,gs->res[lp].amount[RES_FOOD]>=50)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_VILLAGER;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_VILLAGER);
+                }
+                if(draw_button("Scout\n80F",bx+88,by,80,50,gs->res[lp].amount[RES_FOOD]>=80)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_SCOUT;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_SCOUT);
+                }
                 break;
             case BLD_BARRACKS:
-                if(draw_button("Militia\n60F 20G",bx,by,90,50,gs->res[0].amount[RES_FOOD]>=60&&gs->res[0].amount[RES_GOLD]>=20)) building_enqueue_unit(gs,b,UNIT_MILITIA);
-                if(gs->res[0].age>=1&&draw_button("Man@Arms\n60F 20G",bx+98,by,90,50,gs->res[0].amount[RES_FOOD]>=60&&gs->res[0].amount[RES_GOLD]>=20)) building_enqueue_unit(gs,b,UNIT_MAN_AT_ARMS);
+                if(draw_button("Militia\n60F 20G",bx,by,90,50,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_MILITIA;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_MILITIA);
+                }
+                if(gs->res[lp].age>=1&&draw_button("Man@Arms\n60F 20G",bx+98,by,90,50,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
+                     if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_MAN_AT_ARMS;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_MAN_AT_ARMS);
+                }
                 break;
             case BLD_ARCHERY_RANGE:
-                if(draw_button("Archer\n25W 45G",bx,by,90,50,gs->res[0].amount[RES_WOOD]>=25&&gs->res[0].amount[RES_GOLD]>=45)) building_enqueue_unit(gs,b,UNIT_ARCHER);
+                if(draw_button("Archer\n25W 45G",bx,by,90,50,gs->res[lp].amount[RES_WOOD]>=25&&gs->res[lp].amount[RES_GOLD]>=45)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_ARCHER;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_ARCHER);
+                }
                 break;
             case BLD_STABLE:
-                if(draw_button("Knight\n60F 75G",bx,by,90,50,gs->res[0].amount[RES_FOOD]>=60&&gs->res[0].amount[RES_GOLD]>=75)) building_enqueue_unit(gs,b,UNIT_KNIGHT);
+                if(draw_button("Knight\n60F 75G",bx,by,90,50,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=75)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_KNIGHT;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_KNIGHT);
+                }
                 break;
             default: break;
         }
@@ -179,14 +228,13 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         DrawRectangle(panel_w-60,HUD_BOT_Y+8,48,48,CLITERAL(Color){35,28,16,255});
         DrawRectangleLinesEx((Rectangle){(float)(panel_w-60),(float)(HUD_BOT_Y+8),48,48},1.5f,C_HUD_LINE);
         DrawCircle(panel_w-36,HUD_BOT_Y+24,8,CLITERAL(Color){220,185,145,255});
-        Color mc={30,110,220,255}; if(u->player==1) mc=(Color){210,50,40,255};
-        DrawRectangle(panel_w-42,HUD_BOT_Y+35,12,14,mc);
+        DrawRectangle(panel_w-42,HUD_BOT_Y+35,12,14,player_color(u->player));
     } else {
         snprintf(buf,sizeof(buf),"%d units selected",ui->sel_count);
         DrawText(buf,12,HUD_BOT_Y+8,14,C_HUD_TXT);
         for(int i=0;i<ui->sel_count&&i<12;i++){
             Unit *u=&gs->units[ui->sel_units[i]];
-            Color mc=(u->player==0)?CLITERAL(Color){30,110,220,255}:CLITERAL(Color){210,50,40,255};
+            Color mc=player_color(u->player);
             DrawRectangle(12+i*22,HUD_BOT_Y+30,18,18,mc);
             DrawRectangleLinesEx((Rectangle){12.0f+i*22,HUD_BOT_Y+30.0f,18,18},1,C_HUD_LINE);
             float frac=(float)u->hp/u->max_hp;
@@ -232,8 +280,9 @@ void draw_minimap(GameState *gs, UIState *ui){
         (out_y) = cy + iso_y * MINI_SIZE; \
     } while(0)
 
+    int lp = net_get_local_player();
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
-        FogState fs=gs->map[y][x].fog[0];
+        FogState fs=gs->map[y][x].fog[lp];
         if(fs==FOG_HIDDEN) continue;
         Color c;
         switch(gs->map[y][x].type){
@@ -253,9 +302,9 @@ void draw_minimap(GameState *gs, UIState *ui){
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
         if(!b->active) continue;
-        FogState fs=gs->map[clampi(b->ty,0,MAP_H-1)][clampi(b->tx,0,MAP_W-1)].fog[0];
-        if(fs==FOG_HIDDEN&&b->player!=0) continue;
-        Color c=(b->player==0)?CLITERAL(Color){30,110,220,255}:CLITERAL(Color){210,50,40,255};
+        FogState fs=gs->map[clampi(b->ty,0,MAP_H-1)][clampi(b->tx,0,MAP_W-1)].fog[lp];
+        if(fs==FOG_HIDDEN&&b->player!=lp) continue;
+        Color c=player_color(b->player);
         float dx, dy;
         MAP_TO_MINI(b->tx + b->tw*0.5f, b->ty + b->th*0.5f, dx, dy);
         int bw = (int)(b->tw * (half_w / MAP_W));
@@ -266,9 +315,9 @@ void draw_minimap(GameState *gs, UIState *ui){
         Unit *u=&gs->units[i];
         if(!u->active||u->state==US_DEAD) continue;
         int utx=(int)(u->wx/TILE_SIZE),uty=(int)(u->wy/TILE_SIZE);
-        FogState fs=gs->map[clampi(uty,0,MAP_H-1)][clampi(utx,0,MAP_W-1)].fog[0];
-        if(fs==FOG_HIDDEN&&u->player!=0) continue;
-        Color c=(u->player==0)?CLITERAL(Color){80,180,255,255}:CLITERAL(Color){255,100,80,255};
+        FogState fs=gs->map[clampi(uty,0,MAP_H-1)][clampi(utx,0,MAP_W-1)].fog[lp];
+        if(fs==FOG_HIDDEN&&u->player!=lp) continue;
+        Color c=player_color(u->player);
         float dx, dy;
         MAP_TO_MINI(utx, uty, dx, dy);
         DrawRectangle((int)dx, (int)dy, 2, 2, c);

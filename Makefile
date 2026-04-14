@@ -10,6 +10,11 @@ ifeq ($(RAYLIB_PREFIX),)
 $(error Raylib not found. Run: brew install raylib)
 endif
 
+ENET_PREFIX := $(shell $(BREW_PREFIX)/bin/brew --prefix enet 2>/dev/null)
+ifeq ($(ENET_PREFIX),)
+$(error ENet not found. Run: brew install enet)
+endif
+
 # Recursively find all .c files in src/
 SRCS    := $(shell find src -name '*.c')
 OBJS    := $(patsubst src/%.c, build/%.o, $(SRCS))
@@ -22,9 +27,11 @@ INCLUDES = -I$(RAYLIB_PREFIX)/include \
            -Isrc/ui/renderer \
            -Isrc/ui/hud \
            -Isrc/ui/input \
-           -Isrc/ai
+           -Isrc/ai \
+           -I$(ENET_PREFIX)/include
 
 LIBS     = -L$(RAYLIB_PREFIX)/lib -lraylib \
+           -L$(ENET_PREFIX)/lib -lenet \
            -framework OpenGL -framework Cocoa -framework IOKit \
            -framework CoreFoundation -framework CoreVideo \
            -framework CoreAudio -framework AudioToolbox

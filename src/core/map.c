@@ -166,22 +166,19 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
     /* TC is 4x4; keep it well away from the edge so we don't start the game staring at the void */
     static const int CX[4] = { 15,          MAP_W-16,   15,          MAP_W-16 };
     static const int CY[4] = { 15,          15,         MAP_H-16,    MAP_H-16 };
-    static const int OPP[4]= { 3,          2,          1,          0       };
 
-    int corner      = (int)(rng_next() % 4);
-    int P1X = CX[corner],     P1Y = CY[corner];
-    int P2X = CX[OPP[corner]],P2Y = CY[OPP[corner]];
-
-    /* Return chosen positions to caller */
-    *p1_x = P1X; *p1_y = P1Y;
-    *p2_x = P2X; *p2_y = P2Y;
+    /* Return chosen positions to caller (keeping p1/p2 for compatibility) */
+    *p1_x = CX[0]; *p1_y = CY[0];
+    *p2_x = CX[3]; *p2_y = CY[3];
 
     const int SAFE_R = 10;     /* tiles to keep clear of random features */
 
-    /* Helper: is a point safely away from both start zones? */
+    /* Helper: is a point safely away from all 4 start zones? */
     #define safe_from_starts(cx,cy) \
-        (abs((cx)-P1X)>SAFE_R || abs((cy)-P1Y)>SAFE_R) && \
-        (abs((cx)-P2X)>SAFE_R || abs((cy)-P2Y)>SAFE_R)
+        (abs((cx)-CX[0])>SAFE_R || abs((cy)-CY[0])>SAFE_R) && \
+        (abs((cx)-CX[1])>SAFE_R || abs((cy)-CY[1])>SAFE_R) && \
+        (abs((cx)-CX[2])>SAFE_R || abs((cy)-CY[2])>SAFE_R) && \
+        (abs((cx)-CX[3])>SAFE_R || abs((cy)-CY[3])>SAFE_R)
 
     /* Random int in [lo, hi] */
     #define rrand(lo,hi) ((int)(rng_next()%((hi)-(lo)+1))+(lo))
@@ -251,15 +248,11 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
     #undef safe_from_starts
     #undef rrand
 
-    /* ── Clear player start zones so TCs and units spawn on grass ── */
-    clear_zone(gs, P1X, P1Y, 5);
-    clear_zone(gs, P2X, P2Y, 5);
-
-    /* ── GUARANTEED starting resources near each player ──
-         Random directions each game, but always 3 forests, 2 berries,
-         1 gold and 1 stone within 7-13 tiles of the TC.             */
-    place_start_resources(gs, P1X, P1Y);
-    place_start_resources(gs, P2X, P2Y);
+    /* ── Clear starter zones and place starting resources for ALL 4 corners ── */
+    for(int i=0; i<4; i++) {
+        clear_zone(gs, CX[i], CY[i], 5);
+        place_start_resources(gs, CX[i], CY[i]);
+    }
 }
 
 

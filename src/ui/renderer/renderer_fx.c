@@ -29,6 +29,10 @@
 #define C_P1_DARK   CLITERAL(Color){ 15,  70, 160, 255}
 #define C_AI_MAIN   CLITERAL(Color){210,  50,  40, 255}
 #define C_AI_DARK   CLITERAL(Color){150,  25,  20, 255}
+#define C_P2_MAIN   CLITERAL(Color){ 40, 180,  60, 255}
+#define C_P2_DARK   CLITERAL(Color){ 20, 120,  30, 255}
+#define C_P3_MAIN   CLITERAL(Color){230, 210,  30, 255}
+#define C_P3_DARK   CLITERAL(Color){170, 150,  15, 255}
 
 #define C_HP_GREEN  CLITERAL(Color){ 50, 200,  60, 255}
 #define C_HP_YELLOW CLITERAL(Color){220, 200,  20, 255}
@@ -39,8 +43,20 @@
 #define C_FOG_EXP   CLITERAL(Color){  0,   0,   0, 120}
 #define C_FOG_HID   CLITERAL(Color){  0,   0,   0, 235}
 
-Color player_color(int p)          { return p==0?C_P1_MAIN:C_AI_MAIN; }
-Color player_color_dark(int p)     { return p==0?C_P1_DARK:C_AI_DARK; }
+Color player_color(int p) {
+    if (p == 0) return C_P1_MAIN;
+    if (p == 1) return C_AI_MAIN;
+    if (p == 2) return C_P2_MAIN;
+    if (p == 3) return C_P3_MAIN;
+    return C_AI_MAIN;
+}
+Color player_color_dark(int p) {
+    if (p == 0) return C_P1_DARK;
+    if (p == 1) return C_AI_DARK;
+    if (p == 2) return C_P2_DARK;
+    if (p == 3) return C_P3_DARK;
+    return C_AI_DARK;
+}
 Color player_color_alpha(int p, unsigned char a){
     Color c=player_color(p); c.a=a; return c;
 }

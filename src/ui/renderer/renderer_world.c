@@ -4,6 +4,7 @@
 #include "game.h"
 #include "ui_state.h"
 #include "renderer.h"
+#include "net.h"
 #include <stdio.h>
 
 /* Forward declarations of functions in other renderer files */
@@ -87,7 +88,8 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     if(b->hp <= b->max_hp / 2) draw_smoke(px + w*0.4f, py + h*0.4f, gs->game_time, b->id);
     if(b->hp <= b->max_hp / 4) draw_smoke(px + w*0.6f, py + h*0.6f, gs->game_time, b->id + 100);
 
-    if(b->selected && b->player==0){
+    int lp = net_get_local_player();
+    if(b->selected && b->player==lp){
         Vector2 p1 = to_rvec2(world_to_iso(px - 2, py - 2));
         Vector2 p2 = to_rvec2(world_to_iso(px + w + 2, py - 2));
         Vector2 p3 = to_rvec2(world_to_iso(px + w + 2, py + h + 2));
@@ -240,15 +242,16 @@ static void draw_build_ghost(GameState *gs){
 
 /* ─── Master render ───────────────────────────────────────── */
 void renderer_draw_world(GameState *gs, UIState *ui){
+    int lp = net_get_local_player();
     for(int y=0;y<MAP_H;y++)
         for(int x=0;x<MAP_W;x++)
-            if(gs->map[y][x].fog[0]!=FOG_HIDDEN) draw_tile(gs, ui, x, y);
+            if(gs->map[y][x].fog[lp]!=FOG_HIDDEN) draw_tile(gs, ui, x, y);
 
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
         if(!b->active) continue;
         int bx=b->tx+b->tw/2, by=b->ty+b->th/2;
-        if(gs->map[clampi(by,0,MAP_H-1)][clampi(bx,0,MAP_W-1)].fog[0]==FOG_HIDDEN) continue;
+        if(gs->map[clampi(by,0,MAP_H-1)][clampi(bx,0,MAP_W-1)].fog[lp]==FOG_HIDDEN) continue;
         draw_building(gs, ui, b);
     }
 
@@ -257,11 +260,11 @@ void renderer_draw_world(GameState *gs, UIState *ui){
         if(!u->active||u->state==US_DEAD) continue;
         int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
         if(!map_in_bounds(utx,uty)) continue;
-        FogState fs=gs->map[uty][utx].fog[0];
-        if(u->player==1 && fs!=FOG_VISIBLE) continue;
+        FogState fs=gs->map[uty][utx].fog[lp];
+        if(u->player!=lp && fs!=FOG_VISIBLE) continue;
         draw_unit(gs, ui, u, gs->game_time);
     }
-
+    
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++) draw_fog(gs,x,y);
 
     draw_build_ghost(gs);

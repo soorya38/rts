@@ -2,6 +2,7 @@
  * unit_ai.c  –  Unit movement, gathering, building, combat
  *=============================================================*/
 #include "game.h"
+#include "net.h"
 
 static ResType tile_to_res_ai(TileType t){
     switch(t){
@@ -206,19 +207,29 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
         Building *b=&gs->buildings[u->target_bld];
         b->hp-=u->attack_dmg;
         if(b->hp<=0){
-            if(b->type==BLD_TOWN_CENTER && b->player==1) game_set_alert(gs,"VICTORY!");
-            if(b->type==BLD_TOWN_CENTER && b->player==0) game_set_alert(gs,"DEFEATED...");
+            int lp = net_get_local_player();
+            if(b->type==BLD_TOWN_CENTER){
+                if(b->player == lp) {
+                    game_set_alert(gs,"DEFEATED...");
+                    gs->phase = PHASE_DEFEAT;
+                } else {
+                    /* Check if any enemy TCs remain */
+                    bool enemies_left = false;
+                    for(int i=0; i<MAX_BUILDINGS; i++){
+                        Building *eb = &gs->buildings[i];
+                        if(eb->active && eb->type==BLD_TOWN_CENTER && eb->player != lp && eb->id != b->id){
+                            enemies_left = true; break;
+                        }
+                    }
+                    if(!enemies_left){
+                        game_set_alert(gs,"VICTORY!");
+                        gs->phase = PHASE_VICTORY;
+                    }
+                }
+            }
             map_clear_building(gs,b->tx,b->ty,b->tw,b->th);
             b->active=false;
             u->target_bld=-1;
-            for(int p=0;p<NUM_PLAYERS;p++){
-                bool has_tc=false;
-                for(int i=0;i<MAX_BUILDINGS;i++){
-                    Building *bb=&gs->buildings[i];
-                    if(bb->active&&bb->player==p&&bb->type==BLD_TOWN_CENTER){has_tc=true;break;}
-                }
-                if(!has_tc) gs->phase=(p==0)?PHASE_DEFEAT:PHASE_VICTORY;
-            }
         }
     }
 }

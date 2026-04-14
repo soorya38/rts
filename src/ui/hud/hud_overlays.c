@@ -6,6 +6,7 @@
 #include "hud_common.h"
 #include <stdio.h>
 #include <string.h>
+#include "net.h"
 
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
@@ -121,19 +122,56 @@ void draw_menu(GameState *gs, UIState *ui){
     for(int i=0;i<5;i++)
         DrawText(lines[i],SCREEN_W/2-MeasureText(lines[i],12)/2,
                  SCREEN_H/2-30+i*18,12,CLITERAL(Color){150,140,110,220});
-    int bw=200,bh=52,bx=SCREEN_W/2-bw/2,by=SCREEN_H/2+80;
-    Vector2 mp=GetMousePosition();
-    bool hover=mp.x>=bx&&mp.x<=bx+bw&&mp.y>=by&&mp.y<=by+bh;
-    DrawRectangleRounded((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},0.2f,8,
-                         hover?CLITERAL(Color){70,58,28,255}:CLITERAL(Color){45,36,16,255});
-    DrawRectangleRoundedLines((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},0.2f,8,
-                               CLITERAL(Color){180,155,60,255});
-    const char *play="Start Game";
-    int pfs=20;
-    DrawText(play,bx+(bw-MeasureText(play,pfs))/2,by+(bh-pfs)/2,pfs,CLITERAL(Color){220,195,100,255});
-    if (hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) gs->phase = PHASE_PLAYING;
-    ui->menu_start_hover=hover;
-    DrawText("Built with Raylib 5.5",8,SCREEN_H-20,10,CLITERAL(Color){60,55,40,200});
+    int bw=220,bh=48,bx=SCREEN_W/2-bw/2,by=SCREEN_H/2+40;
+    
+    /* Solo button */
+    if(draw_button("Start Solo Campaign", bx, by, bw, bh, true)){
+        game_init_started_game(gs, (uint32_t)time(NULL), 2);
+    }
+
+    /* Host button */
+    if(draw_button("Host LAN Game (Port 12345)", bx, by+54, bw, bh, !g_net_active)){
+        if(net_init()){
+            if(net_host_create(12345)){
+                game_set_alert(gs, "Server started! Waiting for player...");
+            }
+        }
+    }
+
+    /* Join button */
+    if(draw_button("Join Local Game (127.0.0.1)", bx, by+108, bw, bh, !g_net_active)){
+        if(net_init()){
+            if(net_join("127.0.0.1", 12345)){
+                game_set_alert(gs, "Connecting to host...");
+            }
+        }
+    }
+
+    if(g_net_active){
+        int total = net_get_peer_count() + 1;
+        char slots[64]; sprintf(slots, "Lobby: %d/%d Players", total, net_get_max_players());
+        DrawText(slots, bx + (bw-MeasureText(slots,14))/2, by+162, 14, (total > 1) ? GREEN : YELLOW);
+
+        if(g_local_player_id == 0){ // I am Host
+            if(draw_button("START GAME", bx, by+190, bw, bh, total > 1)){
+                uint32_t seed = (uint32_t)time(NULL);
+                NetPacket sp = {0}; sp.type = PKT_SYNC_SEED; sp.extra = seed;
+                net_dispatch_packet(gs, &sp);
+                
+                NetPacket start = {0}; start.type = PKT_START_GAME;
+                start.extra = total; // Number of players in lobby
+                net_dispatch_packet(gs, &start);
+            }
+        } else { // I am Client
+             DrawText("Waiting for host to start...", bx + (bw-MeasureText("Waiting for host to start...",12))/2, by+200, 12, GRAY);
+        }
+
+        if(draw_button("Cancel Lobby", bx+bw+10, by+54, 100, 48, true)){
+            net_deinit();
+        }
+    }
+
+    DrawText("Built with Raylib 5.5 + ENet",8,SCREEN_H-20,10,CLITERAL(Color){60,55,40,200});
 }
 
 static const char *_age_names_unused(void){ return age_names[0]; } /* suppress warning */

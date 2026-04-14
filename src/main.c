@@ -4,6 +4,7 @@
 #include "game.h"
 #include "raylib.h"
 #include <stdio.h>
+#include "net.h"
 
 #include "ui_state.h"
 #include <stdio.h>
@@ -29,6 +30,7 @@ int main(void){
     }
     game_init(gs);
     ui_state_init(ui, gs);
+    GamePhase last_phase = gs->phase;
 
     /* ── Main loop ── */
     while(!WindowShouldClose()){
@@ -38,8 +40,16 @@ int main(void){
         /* Input */
         input_update(gs, ui);
 
+        /* Network */
+        net_update(gs);
+
         /* Update */
         game_update(gs,dt);
+
+        if (last_phase == PHASE_MENU && gs->phase == PHASE_PLAYING) {
+            ui_center_on_tc(ui, gs);
+        }
+        last_phase = gs->phase;
 
         /* Render */
         BeginDrawing();
@@ -62,6 +72,7 @@ int main(void){
     }
 
     CloseWindow();
+    net_deinit();
     free(gs);
     free(ui);
     return 0;

@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <time.h>
+#include "net.h"
 
 uint32_t _rng = 12345;
 
@@ -16,87 +17,65 @@ void game_set_alert(GameState *gs, const char *msg){
     gs->alert_timer=3.5f;
 }
 
-/* ─── Game init ────────────────────────────────────────────── */
-void game_init(GameState *gs){
-    memset(gs,0,sizeof(GameState));
+void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
+    memset(gs, 0, sizeof(GameState));
+    gs->num_players = (num_players < 1) ? 1 : (num_players > 4 ? 4 : num_players);
+    _rng = seed;
 
-    gs->phase        = PHASE_MENU;
+    gs->phase        = PHASE_PLAYING;
     gs->game_time    = 0.0f;
-
-    gs->ai_phase     = 0;           /* AI starts in GATHER */
+    gs->ai_phase     = 0;
     gs->ai_timer     = 0.0f;
-    gs->ai_attack_cd = 90.0f;       /* First attack after 90 seconds */
+    gs->ai_attack_cd = 90.0f;
 
-
-    /* Player 1 resources (Dark Age start) */
-    gs->res[0].amount[RES_FOOD]  = 200;
-    gs->res[0].amount[RES_WOOD]  = 200;
-    gs->res[0].amount[RES_GOLD]  = 0;
-    gs->res[0].amount[RES_STONE] = 0;
-    gs->res[0].age    = 0;
-    gs->res[0].pop_cap = 5;
-
-    /* AI resources */
-    gs->res[1].amount[RES_FOOD]  = 200;
-    gs->res[1].amount[RES_WOOD]  = 200;
-    gs->res[1].amount[RES_GOLD]  = 0;
-    gs->res[1].amount[RES_STONE] = 0;
-    gs->res[1].age    = 0;
-    gs->res[1].pop_cap = 5;
-
-    /* Generate map with a random seed based on current time.
-     * map_init picks a random corner for P1 and the opposite for AI,
-     * and returns the chosen tile centres so we can place units correctly. */
-    _rng = (uint32_t)time(NULL);
-    int p1x, p1y, p2x, p2y;
-    map_init(gs, &p1x, &p1y, &p2x, &p2y);
-
-    /* ── Player 1 start (random corner) ── */
-    /* TC occupies tiles [p1x-2 .. p1x+1][p1y-2 .. p1y+1] (4x4, centred on p1x,p1y) */
-    int p1_tc_tx = p1x - 2, p1_tc_ty = p1y - 2;
-    buildings_init_player(gs, 0, p1_tc_tx, p1_tc_ty);
-    gs->res[0].pop_cap = pop_cap_from_buildings(gs, 0);
-
-    /* Villagers spawn 4 tiles to the right (+x) of the TC centre */
-    float p1_vx = (p1x + 2) * TILE_SIZE + 16.0f;
-    float p1_v0y = (p1y - 2) * TILE_SIZE + 16.0f;
-    float p1_v1y = (p1y)     * TILE_SIZE + 16.0f;
-    float p1_v2y = (p1y + 2) * TILE_SIZE + 16.0f;
-    unit_spawn(gs, 0, UNIT_VILLAGER, p1_vx, p1_v0y);
-    unit_spawn(gs, 0, UNIT_VILLAGER, p1_vx, p1_v1y);
-    unit_spawn(gs, 0, UNIT_VILLAGER, p1_vx, p1_v2y);
-    unit_spawn(gs, 0, UNIT_SCOUT,   p1_vx + TILE_SIZE, p1_v1y);
-
-    /* Send villagers to nearest resource slots */
-    int wood_x, wood_y, food_x, food_y;
-    if(map_find_resource(gs, 0, RES_WOOD, p1x + 2, p1y, &wood_x, &wood_y)){
-        unit_give_gather_order(gs, &gs->units[0], wood_x, wood_y);
-        unit_give_gather_order(gs, &gs->units[1], wood_x, wood_y);
-    }
-    if(map_find_resource(gs, 0, RES_FOOD, p1x + 2, p1y, &food_x, &food_y)){
-        unit_give_gather_order(gs, &gs->units[2], food_x, food_y);
+    /* Setup player resources */
+    for (int i = 0; i < gs->num_players; i++) {
+        gs->res[i].amount[RES_FOOD]  = 200;
+        gs->res[i].amount[RES_WOOD]  = 200;
+        gs->res[i].amount[RES_GOLD]  = 0;
+        gs->res[i].amount[RES_STONE] = 0;
+        gs->res[i].age    = 0;
+        gs->res[i].pop_cap = 5;
     }
 
-    /* ── AI start (opposite corner) ── */
-    int p2_tc_tx = p2x - 2, p2_tc_ty = p2y - 2;
-    buildings_init_player(gs, 1, p2_tc_tx, p2_tc_ty);
-    gs->res[1].pop_cap = pop_cap_from_buildings(gs, 1);
+    int dmx, dmy;
+    map_init(gs, &dmx, &dmy, &dmx, &dmy);
 
-    float p2_vx = (p2x + 2) * TILE_SIZE + 16.0f;
-    float p2_v0y = (p2y - 2) * TILE_SIZE + 16.0f;
-    float p2_v1y = (p2y)     * TILE_SIZE + 16.0f;
-    float p2_v2y = (p2y + 2) * TILE_SIZE + 16.0f;
-    unit_spawn(gs, 1, UNIT_VILLAGER, p2_vx, p2_v0y);
-    unit_spawn(gs, 1, UNIT_VILLAGER, p2_vx, p2_v1y);
-    unit_spawn(gs, 1, UNIT_VILLAGER, p2_vx, p2_v2y);
-    unit_spawn(gs, 1, UNIT_SCOUT,   p2_vx + TILE_SIZE, p2_v1y);
+    static const int CX[4] = { 15,          MAP_W-16,   15,          MAP_W-16 };
+    static const int CY[4] = { 15,          15,         MAP_H-16,    MAP_H-16 };
 
-    /* AI fog: mark all tiles as explored at start */
+    for (int p=0; p < gs->num_players; p++) {
+        int corner = p;
+        if (gs->num_players == 2) corner = (p == 0) ? 0 : 3;
+        else if (gs->num_players == 3 && p == 2) corner = 3;
+
+        int tx = CX[corner], ty = CY[corner];
+        buildings_init_player(gs, p, tx - 2, ty - 2);
+        gs->res[p].pop_cap = pop_cap_from_buildings(gs, p);
+
+        float vx = (tx + 2) * TILE_SIZE + 16.0f;
+        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty - 2) * TILE_SIZE + 16.0f);
+        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty)     * TILE_SIZE + 16.0f);
+        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty + 2) * TILE_SIZE + 16.0f);
+        unit_spawn(gs, p, UNIT_SCOUT,    vx + TILE_SIZE, (ty) * TILE_SIZE + 16.0f);
+    }
+
+    /* Fog: mark everyone's fog explored if not the local player? 
+       No, better to keep it hidden for competitive feel. */
+    int lp = net_get_local_player();
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++)
-        gs->map[y][x].fog[1]=FOG_EXPLORED;
+        for(int p=0; p<NUM_PLAYERS; p++)
+            if(p != lp) gs->map[y][x].fog[p]=FOG_HIDDEN;
 
-    /* Initial fog update for player */
     map_update_fog(gs);
+}
+
+/* ─── Game init (defaults to menu) ─────────────────────────── */
+void game_init(GameState *gs){
+    memset(gs, 0, sizeof(GameState));
+    gs->phase = PHASE_MENU;
+    /* We don't setup the game here anymore. Setup happens when "Start" is clicked. */
+    /* For Solo Campaign, we'll call game_init_started_game(gs, time(NULL)) */
 }
 
 /* ─── Master update ────────────────────────────────────────── */
@@ -109,10 +88,10 @@ void game_update(GameState *gs, float dt){
     if(gs->alert_timer>0) gs->alert_timer-=dt;
 
     /* Update pop caps */
-    gs->res[0].pop_cap=pop_cap_from_buildings(gs,0);
-    gs->res[1].pop_cap=pop_cap_from_buildings(gs,1);
-    if(gs->res[0].pop_cap<5) gs->res[0].pop_cap=5;
-    if(gs->res[1].pop_cap<5) gs->res[1].pop_cap=5;
+    for (int i = 0; i < gs->num_players; i++) {
+        gs->res[i].pop_cap = pop_cap_from_buildings(gs, i);
+        if (gs->res[i].pop_cap < 5) gs->res[i].pop_cap = 5;
+    }
 
     /* Age advancement timers */
     res_update_age_advance(gs,dt);
@@ -123,8 +102,10 @@ void game_update(GameState *gs, float dt){
     /* Buildings */
     buildings_update_all(gs,dt);
 
-    /* AI */
-    ai_update(gs,dt);
+    /* AI - only in singleplayer */
+    if (!g_net_active) {
+        ai_update(gs,dt);
+    }
 
     /* Fog of war */
     map_update_fog(gs);

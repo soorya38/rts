@@ -4,6 +4,7 @@
 #include "game.h"
 #include "ui_state.h"
 #include "renderer.h"
+#include "net.h"
 #include <stdio.h>
 
 #define C_FOREST_G  CLITERAL(Color){28,  72,  28, 255}
@@ -99,7 +100,8 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
 }
 
 void draw_fog(GameState *gs, int x, int y){
-    FogState fs=gs->map[y][x].fog[0];
+    int lp = net_get_local_player();
+    FogState fs=gs->map[y][x].fog[lp];
     if(fs==FOG_VISIBLE) return;
     float px=(float)(x*TILE_SIZE), py=(float)(y*TILE_SIZE);
     float s=TILE_SIZE;

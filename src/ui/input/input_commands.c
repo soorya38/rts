@@ -5,6 +5,7 @@
 #include "ui_state.h"
 #include <math.h>
 #include <stdio.h>
+#include "net.h"
 
 /* Forward declarations from input split files */
 extern void update_camera(GameState *gs, UIState *ui, float dt);
@@ -25,25 +26,50 @@ static void update_build_mode(GameState *gs, UIState *ui) {
     int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
     int tw = building_tw(gs->build_mode.type), th = building_th(gs->build_mode.type);
     tx -= tw / 2; ty -= th / 2;
+    int lp = net_get_local_player();
     gs->build_mode.ghost_tx = tx; gs->build_mode.ghost_ty = ty;
     gs->build_mode.valid = map_is_buildable(gs, tx, ty, tw, th) &&
-                           res_can_afford(&gs->res[0], building_cost(gs->build_mode.type));
+                           res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && gs->build_mode.valid) {
-        int bid = building_place(gs, 0, gs->build_mode.type, tx, ty);
-        if (bid >= 0) {
-            bool any = false;
-            for (int i = 0; i < ui->sel_count; i++) {
+        if (g_net_active) {
+            NetPacket pkt = {0};
+            pkt.type = PKT_PLACE_BLD;
+            pkt.player = g_local_player_id;
+            pkt.extra = gs->build_mode.type;
+            pkt.tx = tx;
+            pkt.ty = ty;
+            int uc = 0;
+            for (int i = 0; i < ui->sel_count && uc < 64; i++) {
                 Unit *u = &gs->units[ui->sel_units[i]];
-                if (u->active && u->player == 0 && u->type == UNIT_VILLAGER) {
-                    unit_give_build_order(gs, u, bid); any = true;
+                if (u->active && u->player == g_local_player_id && u->type == UNIT_VILLAGER) {
+                    pkt.units[uc++] = ui->sel_units[i];
                 }
             }
-            if (!any) {
-                int vid = unit_find_idle_villager(gs, 0);
-                if (vid >= 0) unit_give_build_order(gs, &gs->units[vid], bid);
+            if (uc == 0) {
+                int vid = unit_find_idle_villager(gs, g_local_player_id);
+                if (vid >= 0) pkt.units[uc++] = vid;
             }
+            pkt.unit_count = uc;
+            net_dispatch_packet(gs, &pkt);
             if (!IsKeyDown(KEY_LEFT_SHIFT)) gs->build_mode.active = false;
+        } else {
+            int lp = net_get_local_player();
+            int bid = building_place(gs, lp, gs->build_mode.type, tx, ty);
+            if (bid >= 0) {
+                bool any = false;
+                for (int i = 0; i < ui->sel_count; i++) {
+                    Unit *u = &gs->units[ui->sel_units[i]];
+                    if (u->active && u->player == lp && u->type == UNIT_VILLAGER) {
+                        unit_give_build_order(gs, u, bid); any = true;
+                    }
+                }
+                if (!any) {
+                    int vid = unit_find_idle_villager(gs, lp);
+                    if (vid >= 0) unit_give_build_order(gs, &gs->units[vid], bid);
+                }
+                if (!IsKeyDown(KEY_LEFT_SHIFT)) gs->build_mode.active = false;
+            }
         }
     }
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) gs->build_mode.active = false;
@@ -76,7 +102,8 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         if (IsKeyPressed(KEY_A)) qt = BLD_ARCHERY_RANGE;
         if (IsKeyPressed(KEY_M)) qt = BLD_MILL;
         if (IsKeyPressed(KEY_F)) qt = BLD_FARM;
-        if (qt != BLD_COUNT && res_can_afford(&gs->res[0], building_cost(qt))) {
+        int lp = net_get_local_player();
+        if (qt != BLD_COUNT && res_can_afford(&gs->res[lp], building_cost(qt))) {
             gs->build_mode.type = qt;
             gs->build_mode.active = true;
             ui->build_panel_open = false;
@@ -91,7 +118,20 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
     else if (IsKeyPressed(KEY_P) && gs->phase == PHASE_PAUSED) gs->phase = PHASE_PLAYING;
     if (IsKeyPressed(KEY_DELETE) && ui->sel_building >= 0) {
         Building *b = &gs->buildings[ui->sel_building];
-        if (b->player == 0) { map_clear_building(gs, b->tx, b->ty, b->tw, b->th); b->active = false; ui->sel_building = -1; }
+        int lp = net_get_local_player();
+        if (b->player == lp) {
+            if (g_net_active) {
+                NetPacket pkt = {0};
+                pkt.type = PKT_DELETE_BLD;
+                pkt.player = g_local_player_id;
+                pkt.target_id = ui->sel_building;
+                net_dispatch_packet(gs, &pkt);
+            } else {
+                map_clear_building(gs, b->tx, b->ty, b->tw, b->th); 
+                b->active = false; 
+            }
+            ui->sel_building = -1; 
+        }
     }
     if (IsKeyPressed(KEY_S) && IsKeyDown(KEY_LEFT_SHIFT)) {
         for (int i = 0; i < ui->sel_count; i++) {

@@ -2,6 +2,7 @@
  * resources.c  –  Resource management, age advancement
  *=============================================================*/
 #include "game.h"
+#include "net.h"
 
 bool res_can_afford(PlayerRes *pr, Cost c){
     return pr->amount[RES_FOOD]  >= c.food  &&
@@ -40,7 +41,7 @@ bool res_try_advance_age(GameState *gs, int player){
     pr->advancing    = true;
     pr->advance_timer= 30.0f - pr->age*5.0f;  /* 30/25/20 seconds */
     const char *names[]={"Feudal Age","Castle Age","Imperial Age"};
-    if(player==0) game_set_alert(gs, names[pr->age]);
+    if(player == net_get_local_player()) game_set_alert(gs, names[pr->age]);
     return true;
 }
 
