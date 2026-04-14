@@ -39,4 +39,3 @@ void ui_state_init(UIState *ui);
 void renderer_draw_world(GameState *gs, UIState *ui);
 void hud_draw(GameState *gs, UIState *ui);
 void input_update(GameState *gs, UIState *ui);
-

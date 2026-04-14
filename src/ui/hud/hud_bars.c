@@ -1,0 +1,261 @@
+/*=============================================================
+ * hud_bars.c  –  Top resource bar, bottom panel, minimap
+ *=============================================================*/
+#include "game.h"
+#include "ui_state.h"
+#include "hud_common.h"
+#include <stdio.h>
+#include <string.h>
+
+static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
+
+void draw_top_bar(GameState *gs, UIState *ui){
+    (void)ui;
+    PlayerRes *pr=&gs->res[0];
+    DrawRectangle(0,0,SCREEN_W,HUD_TOP_H,C_HUD_BG);
+    DrawRectangle(0,HUD_TOP_H-1,SCREEN_W,2,C_HUD_LINE);
+    char buf[32];
+    int cx=10;
+    int f0=cx; draw_food_icon(cx,11); cx+=20;
+    snprintf(buf,sizeof(buf),"%d",pr->amount[RES_FOOD]);
+    DrawText(buf,cx,14,14,C_FOOD); int f1=cx+MeasureText(buf,14); cx=f1+18;
+    int w0=cx; draw_wood_icon(cx,11); cx+=20;
+    snprintf(buf,sizeof(buf),"%d",pr->amount[RES_WOOD]);
+    DrawText(buf,cx,14,14,C_WOOD); int w1=cx+MeasureText(buf,14); cx=w1+18;
+    int g0=cx; draw_gold_icon(cx,11); cx+=20;
+    snprintf(buf,sizeof(buf),"%d",pr->amount[RES_GOLD]);
+    DrawText(buf,cx,14,14,C_GOLD); int g1=cx+MeasureText(buf,14); cx=g1+18;
+    int s0=cx; draw_stone_icon(cx,11); cx+=20;
+    snprintf(buf,sizeof(buf),"%d",pr->amount[RES_STONE]);
+    DrawText(buf,cx,14,14,C_STONE); int s1=cx+MeasureText(buf,14); cx=s1+18;
+    int p0=cx;
+    Color pc=(pr->population>=pr->pop_cap)?C_POP_WARN:C_POP_OK;
+    snprintf(buf,sizeof(buf),"Pop: %d/%d",pr->population,pr->pop_cap);
+    DrawText(buf,cx,14,13,pc); int p1=cx+MeasureText(buf,13);
+    Vector2 mp = GetMousePosition();
+    if(mp.y < HUD_TOP_H){
+        if(mp.x >= f0 && mp.x <= f1) draw_tooltip("Food: Used to train villagers and most units", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= w0 && mp.x <= w1) draw_tooltip("Wood: Used for buildings and archers", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= g0 && mp.x <= g1) draw_tooltip("Gold: Used for advanced units and aging up", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= s0 && mp.x <= s1) draw_tooltip("Stone: Used for castles and some defensive buildings", (int)mp.x+5, (int)mp.y+15);
+        if(mp.x >= p0 && mp.x <= p1) draw_tooltip("Population: Total units vs capacity", (int)mp.x+5, (int)mp.y+15);
+    }
+    const char *an=age_names[pr->age];
+    if(pr->advancing){
+        snprintf(buf,sizeof(buf),"-> %s (%.0fs)",age_names[pr->age+1],pr->advance_timer);
+        DrawText(buf,SCREEN_W/2-MeasureText(buf,12)/2,14,12,C_AGE);
+    } else {
+        DrawText(an,SCREEN_W/2-MeasureText(an,13)/2,14,13,C_AGE);
+    }
+    if(pr->age<3 && !pr->advancing){
+        Cost c=age_advance_cost(pr->age);
+        bool can=res_can_afford(pr,c);
+        char label[40];
+        if(c.gold>0) snprintf(label,sizeof(label),"Advance Age: %dF %dG",c.food,c.gold);
+        else         snprintf(label,sizeof(label),"Advance Age: %dF",c.food);
+        if(draw_button(label,SCREEN_W-208,6,200,30,can)) res_try_advance_age(gs,0);
+        if(!can){
+            char need[48]="Need:";
+            if(pr->amount[RES_FOOD]<c.food){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dF",c.food-pr->amount[RES_FOOD]); strcat(need,tmp); }
+            if(c.gold>0&&pr->amount[RES_GOLD]<c.gold){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dG",c.gold-pr->amount[RES_GOLD]); strcat(need,tmp); }
+            DrawText(need,SCREEN_W-206,38,10,CLITERAL(Color){220,160,80,220});
+        }
+    } else if(pr->advancing){
+        char buf2[48];
+        snprintf(buf2,sizeof(buf2),"Advancing... %.0fs left",pr->advance_timer);
+        DrawText(buf2,SCREEN_W-210,12,11,C_AGE);
+    }
+    int minutes=(int)(gs->game_time/60), seconds=(int)(gs->game_time)%60;
+    snprintf(buf,sizeof(buf),"%02d:%02d",minutes,seconds);
+    DrawText(buf,SCREEN_W-48,14,12,CLITERAL(Color){140,130,100,255});
+}
+
+void draw_bottom_panel(GameState *gs, UIState *ui){
+    DrawRectangle(0,HUD_BOT_Y,SCREEN_W-MINI_SIZE-16,HUD_BOT_H,C_HUD_BG);
+    DrawRectangle(0,HUD_BOT_Y,SCREEN_W-MINI_SIZE-16,2,C_HUD_LINE);
+    int panel_w = SCREEN_W-MINI_SIZE-16;
+    char buf[64];
+
+    if(ui->sel_building>=0){
+        Building *b=&gs->buildings[ui->sel_building];
+        if(!b->active){ui->sel_building=-1;return;}
+        static const char *BLD_NAMES[BLD_COUNT]={
+            "Town Center","House","Barracks","Archery Range","Stable",
+            "Mill","Lumber Camp","Mining Camp","Farm"
+        };
+        DrawText(BLD_NAMES[b->type],12,HUD_BOT_Y+8,16,C_HUD_TXT);
+        snprintf(buf,sizeof(buf),"HP: %d / %d",b->hp,b->max_hp);
+        DrawText(buf,12,HUD_BOT_Y+28,12,CLITERAL(Color){180,165,130,255});
+        if(!b->complete){
+            int builders=0;
+            for(int i=0;i<MAX_UNITS;i++){ Unit *u=&gs->units[i]; if(u->active&&u->build_id==b->id) builders++; }
+            DrawRectangle(12,HUD_BOT_Y+44,200,7,CLITERAL(Color){35,28,16,255});
+            DrawRectangle(12,HUD_BOT_Y+44,(int)(200*b->construction),7,CLITERAL(Color){200,160,40,255});
+            snprintf(buf,sizeof(buf),"Construction: %.0f%%",b->construction*100);
+            DrawText(buf,12,HUD_BOT_Y+56,12,CLITERAL(Color){200,180,100,255});
+            if(builders==0) DrawText("No builders!  Select a villager and click this building",12,HUD_BOT_Y+72,11,CLITERAL(Color){220,100,60,230});
+            else { snprintf(buf,sizeof(buf),"%d builder%s  (%dx speed)",builders,builders>1?"s":"",builders); DrawText(buf,12,HUD_BOT_Y+72,11,CLITERAL(Color){120,200,100,220}); }
+            return;
+        }
+        if(b->queue_len>0){
+            static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
+            snprintf(buf,sizeof(buf),"Training: %s (%.0fs)",UN[b->queue[0]],b->train_timer);
+            DrawText(buf,12,HUD_BOT_Y+44,12,C_GOLD);
+            float prog=1.0f-(b->train_timer/building_train_time(b->queue[0]));
+            DrawRectangle(12,HUD_BOT_Y+60,160,6,CLITERAL(Color){40,35,20,255});
+            DrawRectangle(12,HUD_BOT_Y+60,(int)(160*prog),6,CLITERAL(Color){50,200,60,255});
+        }
+        int bx=220, by=HUD_BOT_Y+10;
+        switch(b->type){
+            case BLD_TOWN_CENTER:
+                if(draw_button("Villager\n50F",bx,by,80,50,gs->res[0].amount[RES_FOOD]>=50)) building_enqueue_unit(gs,b,UNIT_VILLAGER);
+                if(draw_button("Scout\n80F",bx+88,by,80,50,gs->res[0].amount[RES_FOOD]>=80)) building_enqueue_unit(gs,b,UNIT_SCOUT);
+                break;
+            case BLD_BARRACKS:
+                if(draw_button("Militia\n60F 20G",bx,by,90,50,gs->res[0].amount[RES_FOOD]>=60&&gs->res[0].amount[RES_GOLD]>=20)) building_enqueue_unit(gs,b,UNIT_MILITIA);
+                if(gs->res[0].age>=1&&draw_button("Man@Arms\n60F 20G",bx+98,by,90,50,gs->res[0].amount[RES_FOOD]>=60&&gs->res[0].amount[RES_GOLD]>=20)) building_enqueue_unit(gs,b,UNIT_MAN_AT_ARMS);
+                break;
+            case BLD_ARCHERY_RANGE:
+                if(draw_button("Archer\n25W 45G",bx,by,90,50,gs->res[0].amount[RES_WOOD]>=25&&gs->res[0].amount[RES_GOLD]>=45)) building_enqueue_unit(gs,b,UNIT_ARCHER);
+                break;
+            case BLD_STABLE:
+                if(draw_button("Knight\n60F 75G",bx,by,90,50,gs->res[0].amount[RES_FOOD]>=60&&gs->res[0].amount[RES_GOLD]>=75)) building_enqueue_unit(gs,b,UNIT_KNIGHT);
+                break;
+            default: break;
+        }
+        return;
+    }
+
+    if(ui->sel_count==0){
+        if(ui->sel_building<0 && ui->sel_tile_x>=0 && ui->sel_tile_y>=0 && map_in_bounds(ui->sel_tile_x,ui->sel_tile_y)){
+            Tile *t=&gs->map[ui->sel_tile_y][ui->sel_tile_x];
+            if(t->type==TILE_FOREST||t->type==TILE_GOLD||t->type==TILE_STONE||t->type==TILE_BERRIES||t->type==TILE_FARM){
+                static const char *TILE_LABEL[]={"Grass","Water","Forest","Gold Deposit","Stone Deposit","Berry Bush","Farmland"};
+                static Color TILE_COLOR[]={{80,120,60,255},{60,100,170,255},{60,130,50,255},{210,175,30,255},{160,155,140,255},{180,60,80,255},{160,140,80,255}};
+                Color col=TILE_COLOR[t->type];
+                DrawText(TILE_LABEL[t->type],12,HUD_BOT_Y+8,18,col);
+                char rbuf[48];
+                static const char *RNAME[]={"Food","Wood","Gold","Stone"};
+                ResType rtype;
+                switch(t->type){
+                    case TILE_FOREST: rtype=RES_WOOD; break;
+                    case TILE_GOLD:   rtype=RES_GOLD; break;
+                    case TILE_STONE:  rtype=RES_STONE; break;
+                    default:          rtype=RES_FOOD; break;
+                }
+                snprintf(rbuf,sizeof(rbuf),"%s remaining: %d",RNAME[rtype],t->resource_amt);
+                DrawText(rbuf,12,HUD_BOT_Y+30,12,CLITERAL(Color){200,185,140,220});
+                static const int MAX_AMT[]={0,0,250,900,800,500,400};
+                int maxv=MAX_AMT[t->type]; if(maxv<=0) maxv=500;
+                int bar_w=(int)(200.0f*((float)t->resource_amt/(float)maxv));
+                if(bar_w<0)bar_w=0; if(bar_w>200)bar_w=200;
+                DrawRectangle(12,HUD_BOT_Y+46,200,8,CLITERAL(Color){20,18,12,220});
+                DrawRectangle(12,HUD_BOT_Y+46,bar_w,8,col);
+                DrawRectangleLinesEx((Rectangle){12,HUD_BOT_Y+46,200,8},1,CLITERAL(Color){80,70,50,200});
+                DrawText("Click to inspect  |  Select villager + click to gather",12,HUD_BOT_Y+62,10,CLITERAL(Color){90,80,55,180});
+                return;
+            }
+        }
+        DrawText("No units selected",12,HUD_BOT_Y+8,13,CLITERAL(Color){100,90,65,200});
+        DrawText("Click unit/building to select  |  Drag to box-select",12,HUD_BOT_Y+28,11,CLITERAL(Color){90,80,55,180});
+        DrawText("B: build menu  |  WASD: scroll  |  Mouse wheel: zoom",12,HUD_BOT_Y+44,11,CLITERAL(Color){90,80,55,180});
+        return;
+    }
+
+    if(ui->sel_count==1){
+        Unit *u=&gs->units[ui->sel_units[0]];
+        static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
+        static const char *ST[]={"Idle","Moving","Gathering","Returning","Building","Attacking","Dying","Dead"};
+        DrawText(UN[u->type],12,HUD_BOT_Y+8,16,CLITERAL(Color){220,200,155,255});
+        snprintf(buf,sizeof(buf),"HP: %d/%d  Atk: %d  Armor: %d",u->hp,u->max_hp,u->attack_dmg,u->armor);
+        DrawText(buf,12,HUD_BOT_Y+28,12,CLITERAL(Color){180,165,130,255});
+        snprintf(buf,sizeof(buf),"State: %s",ST[u->state]);
+        DrawText(buf,12,HUD_BOT_Y+44,12,CLITERAL(Color){160,145,110,255});
+        if(u->type==UNIT_VILLAGER && u->carry_amt>0){
+            static const char *RT[]={"Food","Wood","Gold","Stone"};
+            snprintf(buf,sizeof(buf),"Carrying: %d %s",u->carry_amt,RT[u->carry_type]);
+            DrawText(buf,12,HUD_BOT_Y+60,12,C_GOLD);
+        }
+        DrawRectangle(panel_w-60,HUD_BOT_Y+8,48,48,CLITERAL(Color){35,28,16,255});
+        DrawRectangleLinesEx((Rectangle){(float)(panel_w-60),(float)(HUD_BOT_Y+8),48,48},1.5f,C_HUD_LINE);
+        DrawCircle(panel_w-36,HUD_BOT_Y+24,8,CLITERAL(Color){220,185,145,255});
+        Color mc={30,110,220,255}; if(u->player==1) mc=(Color){210,50,40,255};
+        DrawRectangle(panel_w-42,HUD_BOT_Y+35,12,14,mc);
+    } else {
+        snprintf(buf,sizeof(buf),"%d units selected",ui->sel_count);
+        DrawText(buf,12,HUD_BOT_Y+8,14,C_HUD_TXT);
+        for(int i=0;i<ui->sel_count&&i<12;i++){
+            Unit *u=&gs->units[ui->sel_units[i]];
+            Color mc=(u->player==0)?CLITERAL(Color){30,110,220,255}:CLITERAL(Color){210,50,40,255};
+            DrawRectangle(12+i*22,HUD_BOT_Y+30,18,18,mc);
+            DrawRectangleLinesEx((Rectangle){12.0f+i*22,HUD_BOT_Y+30.0f,18,18},1,C_HUD_LINE);
+            float frac=(float)u->hp/u->max_hp;
+            DrawRectangle(12+i*22,HUD_BOT_Y+50,18,3,CLITERAL(Color){30,30,30,200});
+            DrawRectangle(12+i*22,HUD_BOT_Y+50,(int)(18*frac),3,frac>0.5f?CLITERAL(Color){50,200,60,255}:CLITERAL(Color){210,50,40,255});
+        }
+    }
+    if(ui->sel_count>=1){
+        bool vil=false;
+        for(int i=0;i<ui->sel_count;i++) if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
+        if(vil){
+            bool menu_active = ui->build_panel_open || gs->build_mode.active;
+            if(draw_button(menu_active?"[B] Cancel":"[B] Build",12,HUD_BOT_Y+80,90,36,true)){
+                if(menu_active){ ui->build_panel_open=false; gs->build_mode.active=false; }
+                else { ui->build_panel_open=true; gs->build_mode.active=false; }
+            }
+        }
+    }
+}
+
+void draw_minimap(GameState *gs, UIState *ui){
+    DrawRectangle(MINI_X-2,MINI_Y-2,MINI_SIZE+4,MINI_SIZE+4,C_HUD_BG);
+    DrawRectangleLinesEx((Rectangle){MINI_X-2.0f,MINI_Y-2.0f,MINI_SIZE+4.0f,MINI_SIZE+4.0f},1.5f,C_HUD_LINE);
+    float sx=(float)MINI_SIZE/MAP_W, sy=(float)MINI_SIZE/MAP_H;
+    int ps=(int)(sx<1?1:sx), qs=(int)(sy<1?1:sy);
+    for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
+        FogState fs=gs->map[y][x].fog[0];
+        if(fs==FOG_HIDDEN) continue;
+        Color c;
+        switch(gs->map[y][x].type){
+            case TILE_GRASS:   c=CLITERAL(Color){55,100,38,255}; break;
+            case TILE_WATER:   c=CLITERAL(Color){30,80,160,255}; break;
+            case TILE_FOREST:  c=CLITERAL(Color){22,60,22,255};  break;
+            case TILE_GOLD:    c=CLITERAL(Color){200,170,20,255};break;
+            case TILE_STONE:   c=CLITERAL(Color){140,130,120,255};break;
+            case TILE_BERRIES: c=CLITERAL(Color){160,30,30,255}; break;
+            default:           c=CLITERAL(Color){130,100,50,255};break;
+        }
+        if(fs==FOG_EXPLORED){ c.r/=2;c.g/=2;c.b/=2; }
+        DrawRectangle(MINI_X+(int)(x*sx),MINI_Y+(int)(y*sy),ps,qs,c);
+    }
+    for(int i=0;i<MAX_BUILDINGS;i++){
+        Building *b=&gs->buildings[i];
+        if(!b->active) continue;
+        FogState fs=gs->map[clampi(b->ty,0,MAP_H-1)][clampi(b->tx,0,MAP_W-1)].fog[0];
+        if(fs==FOG_HIDDEN&&b->player!=0) continue;
+        Color c=(b->player==0)?CLITERAL(Color){30,110,220,255}:CLITERAL(Color){210,50,40,255};
+        DrawRectangle(MINI_X+(int)(b->tx*sx),MINI_Y+(int)(b->ty*sy),(int)(b->tw*sx)+1,(int)(b->th*sy)+1,c);
+    }
+    for(int i=0;i<MAX_UNITS;i++){
+        Unit *u=&gs->units[i];
+        if(!u->active||u->state==US_DEAD) continue;
+        int utx=(int)(u->wx/TILE_SIZE),uty=(int)(u->wy/TILE_SIZE);
+        FogState fs=gs->map[clampi(uty,0,MAP_H-1)][clampi(utx,0,MAP_W-1)].fog[0];
+        if(fs==FOG_HIDDEN&&u->player!=0) continue;
+        Color c=(u->player==0)?CLITERAL(Color){80,180,255,255}:CLITERAL(Color){255,100,80,255};
+        DrawRectangle(MINI_X+(int)(u->wx/TILE_SIZE*sx)-1,MINI_Y+(int)(u->wy/TILE_SIZE*sy)-1,2,2,c);
+    }
+    float cam_w=SCREEN_W/ui->camera.zoom, cam_h=SCREEN_H/ui->camera.zoom;
+    float cam_l=ui->camera.target.x - cam_w*0.5f, cam_t=ui->camera.target.y - cam_h*0.5f;
+    float rl=(cam_l/TILE_SIZE)*sx, rt=(cam_t/TILE_SIZE)*sy;
+    float rw=(cam_w/TILE_SIZE)*sx, rh=(cam_h/TILE_SIZE)*sy;
+    if(rl<0){rw+=rl;rl=0;} if(rt<0){rh+=rt;rt=0;}
+    if(rl+rw>MINI_SIZE) rw=MINI_SIZE-rl;
+    if(rt+rh>MINI_SIZE) rh=MINI_SIZE-rt;
+    DrawRectangleLinesEx((Rectangle){MINI_X+rl,MINI_Y+rt,rw,rh},1,CLITERAL(Color){220,200,150,200});
+    Vector2 mp=GetMousePosition();
+    if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)&&mp.x>=MINI_X&&mp.x<=MINI_X+MINI_SIZE&&mp.y>=MINI_Y&&mp.y<=MINI_Y+MINI_SIZE){
+        float rx=(mp.x-MINI_X)/MINI_SIZE, ry=(mp.y-MINI_Y)/MINI_SIZE;
+        ui->camera.target=(Vector2){rx*MAP_W*TILE_SIZE, ry*MAP_H*TILE_SIZE};
+    }
+}

@@ -1,10 +1,6 @@
 CC      = gcc
 CFLAGS  = -std=c99 -Wall -Wextra -O2 -g
 TARGET  = rts
-SRC_DIR = src
-
-SRCS    = $(wildcard $(SRC_DIR)/*.c)
-OBJS    = $(patsubst $(SRC_DIR)/%.c, $(SRC_DIR)/%.o, $(SRCS))
 
 # Detect Homebrew prefix (Apple Silicon first, then Intel)
 BREW_PREFIX := $(shell /opt/homebrew/bin/brew --prefix 2>/dev/null || /usr/local/bin/brew --prefix 2>/dev/null)
@@ -14,7 +10,20 @@ ifeq ($(RAYLIB_PREFIX),)
 $(error Raylib not found. Run: brew install raylib)
 endif
 
-INCLUDES = -I$(RAYLIB_PREFIX)/include -I$(SRC_DIR)
+# Recursively find all .c files in src/
+SRCS    := $(shell find src -name '*.c')
+OBJS    := $(patsubst src/%.c, build/%.o, $(SRCS))
+
+INCLUDES = -I$(RAYLIB_PREFIX)/include \
+           -Isrc \
+           -Isrc/core \
+           -Isrc/core/unit \
+           -Isrc/ui \
+           -Isrc/ui/renderer \
+           -Isrc/ui/hud \
+           -Isrc/ui/input \
+           -Isrc/ai
+
 LIBS     = -L$(RAYLIB_PREFIX)/lib -lraylib \
            -framework OpenGL -framework Cocoa -framework IOKit \
            -framework CoreFoundation -framework CoreVideo \
@@ -25,14 +34,15 @@ all: $(TARGET)
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
 
-$(SRC_DIR)/%.o: $(SRC_DIR)/%.c
+build/%.o: src/%.c
+	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
 
 run: $(TARGET)
 	./$(TARGET)
 
 clean:
-	rm -f $(SRC_DIR)/*.o $(TARGET)
+	rm -rf build $(TARGET)
 
 install-deps:
 	brew install raylib
