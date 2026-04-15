@@ -32,7 +32,8 @@ typedef enum {
     PKT_DELETE_BLD,
     PKT_AGE_ADVANCE,
     PKT_ID_ASSIGN,
-    PKT_STANCE
+    PKT_STANCE,
+    PKT_LOBBY_SYNC
 } PacketType;
 
 #pragma pack(push, 1)

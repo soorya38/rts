@@ -158,6 +158,11 @@ static void apply_packet(GameState *gs, NetPacket *pkt) {
         g_local_player_id = (int)pkt->extra;
         printf("Assigned Player ID: %d\n", g_local_player_id);
     }
+    else if (pkt->type == PKT_LOBBY_SYNC) {
+        if (g_local_player_id != 0) {
+            peer_count = pkt->extra;
+        }
+    }
 }
 
 void net_update(GameState *gs) {
@@ -188,6 +193,11 @@ void net_update(GameState *gs) {
                         sp.extra = _rng;
                         ep = enet_packet_create(&sp, sizeof(NetPacket), ENET_PACKET_FLAG_RELIABLE);
                         enet_peer_send(event.peer, 0, ep);
+                        
+                        NetPacket lsp = {0};
+                        lsp.type = PKT_LOBBY_SYNC;
+                        lsp.extra = peer_count;
+                        net_send_packet(&lsp);
                     }
                 }
                 break;
@@ -205,6 +215,10 @@ void net_update(GameState *gs) {
                     for(int i=0; i<NUM_PLAYERS-1; i++) {
                         if (peers[i] == event.peer) { peers[i] = NULL; peer_count--; break; }
                     }
+                    NetPacket lsp = {0};
+                    lsp.type = PKT_LOBBY_SYNC;
+                    lsp.extra = peer_count;
+                    net_send_packet(&lsp);
                 }
                 if (peer_count == 0 && g_local_player_id != 0) g_net_connected = false;
                 enet_packet_destroy(event.packet); // wait, event.packet might be null on disconnect? ENet docs say so
