@@ -58,12 +58,14 @@ jobs:
             packages: ""
             extra_cflags: ""
             extra_libs: ""
+            raylib_prefix: /usr/local
 
           - arch: arm64
             cc: aarch64-linux-gnu-gcc
             packages: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
             extra_cflags: "-march=armv8-a"
             extra_libs: ""
+            raylib_prefix: /opt/raylib-arm64
 
     steps:
       - uses: actions/checkout@v4
@@ -82,6 +84,7 @@ jobs:
       - name: Build Raylib from source
         run: |
           git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git raylib-src
+          sudo mkdir -p ${{ matrix.raylib_prefix }}
           cmake -S raylib-src -B raylib-build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER=${{ matrix.cc }} \
@@ -89,15 +92,15 @@ jobs:
             -DPLATFORM=Desktop \
             -DBUILD_EXAMPLES=OFF
           cmake --build raylib-build -j$(nproc)
-          sudo cmake --install raylib-build --prefix /usr/local
+          sudo cmake --install raylib-build --prefix ${{ matrix.raylib_prefix }}
 
       - name: Build RTS
         run: |
           mkdir -p build
           SRCS=$(find src -name '*.c')
-          INCLUDES="-Isrc -Isrc/core -Isrc/core/unit -Isrc/ui -Isrc/ui/renderer -Isrc/ui/hud -Isrc/ui/input -Isrc/ai -Isrc/core/enet -I/usr/local/include"
-          LIBS="-L/usr/local/lib -lraylib -lm -ldl -lpthread"
-          ${{ matrix.cc }} -std=c11 -Wall -O2 ${{ matrix.extra_cflags }} \
+          INCLUDES="-Isrc -Isrc/core -Isrc/core/unit -Isrc/ui -Isrc/ui/renderer -Isrc/ui/hud -Isrc/ui/input -Isrc/ai -Isrc/core/enet -I${{ matrix.raylib_prefix }}/include"
+          LIBS="-L${{ matrix.raylib_prefix }}/lib -lraylib -lm -ldl -lpthread"
+          ${{ matrix.cc }} -std=c11 -Wall -O2 -D_GNU_SOURCE ${{ matrix.extra_cflags }} \
             $INCLUDES $SRCS -o rts-linux-${{ matrix.arch }} $LIBS
 
       - name: Upload artifact
