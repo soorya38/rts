@@ -227,6 +227,9 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
 /* ─── Selection box ───────────────────────────────────────── */
 static void draw_selection_box(GameState *gs, UIState *ui){
     (void)gs;
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    return;
+#endif
     if(!ui->box_selecting) return;
     Vector2 a=GetScreenToWorld2D(ui->box_start,ui->camera);
     Vector2 b=GetScreenToWorld2D(GetMousePosition(),ui->camera);

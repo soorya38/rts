@@ -21,19 +21,29 @@ void update_camera(GameState *gs, UIState *ui, float dt) {
     if (IsKeyDown(KEY_A) || IsKeyDown(KEY_LEFT))   cam->target.x -= speed * dt;
     if (IsKeyDown(KEY_D) || IsKeyDown(KEY_RIGHT))  cam->target.x += speed * dt;
 
-    /* Touch drag panning */
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    /* Touch drag panning (swiping) */
     if (IsGestureDetected(GESTURE_DRAG)) {
         Vector2 delta = GetGestureDragVector();
         cam->target.x -= delta.x / cam->zoom;
         cam->target.y -= delta.y / cam->zoom;
     }
+#else
+    /* Right-click drag panning for PC */
+    if (IsMouseButtonDown(MOUSE_BUTTON_RIGHT)) {
+        Vector2 delta = GetMouseDelta();
+        cam->target.x -= delta.x / cam->zoom;
+        cam->target.y -= delta.y / cam->zoom;
+    }
 
+    /* Edge panning for PC */
     if (!gs->build_mode.active && !ui->build_panel_open) {
         if (mp.x < CAM_EDGE)              cam->target.x -= speed * dt;
         if (mp.x > SCREEN_W - CAM_EDGE)   cam->target.x += speed * dt;
         if (mp.y < CAM_EDGE)              cam->target.y -= speed * dt;
         if (mp.y > SCREEN_H - CAM_EDGE)   cam->target.y += speed * dt;
     }
+#endif
 
     float wheel = GetMouseWheelMove();
     float pinch = 0.0f;

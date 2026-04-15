@@ -212,8 +212,10 @@ void handle_left_down(GameState *gs, UIState *ui) {
                     (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
     if (over_hud) return;
     if (gs->build_mode.active || ui->build_panel_open) return;
+#if !defined(PLATFORM_ANDROID) && !defined(ANDROID)
     ui->box_selecting = true;
     ui->box_start = mp;
+#endif
 }
 
 /* ─── Left-click release ──────────────────────────────────── */
@@ -227,8 +229,13 @@ void handle_left_up(GameState *gs, UIState *ui) {
                     (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
     if (over_hud) return;
 
-    float dx = fabsf(we.x - ws.x), dy = fabsf(we.y - ws.y);
-    bool is_box = (dx > 10 || dy > 10);
+    // Use screen-space distance for more reliable thresholding
+    float sdx = fabsf(mp.x - ui->box_start.x), sdy = fabsf(mp.y - ui->box_start.y);
+    bool is_box = (sdx > 15 || sdy > 15);
+
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    is_box = false;
+#endif
 
     if (is_box) {
         bool shift = IsKeyDown(KEY_LEFT_SHIFT);

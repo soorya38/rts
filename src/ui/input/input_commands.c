@@ -158,9 +158,13 @@ void input_update(GameState *gs, UIState *ui) {
 
     update_hotkeys(gs, ui);
 
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
     bool tap = IsGestureDetected(GESTURE_TAP);
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || tap)   handle_left_down(gs, ui);
-    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON) || tap)  handle_left_up(gs, ui);
+    if (tap) { handle_left_down(gs, ui); handle_left_up(gs, ui); }
+#else
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))   handle_left_down(gs, ui);
+    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))  handle_left_up(gs, ui);
+#endif
 
     if (gs->phase == PHASE_VICTORY || gs->phase == PHASE_DEFEAT) {
         if (IsKeyPressed(KEY_Q)) CloseWindow();
