@@ -136,7 +136,13 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
 /* ─── Combat ───────────────────────────────────────────────── */
 static float dist_to_unit(Unit *a,Unit *b){return dist2f(a->wx,a->wy,b->wx,b->wy)/TILE_SIZE;}
 static float dist_to_bld(Unit *u,Building *b){
-    return dist2f(u->wx,u->wy,(b->tx+b->tw*0.5f)*TILE_SIZE,(b->ty+b->th*0.5f)*TILE_SIZE)/TILE_SIZE;
+    float bx1 = b->tx * TILE_SIZE;
+    float by1 = b->ty * TILE_SIZE;
+    float bx2 = bx1 + b->tw * TILE_SIZE;
+    float by2 = by1 + b->th * TILE_SIZE;
+    float cx = clampf(u->wx, bx1, bx2);
+    float cy = clampf(u->wy, by1, by2);
+    return sqrtf((u->wx - cx) * (u->wx - cx) + (u->wy - cy) * (u->wy - cy)) / TILE_SIZE;
 }
 
 static int auto_find_enemy_unit(GameState *gs,Unit *u){
@@ -188,7 +194,19 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                 tx=(int)(t->wx/TILE_SIZE);ty=(int)(t->wy/TILE_SIZE);
             } else {
                 Building *b=&gs->buildings[u->target_bld];
-                tx=b->tx+b->tw/2;ty=b->ty+b->th/2;
+                /* Find nearest passable tile adjacent to the building perimeter */
+                int best_d = 99999, bx=-1, by=-1;
+                int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
+                for(int dy=-1; dy<=b->th; dy++) for(int dx=-1; dx<=b->tw; dx++){
+                    int nx=b->tx+dx, ny=b->ty+dy;
+                    /* Skip interior tiles */
+                    if(nx>=b->tx&&nx<b->tx+b->tw&&ny>=b->ty&&ny<b->ty+b->th) continue;
+                    if(!map_in_bounds(nx,ny)) continue;
+                    if(!map_is_passable(gs,nx,ny)) continue;
+                    int d=(nx-utx)*(nx-utx)+(ny-uty)*(ny-uty);
+                    if(d<best_d){best_d=d;bx=nx;by=ny;}
+                }
+                if(bx<0){tx=b->tx;ty=b->ty;} else {tx=bx;ty=by;}
             }
             int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
             u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,MAX_PATH);
@@ -255,6 +273,10 @@ void unit_update(GameState *gs, Unit *u, float dt){
             if(!u->stance_manual && u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
                 int e=auto_find_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
+                else {
+                    int b=auto_find_enemy_bld(gs,u);
+                    if(b>=0){u->target_bld=b;u->state=US_ATTACKING;}
+                }
             }
             break;
         case US_MOVING:
