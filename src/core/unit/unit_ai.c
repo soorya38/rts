@@ -3,6 +3,7 @@
  *=============================================================*/
 #include "game.h"
 #include "net.h"
+#include <stdio.h>
 
 static ResType tile_to_res_ai(TileType t){
     switch(t){
@@ -92,10 +93,24 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
     if(u->carry_amt>=u->carry_cap){
         int dtx,dty;
         if(map_find_dropoff(gs,u->player,rt,u->wx,u->wy,&dtx,&dty)){
-            int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-            u->path_len=pathfind(gs,sx,sy,dtx,dty,u->path,MAX_PATH);
-            u->path_idx=0;
-            u->state=(u->path_len>0)?US_RETURNING:US_IDLE;
+            /* Find the building at dropoff to get its actual size */
+            int bw=1, bh=1;
+            for(int i=0;i<MAX_BUILDINGS;i++){
+                Building *b=&gs->buildings[i];
+                if(b->active && dtx>=b->tx && dtx<b->tx+b->tw && dty>=b->ty && dty<b->ty+b->th){
+                    bw=b->tw; bh=b->th; break;
+                }
+            }
+            /* Find adjacent tile to the dropoff building */
+            int bx,by;
+            find_adjacent_tile(gs,dtx,dty,bw,bh,u->wx,u->wy,&bx,&by);
+            if(bx<0){ u->state=US_IDLE; }
+            else {
+                int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
+                u->path_len=pathfind(gs,sx,sy,bx,by,u->path,MAX_PATH);
+                u->path_idx=0;
+                u->state=(u->path_len>0)?US_RETURNING:US_IDLE;
+            }
         } else u->state=US_IDLE;
     }
 }
@@ -128,7 +143,9 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
     if(b->construction>=1.0f){
         extern void building_on_complete(GameState *gs, Building *b);
         building_on_complete(gs, b);
+        int old_cap = gs->res[b->player].pop_cap;
         gs->res[b->player].pop_cap=pop_cap_from_buildings(gs,b->player);
+        printf("House completed for player %d: pop_cap %d -> %d\n", b->player, old_cap, gs->res[b->player].pop_cap);
         u->build_id=-1; u->state=US_IDLE;
     }
 }

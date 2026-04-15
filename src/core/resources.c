@@ -3,6 +3,7 @@
  *=============================================================*/
 #include "game.h"
 #include "net.h"
+#include <stdio.h>
 
 bool res_can_afford(PlayerRes *pr, Cost c){
     return pr->amount[RES_FOOD]  >= c.food  &&
@@ -59,12 +60,14 @@ void res_update_age_advance(GameState *gs, float dt){
 
 int pop_cap_from_buildings(GameState *gs, int player){
     int cap=5;  /* Town Center gives 5 if present */
+    int house_count=0;
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
         if(!b->active || !b->complete || b->player!=player) continue;
-        if(b->type==BLD_HOUSE) cap+=5;
+        if(b->type==BLD_HOUSE){ cap+=5; house_count++; }
     }
     if(cap>POP_CAP_MAX) cap=POP_CAP_MAX;
+    printf("pop_cap_from_buildings: player=%d houses=%d cap=%d\n", player, house_count, cap);
     return cap;
 }
 

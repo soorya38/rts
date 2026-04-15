@@ -92,8 +92,8 @@ int unit_spawn(GameState *gs, int player, UnitType type, float wx, float wy){
 }
 
 /* ─── Adjacency helper ────────────────────────────────────── */
-static void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
-                                float ux, float uy, int *ox, int *oy){
+void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
+                         float ux, float uy, int *ox, int *oy){
     int best=9999; *ox=-1; *oy=-1;
     int utx=(int)(ux/TILE_SIZE), uty=(int)(uy/TILE_SIZE);
     for(int dy=-1;dy<=bh;dy++) for(int dx=-1;dx<=bw;dx++){
@@ -145,9 +145,19 @@ void unit_give_dropoff_order(GameState *gs, Unit *u, int tx, int ty){
     if(u->type!=UNIT_VILLAGER || u->carry_amt == 0) return;
     int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
     
+    /* Find the building at these coordinates to get its actual size */
+    int bw = 1, bh = 1;
+    for(int i=0;i<MAX_BUILDINGS;i++){
+        Building *b = &gs->buildings[i];
+        if(b->active && tx >= b->tx && tx < b->tx + b->tw && ty >= b->ty && ty < b->ty + b->th){
+            bw = b->tw; bh = b->th;
+            break;
+        }
+    }
+    
     /* Find adjacent tile to the drop-off building */
     int bx, by;
-    find_adjacent_tile(gs,tx,ty,1,1,u->wx,u->wy,&bx,&by);
+    find_adjacent_tile(gs,tx,ty,bw,bh,u->wx,u->wy,&bx,&by);
     
     if(bx<0){
         u->state = US_RETURNING;

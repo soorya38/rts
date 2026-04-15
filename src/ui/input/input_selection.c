@@ -262,13 +262,26 @@ void handle_left_up(GameState *gs, UIState *ui) {
         if (has_villagers && gs->buildings[fb].type == BLD_FARM) {
             issue_command_at(gs, ui, we);
         } else {
-            /* Always select the building — even if a carrying villager is in the selection.
-               Villagers auto-return when full; this prevents the dropoff branch from
-               hijacking a "I want to see this building's panel" click. */
-            clear_selection(gs, ui);
-            ui->sel_building = fb;
-            gs->buildings[fb].selected = true;
-            ui->sel_tile_x = -1; ui->sel_tile_y = -1;
+            /* If carrying villagers are selected and the clicked building is a drop-off
+               point, issue a drop-off command instead of selecting the building. */
+            BldType bt = gs->buildings[fb].type;
+            bool is_dropoff_bld = (bt == BLD_TOWN_CENTER || bt == BLD_MILL ||
+                                   bt == BLD_LUMBER_CAMP  || bt == BLD_MINING_CAMP);
+            bool has_carrying_villager = false;
+            for (int i = 0; i < ui->sel_count; i++) {
+                Unit *u = &gs->units[ui->sel_units[i]];
+                if (u->type == UNIT_VILLAGER && u->carry_amt > 0) {
+                    has_carrying_villager = true; break;
+                }
+            }
+            if (is_dropoff_bld && has_carrying_villager) {
+                issue_command_at(gs, ui, we);
+            } else {
+                clear_selection(gs, ui);
+                ui->sel_building = fb;
+                gs->buildings[fb].selected = true;
+                ui->sel_tile_x = -1; ui->sel_tile_y = -1;
+            }
         }
     } else if (ui->sel_count > 0) {
         /* Units selected, clicked on world → context command (move/attack/gather/build/dropoff) */
