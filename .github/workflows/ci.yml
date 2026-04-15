@@ -207,3 +207,39 @@ jobs:
           name: rts-android-arm64-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+  # ── Release ─── Upload binaries to Github Releases ──────────────────────────
+  release:
+    name: Create Release
+    needs: [build-macos, build-linux, build-windows, build-android]
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p release-assets
+          cp artifacts/rts-macos-arm64/rts release-assets/rts-macos-arm64 || true
+          cp artifacts/rts-linux-amd64/rts-linux-amd64 release-assets/ || true
+          cp artifacts/rts-linux-arm64/rts-linux-arm64 release-assets/ || true
+          cp artifacts/rts-windows-amd64/rts-windows-amd64.exe release-assets/ || true
+          cp artifacts/rts-windows-arm64/rts-windows-arm64.exe release-assets/ || true
+          cp artifacts/rts-android-arm64-apk/app-debug.apk release-assets/rts-android-arm64.apk || true
+          chmod +x release-assets/rts-macos-arm64 release-assets/rts-linux-* || true
+          ls -la release-assets/
+
+      - name: Create or Update Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.sha }}
+          name: Build ${{ github.sha }}
+          prerelease: true
+          files: release-assets/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
