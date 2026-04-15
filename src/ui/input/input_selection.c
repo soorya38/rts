@@ -38,10 +38,12 @@ bool hit_building_iso(Building *b, Vector2 wp) {
     float bw = (float)b->tw * TILE_SIZE, bh = (float)b->th * TILE_SIZE;
     Vec2 c = iso_to_world(wp.x, wp.y);
     if (c.x >= bx && c.x <= bx + bw && c.y >= by && c.y <= by + bh) return true;
+    
     Vector2 p = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh * 0.5f));
-    float hit_w = (bw + bh) * 0.7f, hit_h = (bw + bh) * 0.5f + 30;
+    float hit_w = (bw + bh) * 0.3f;
+    float hit_h = (bw + bh) * 0.3f + 15.0f;
     return (wp.x >= p.x - hit_w / 2 && wp.x <= p.x + hit_w / 2 &&
-            wp.y >= p.y - hit_h && wp.y <= p.y + hit_h / 4);
+            wp.y >= p.y - hit_h && wp.y <= p.y);
 }
 
 int find_friendly_unit_at(GameState *gs, Vector2 wp) {
