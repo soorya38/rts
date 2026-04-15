@@ -163,6 +163,10 @@ static void apply_packet(GameState *gs, NetPacket *pkt) {
             peer_count = pkt->extra;
         }
     }
+    else if (pkt->type == PKT_RESEARCH) {
+        if (pkt->target_id >= 0 && pkt->target_id < MAX_BUILDINGS)
+            building_start_tech(gs, &gs->buildings[pkt->target_id], (TechType)pkt->extra);
+    }
 }
 
 void net_update(GameState *gs) {

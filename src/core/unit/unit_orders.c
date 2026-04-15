@@ -30,7 +30,7 @@ static const UnitStats STATS[UNIT_COUNT] = {
     /*KNIGHT*/      {100,10, 3, 1.3f, 4.0f, 115.0f, 2.0f,  0},
 };
 
-void unit_init_stats(Unit *u){
+void unit_init_stats(GameState *gs, Unit *u){
     const UnitStats *s = &STATS[u->type];
     u->hp = u->max_hp   = s->hp;
     u->attack_dmg       = s->attack_dmg;
@@ -52,6 +52,22 @@ void unit_init_stats(Unit *u){
     u->path_len         = 0;
     u->path_idx         = 0;
     u->death_timer      = 0.8f;
+    
+    if (gs) {
+        if (gs->res[u->player].tech_unlocked[TECH_IRON_WEAPONRY] && (u->type == UNIT_MILITIA || u->type == UNIT_MAN_AT_ARMS)) {
+            u->max_hp += 10;
+            u->hp += 10;
+            u->attack_dmg += 1;
+        }
+        if (gs->res[u->player].tech_unlocked[TECH_COMPOSITE_BOWS] && u->type == UNIT_ARCHER) {
+            u->attack_dmg += 1;
+            u->attack_range += 1.0f;
+        }
+        if (gs->res[u->player].tech_unlocked[TECH_MOUNTED_ARMOR] && (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT)) {
+            u->max_hp += 20;
+            u->hp += 20;
+        }
+    }
 }
 
 int unit_spawn(GameState *gs, int player, UnitType type, float wx, float wy){
@@ -67,7 +83,7 @@ int unit_spawn(GameState *gs, int player, UnitType type, float wx, float wy){
         u->state  = US_IDLE;
         u->wx     = wx; u->wy = wy;
         u->facing = 0.0f;
-        unit_init_stats(u);
+        unit_init_stats(gs, u);
         gs->res[player].population++;
         if(i >= gs->unit_count) gs->unit_count = i+1;
         return i;

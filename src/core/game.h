@@ -121,6 +121,16 @@ typedef struct {
 /* ─── Resources ─────────────────────────────────────────────── */
 typedef enum { RES_FOOD=0, RES_WOOD, RES_GOLD, RES_STONE, RES_COUNT } ResType;
 
+typedef enum {
+    TECH_CROP_ROTATION=0,
+    TECH_FERTILIZER,
+    TECH_IRON_WEAPONRY,
+    TECH_COMPOSITE_BOWS,
+    TECH_MOUNTED_ARMOR,
+    TECH_COUNT,
+    TECH_NONE = -1
+} TechType;
+
 typedef struct {
     int   amount[RES_COUNT];
     int   population;
@@ -128,6 +138,7 @@ typedef struct {
     int   age;              /* 0=Dark 1=Feudal 2=Castle 3=Imperial */
     bool  advancing;
     float advance_timer;
+    bool  tech_unlocked[TECH_COUNT];
 } PlayerRes;
 
 /* ─── Path cell ──────────────────────────────────────────────── */
@@ -212,6 +223,8 @@ typedef struct {
     int      rally_tx, rally_ty;
     bool     selected;
     int      resource_amt;      /* For farms: remaining food */
+    TechType active_tech;
+    float    tech_timer;
 } Building;
 
 /* ─── Build mode ghost ───────────────────────────────────────── */
@@ -281,7 +294,7 @@ int  map_find_passable_near(GameState *gs, int tx, int ty, int *ox, int *oy);
 int pathfind(GameState *gs,int sx,int sy,int ex,int ey,PathCell *out,int max_len);
 
 /* unit.c */
-void unit_init_stats(Unit *u);
+void unit_init_stats(GameState *gs, Unit *u);
 int  unit_spawn(GameState *gs,int player,UnitType type,float wx,float wy);
 void unit_give_move_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_gather_order(GameState *gs,Unit *u,int tx,int ty);
@@ -307,6 +320,13 @@ int  building_th(BldType t);
 int  building_max_hp(BldType t);
 float building_train_time(UnitType ut);
 Cost  unit_cost(UnitType ut);
+
+/* Technologies */
+Cost  tech_cost(TechType t);
+float tech_time(TechType t);
+const char* tech_name(TechType t);
+const char* tech_desc(TechType t);
+void  building_start_tech(GameState *gs, Building *b, TechType t);
 
 /* resources.c */
 bool  res_can_afford(PlayerRes *pr,Cost c);

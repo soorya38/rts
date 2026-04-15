@@ -29,8 +29,12 @@ bool map_is_buildable(GameState *gs,int x,int y,int w,int h){
         int nx=x+dx, ny=y+dy;
         if(!map_in_bounds(nx,ny)) return false;
         Tile *t=&gs->map[ny][nx];
-        if(t->type==TILE_WATER) return false;
-        if(t->building_id>=0) return false;
+        if(t->type==TILE_WATER)   return false;
+        if(t->type==TILE_FOREST)  return false;
+        if(t->type==TILE_GOLD)    return false;
+        if(t->type==TILE_STONE)   return false;
+        if(t->type==TILE_BERRIES) return false;
+        if(t->building_id>=0)     return false;
     }
     return true;
 }

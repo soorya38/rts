@@ -25,8 +25,8 @@ static void update_build_mode(GameState *gs, UIState *ui) {
     Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
     int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
     int tw = building_tw(gs->build_mode.type), th = building_th(gs->build_mode.type);
-    tx -= tw / 2; ty -= th / 2;
     int lp = net_get_local_player();
+    tx -= tw / 2; ty -= th / 2;
     gs->build_mode.ghost_tx = tx; gs->build_mode.ghost_ty = ty;
     gs->build_mode.valid = map_is_buildable(gs, tx, ty, tw, th) &&
                            res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));

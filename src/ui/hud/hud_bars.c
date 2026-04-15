@@ -109,7 +109,14 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             else { snprintf(buf,sizeof(buf),"%d builder%s  (%dx speed)",builders,builders>1?"s":"",builders); DrawText(buf,12,HUD_BOT_Y+72,11,CLITERAL(Color){120,200,100,220}); }
             return;
         }
-        if(b->queue_len>0){
+        if(b->active_tech != TECH_NONE){
+            float full=tech_time(b->active_tech);
+            float prog=1.0f-(b->tech_timer/full);
+            snprintf(buf,sizeof(buf),"Researching: %s (%.0fs)",tech_name(b->active_tech),b->tech_timer);
+            DrawText(buf,12,HUD_BOT_Y+44,12,CLITERAL(Color){100,180,255,255});
+            DrawRectangle(12,HUD_BOT_Y+60,160,6,CLITERAL(Color){20,30,50,255});
+            DrawRectangle(12,HUD_BOT_Y+60,(int)(160*prog),6,CLITERAL(Color){60,140,255,255});
+        } else if(b->queue_len>0){
             static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
             snprintf(buf,sizeof(buf),"Training: %s (%.0fs)",UN[b->queue[0]],b->train_timer);
             DrawText(buf,12,HUD_BOT_Y+44,12,C_GOLD);
@@ -172,6 +179,38 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 break;
             default: break;
         }
+        /* Research tech buttons by building type */
+        bool busy = (b->active_tech != TECH_NONE || b->queue_len > 0);
+        if(b->player == lp){
+            TechType techs[2] = {TECH_NONE, TECH_NONE};
+            int tc = 0;
+            if(b->type == BLD_MILL){ techs[0]=TECH_CROP_ROTATION; techs[1]=TECH_FERTILIZER; tc=2; }
+            else if(b->type == BLD_BARRACKS){ techs[0]=TECH_IRON_WEAPONRY; tc=1; }
+            else if(b->type == BLD_ARCHERY_RANGE){ techs[0]=TECH_COMPOSITE_BOWS; tc=1; }
+            else if(b->type == BLD_STABLE){ techs[0]=TECH_MOUNTED_ARMOR; tc=1; }
+            for(int ti=0; ti<tc; ti++){
+                TechType tt = techs[ti];
+                int tbx = bx + ti*112;
+                if(!gs->res[lp].tech_unlocked[tt]){
+                    Cost tc2 = tech_cost(tt);
+                    bool can = res_can_afford(&gs->res[lp], tc2) && !busy;
+                    char tbuf[80];
+                    snprintf(tbuf,sizeof(tbuf),"%s",tech_name(tt));
+                    if(draw_button(tbuf, tbx, by+58, 107, 40, can)){
+                        if(g_net_active){
+                            NetPacket pkt={0}; pkt.type=PKT_RESEARCH;
+                            pkt.player=lp; pkt.target_id=ui->sel_building; pkt.extra=(int32_t)tt;
+                            net_dispatch_packet(gs,&pkt);
+                        } else building_start_tech(gs,b,tt);
+                    }
+                    DrawText(tech_desc(tt), tbx, by+100, 10, CLITERAL(Color){160,200,255,200});
+                } else {
+                    DrawText(tech_name(tt), tbx, by+62, 10, CLITERAL(Color){80,220,100,220});
+                    DrawText("[Researched]", tbx, by+74, 9, CLITERAL(Color){60,180,80,200});
+                }
+            }
+        }
+
         /* Sell button – shown for own complete buildings (not Town Center) */
         if(b->player == lp && b->complete && b->type != BLD_TOWN_CENTER){
             Cost refund = building_cost(b->type);
