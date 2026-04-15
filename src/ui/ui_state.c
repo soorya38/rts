@@ -5,13 +5,17 @@
 void ui_state_init(UIState *ui, GameState *gs) {
     memset(ui, 0, sizeof(UIState));
 
-    ui->sel_building = -1;
-    ui->sel_tile_x   = -1;
-    ui->sel_tile_y   = -1;
-    ui->hover_unit   = -1;
+    ui->sel_building   = -1;
+    ui->sel_tile_x     = -1;
+    ui->sel_tile_y     = -1;
+    ui->hover_unit     = -1;
     ui->hover_building = -1;
-    ui->hover_tile_x = -1;
-    ui->hover_tile_y = -1;
+    ui->hover_tile_x   = -1;
+    ui->hover_tile_y   = -1;
+
+    /* Default placeholder IP — user overwrites this to join */
+    strncpy(ui->net_ip, "192.168.1.1", sizeof(ui->net_ip)-1);
+    ui->net_ip_active  = false;
 
     ui->camera.zoom    = 1.0f;
     ui->camera.offset  = (Vector2){GetScreenWidth()*0.5f, GetScreenHeight()*0.5f};

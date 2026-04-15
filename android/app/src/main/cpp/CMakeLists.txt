@@ -6,7 +6,9 @@ project(rts C)
 set(CMAKE_C_STANDARD 11)
 
 set(PLATFORM "Android" CACHE STRING "Platform force" FORCE)
-set(CUSTOM_ANDROID_API 21 CACHE STRING "API version")
+set(CUSTOM_ANDROID_API 24 CACHE STRING "API version")
+set(CMAKE_SYSTEM_VERSION 24)
+set(FETCHCONTENT_UPDATES_DISCONNECTED ON)
 include(FetchContent)
 FetchContent_Declare(
     raylib

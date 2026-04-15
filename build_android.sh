@@ -55,6 +55,7 @@ fi
 
 echo "[4/4] Building APK..."
 cd android
+# Use standard daemon and rich console for interactive progress bar
 ./gradlew assembleDebug
 
 echo "======================================"
