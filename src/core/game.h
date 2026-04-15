@@ -179,6 +179,7 @@ typedef struct {
     /* Combat */
     int       target_unit;      /* -1 = none */
     int       target_bld;       /* -1 = none */
+    bool      stance_manual;    /* false = auto, true = manual */
 
     bool      selected;
     float     anim_timer;

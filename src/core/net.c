@@ -148,6 +148,12 @@ static void apply_packet(GameState *gs, NetPacket *pkt) {
     else if (pkt->type == PKT_AGE_ADVANCE) {
         res_try_advance_age(gs, pkt->player);
     }
+    else if (pkt->type == PKT_STANCE) {
+        for (int i=0; i<pkt->unit_count && i<64; i++) {
+            if (pkt->units[i] < MAX_UNITS)
+                gs->units[pkt->units[i]].stance_manual = (pkt->extra != 0);
+        }
+    }
     else if (pkt->type == PKT_ID_ASSIGN) {
         g_local_player_id = (int)pkt->extra;
         printf("Assigned Player ID: %d\n", g_local_player_id);

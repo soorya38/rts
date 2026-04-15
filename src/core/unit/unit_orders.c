@@ -48,6 +48,7 @@ void unit_init_stats(Unit *u){
     u->build_id         = -1;
     u->target_unit      = -1;
     u->target_bld       = -1;
+    u->stance_manual    = false;
     u->path_len         = 0;
     u->path_idx         = 0;
     u->death_timer      = 0.8f;

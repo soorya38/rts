@@ -252,6 +252,41 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 else { ui->build_panel_open=true; gs->build_mode.active=false; }
             }
         }
+        
+        bool military=false;
+        bool all_manual=true;
+        int lp = net_get_local_player();
+        for(int i=0;i<ui->sel_count;i++) {
+            Unit *u = &gs->units[ui->sel_units[i]];
+            if(u->player == lp && u->type!=UNIT_VILLAGER && u->type!=UNIT_SCOUT) {
+                military=true;
+                if(!u->stance_manual) all_manual=false;
+            }
+        }
+        if(military){
+            const char *lbl = all_manual ? "Stance: Manual" : "Stance: Auto";
+            if(draw_button(lbl, 110, HUD_BOT_Y+80, 120, 36, true)){
+                bool new_stance = !all_manual;
+                if (g_net_active) {
+                    NetPacket pkt = {0}; pkt.type = PKT_STANCE; pkt.player = lp;
+                    pkt.extra = new_stance ? 1 : 0;
+                    for(int i=0; i<ui->sel_count && pkt.unit_count<64; i++){
+                        Unit *u = &gs->units[ui->sel_units[i]];
+                        if(u->player == lp && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT){
+                            pkt.units[pkt.unit_count++] = ui->sel_units[i];
+                        }
+                    }
+                    net_dispatch_packet(gs, &pkt);
+                } else {
+                    for(int i=0; i<ui->sel_count; i++){
+                        Unit *u = &gs->units[ui->sel_units[i]];
+                        if(u->player == lp && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT){
+                            u->stance_manual = new_stance;
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

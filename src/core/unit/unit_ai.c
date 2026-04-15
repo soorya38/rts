@@ -170,8 +170,10 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
         if(!gs->buildings[u->target_bld].active) u->target_bld=-1;
     }
     if(u->target_unit<0&&u->target_bld<0){
-        u->target_unit=auto_find_enemy_unit(gs,u);
-        if(u->target_unit<0) u->target_bld=auto_find_enemy_bld(gs,u);
+        if(!u->stance_manual) {
+            u->target_unit=auto_find_enemy_unit(gs,u);
+            if(u->target_unit<0) u->target_bld=auto_find_enemy_bld(gs,u);
+        }
         if(u->target_unit<0&&u->target_bld<0){u->state=US_IDLE;return;}
     }
     float dist=9999.0f;
@@ -250,7 +252,7 @@ void unit_update(GameState *gs, Unit *u, float dt){
 
     switch(u->state){
         case US_IDLE:
-            if(u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
+            if(!u->stance_manual && u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
                 int e=auto_find_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
             }
