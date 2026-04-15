@@ -39,9 +39,9 @@ void update_camera(GameState *gs, UIState *ui, float dt) {
     /* Edge panning for PC */
     if (!gs->build_mode.active && !ui->build_panel_open) {
         if (mp.x < CAM_EDGE)              cam->target.x -= speed * dt;
-        if (mp.x > SCREEN_W - CAM_EDGE)   cam->target.x += speed * dt;
+        if (mp.x > GetScreenWidth() - CAM_EDGE)   cam->target.x += speed * dt;
         if (mp.y < CAM_EDGE)              cam->target.y -= speed * dt;
-        if (mp.y > SCREEN_H - CAM_EDGE)   cam->target.y += speed * dt;
+        if (mp.y > GetScreenHeight() - CAM_EDGE)   cam->target.y += speed * dt;
     }
 #endif
 
@@ -93,7 +93,7 @@ void update_camera(GameState *gs, UIState *ui, float dt) {
         cam->target.y += (before.y - after.y);
     }
 
-    float hw = (SCREEN_W * 0.5f) / cam->zoom, hh = (SCREEN_H * 0.5f) / cam->zoom;
+    float hw = (GetScreenWidth() * 0.5f) / cam->zoom, hh = (GetScreenHeight() * 0.5f) / cam->zoom;
     float min_cam_x = -(float)(MAP_H * TILE_SIZE), max_cam_x = (float)(MAP_W * TILE_SIZE);
     float min_cam_y = -30.0f, max_cam_y = (float)(MAP_W + MAP_H) * TILE_SIZE * 0.5f + 100.0f;
     float min_x = min_cam_x + hw, max_x = max_cam_x - hw;

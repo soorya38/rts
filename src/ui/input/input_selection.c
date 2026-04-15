@@ -208,8 +208,8 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
 /* ─── Left-click start ────────────────────────────────────── */
 void handle_left_down(GameState *gs, UIState *ui) {
     Vector2 mp = GetMousePosition();
-    bool over_hud = mp.y < 42 || mp.y > SCREEN_H - 130 ||
-                    (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
+    bool over_hud = mp.y < 42 || mp.y > GetScreenHeight() - 130 ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - 130 - 8);
     if (over_hud) return;
     if (gs->build_mode.active || ui->build_panel_open) return;
 #if !defined(PLATFORM_ANDROID) && !defined(ANDROID)
@@ -225,8 +225,8 @@ void handle_left_up(GameState *gs, UIState *ui) {
     Vector2 mp = GetMousePosition();
     Vector2 ws = GetScreenToWorld2D(ui->box_start, ui->camera);
     Vector2 we = GetScreenToWorld2D(mp, ui->camera);
-    bool over_hud = mp.y < 42 || mp.y > SCREEN_H - 130 ||
-                    (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
+    bool over_hud = mp.y < 42 || mp.y > GetScreenHeight() - 130 ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - 130 - 8);
     if (over_hud) return;
 
     // Use screen-space distance for more reliable thresholding
@@ -317,8 +317,8 @@ void handle_left_up(GameState *gs, UIState *ui) {
 /* ─── Hover detection ─────────────────────────────────────── */
 void update_hover(GameState *gs, UIState *ui) {
     Vector2 mp = GetMousePosition();
-    bool over_hud = mp.y < 42 || mp.y > SCREEN_H - 130 ||
-                    (mp.x > SCREEN_W - MINI_SIZE - 16 && mp.y > SCREEN_H - 130 - 8);
+    bool over_hud = mp.y < 42 || mp.y > GetScreenHeight() - 130 ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - 130 - 8);
     ui->hover_unit = -1; ui->hover_building = -1;
     ui->hover_tile_x = -1; ui->hover_tile_y = -1;
     if (over_hud || gs->phase != PHASE_PLAYING) return;

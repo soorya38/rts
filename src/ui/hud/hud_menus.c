@@ -110,9 +110,9 @@ void hud_draw(GameState *gs, UIState *ui){
     draw_alert(gs, ui);
 
     if(gs->phase==PHASE_PAUSED){
-        DrawRectangle(0,0,SCREEN_W,SCREEN_H,CLITERAL(Color){0,0,0,100});
+        DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,100});
         const char *pm="PAUSED  –  Press [P] to resume";
-        DrawText(pm,SCREEN_W/2-MeasureText(pm,22)/2,SCREEN_H/2-11,22,CLITERAL(Color){220,200,140,255});
+        DrawText(pm,GetScreenWidth()/2-MeasureText(pm,22)/2,GetScreenHeight()/2-11,22,CLITERAL(Color){220,200,140,255});
     }
 
     char dbuf[64];

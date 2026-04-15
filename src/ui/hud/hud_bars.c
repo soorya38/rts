@@ -15,8 +15,8 @@ void draw_top_bar(GameState *gs, UIState *ui){
     (void)ui;
     int lp = net_get_local_player();
     PlayerRes *pr=&gs->res[lp];
-    DrawRectangle(0,0,SCREEN_W,HUD_TOP_H,C_HUD_BG);
-    DrawRectangle(0,HUD_TOP_H-1,SCREEN_W,2,C_HUD_LINE);
+    DrawRectangle(0,0,GetScreenWidth(),HUD_TOP_H,C_HUD_BG);
+    DrawRectangle(0,HUD_TOP_H-1,GetScreenWidth(),2,C_HUD_LINE);
     char buf[32];
     int cx=10;
     int f0=cx; draw_food_icon(cx,11); cx+=20;
@@ -46,9 +46,9 @@ void draw_top_bar(GameState *gs, UIState *ui){
     const char *an=age_names[pr->age];
     if(pr->advancing){
         snprintf(buf,sizeof(buf),"-> %s (%.0fs)",age_names[pr->age+1],pr->advance_timer);
-        DrawText(buf,SCREEN_W/2-MeasureText(buf,12)/2,14,12,C_AGE);
+        DrawText(buf,GetScreenWidth()/2-MeasureText(buf,12)/2,14,12,C_AGE);
     } else {
-        DrawText(an,SCREEN_W/2-MeasureText(an,13)/2,14,13,C_AGE);
+        DrawText(an,GetScreenWidth()/2-MeasureText(an,13)/2,14,13,C_AGE);
     }
     if(pr->age<3 && !pr->advancing){
         Cost c=age_advance_cost(pr->age);
@@ -56,7 +56,7 @@ void draw_top_bar(GameState *gs, UIState *ui){
         char label[40];
         if(c.gold>0) snprintf(label,sizeof(label),"Advance Age: %dF %dG",c.food,c.gold);
         else         snprintf(label,sizeof(label),"Advance Age: %dF",c.food);
-        if(draw_button(label,SCREEN_W-208,6,200,30,can)) {
+        if(draw_button(label,GetScreenWidth()-208,6,200,30,can)) {
             if (g_net_active) {
                 NetPacket pkt = {0};
                 pkt.type = PKT_AGE_ADVANCE;
@@ -70,22 +70,22 @@ void draw_top_bar(GameState *gs, UIState *ui){
             char need[48]="Need:";
             if(pr->amount[RES_FOOD]<c.food){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dF",c.food-pr->amount[RES_FOOD]); strcat(need,tmp); }
             if(c.gold>0&&pr->amount[RES_GOLD]<c.gold){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dG",c.gold-pr->amount[RES_GOLD]); strcat(need,tmp); }
-            DrawText(need,SCREEN_W-206,38,10,CLITERAL(Color){220,160,80,220});
+            DrawText(need,GetScreenWidth()-206,38,10,CLITERAL(Color){220,160,80,220});
         }
     } else if(pr->advancing){
         char buf2[48];
         snprintf(buf2,sizeof(buf2),"Advancing... %.0fs left",pr->advance_timer);
-        DrawText(buf2,SCREEN_W-210,12,11,C_AGE);
+        DrawText(buf2,GetScreenWidth()-210,12,11,C_AGE);
     }
     int minutes=(int)(gs->game_time/60), seconds=(int)(gs->game_time)%60;
     snprintf(buf,sizeof(buf),"%02d:%02d",minutes,seconds);
-    DrawText(buf,SCREEN_W-48,14,12,CLITERAL(Color){140,130,100,255});
+    DrawText(buf,GetScreenWidth()-48,14,12,CLITERAL(Color){140,130,100,255});
 }
 
 void draw_bottom_panel(GameState *gs, UIState *ui){
-    DrawRectangle(0,HUD_BOT_Y,SCREEN_W-MINI_SIZE-16,HUD_BOT_H,C_HUD_BG);
-    DrawRectangle(0,HUD_BOT_Y,SCREEN_W-MINI_SIZE-16,2,C_HUD_LINE);
-    int panel_w = SCREEN_W-MINI_SIZE-16;
+    DrawRectangle(0,HUD_BOT_Y,GetScreenWidth()-MINI_SIZE-16,HUD_BOT_H,C_HUD_BG);
+    DrawRectangle(0,HUD_BOT_Y,GetScreenWidth()-MINI_SIZE-16,2,C_HUD_LINE);
+    int panel_w = GetScreenWidth()-MINI_SIZE-16;
     char buf[64];
 
     if(ui->sel_building>=0){
@@ -445,8 +445,8 @@ void draw_minimap(GameState *gs, UIState *ui){
     }
 
     /* Camera view box */
-    float cam_w = SCREEN_W / ui->camera.zoom;
-    float cam_h = SCREEN_H / ui->camera.zoom;
+    float cam_w = GetScreenWidth() / ui->camera.zoom;
+    float cam_h = GetScreenHeight() / ui->camera.zoom;
     
     /* Calculate corners of the camera view in world coordinates */
     /* Target in ui->camera.target is already in ISO space!
@@ -457,9 +457,9 @@ void draw_minimap(GameState *gs, UIState *ui){
 
     /* To draw a proper camera quad on the minimap, we need the 4 corners of the screen in world coords */
     Vector2 cam_tl = GetScreenToWorld2D((Vector2){0, 0}, ui->camera);
-    Vector2 cam_tr = GetScreenToWorld2D((Vector2){SCREEN_W, 0}, ui->camera);
-    Vector2 cam_bl = GetScreenToWorld2D((Vector2){0, SCREEN_H}, ui->camera);
-    Vector2 cam_br = GetScreenToWorld2D((Vector2){SCREEN_W, SCREEN_H}, ui->camera);
+    Vector2 cam_tr = GetScreenToWorld2D((Vector2){GetScreenWidth(), 0}, ui->camera);
+    Vector2 cam_bl = GetScreenToWorld2D((Vector2){0, GetScreenHeight()}, ui->camera);
+    Vector2 cam_br = GetScreenToWorld2D((Vector2){GetScreenWidth(), GetScreenHeight()}, ui->camera);
 
     Vec2 w_tl = iso_to_world(cam_tl.x, cam_tl.y);
     Vec2 w_tr = iso_to_world(cam_tr.x, cam_tr.y);

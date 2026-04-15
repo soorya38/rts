@@ -14,7 +14,7 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->hover_tile_y = -1;
 
     ui->camera.zoom    = 1.0f;
-    ui->camera.offset  = (Vector2){SCREEN_W*0.5f, SCREEN_H*0.5f};
+    ui->camera.offset  = (Vector2){GetScreenWidth()*0.5f, GetScreenHeight()*0.5f};
     ui->camera.rotation= 0.0f;
 
     ui_center_on_tc(ui, gs);

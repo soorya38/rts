@@ -72,7 +72,7 @@ void draw_alert(GameState *gs, UIState *ui){
     float alpha=clampf(gs->alert_timer/1.5f,0,1)*255;
     int tw=MeasureText(gs->alert,22);
     int bw=tw+40, bh=36;
-    int bx=SCREEN_W/2-bw/2, by=HUD_TOP_H+8;
+    int bx=GetScreenWidth()/2-bw/2, by=HUD_TOP_H+8;
     DrawRectangleRounded((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},0.3f,8,
                          CLITERAL(Color){25,20,10,(unsigned char)(alpha*0.9f)});
     DrawText(gs->alert,bx+(bw-tw)/2,by+(bh-22)/2,22,
@@ -82,18 +82,18 @@ void draw_alert(GameState *gs, UIState *ui){
 void draw_end_screen(GameState *gs, UIState *ui){
     (void)ui;
     if(gs->phase!=PHASE_VICTORY&&gs->phase!=PHASE_DEFEAT) return;
-    DrawRectangle(0,0,SCREEN_W,SCREEN_H,CLITERAL(Color){0,0,0,180});
+    DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,180});
     bool win=(gs->phase==PHASE_VICTORY);
     const char *msg=win?"VICTORY!":"DEFEATED";
     Color mc=win?CLITERAL(Color){220,200,50,255}:CLITERAL(Color){210,50,40,255};
     int fs=52, tw=MeasureText(msg,fs);
-    DrawText(msg,SCREEN_W/2-tw/2,SCREEN_H/2-60,fs,mc);
+    DrawText(msg,GetScreenWidth()/2-tw/2,GetScreenHeight()/2-60,fs,mc);
     const char *sub=win?"The enemy town center has fallen!":"Your town center has been destroyed!";
     int sfs=18, stw=MeasureText(sub,sfs);
-    DrawText(sub,SCREEN_W/2-stw/2,SCREEN_H/2+10,sfs,CLITERAL(Color){200,185,150,255});
+    DrawText(sub,GetScreenWidth()/2-stw/2,GetScreenHeight()/2+10,sfs,CLITERAL(Color){200,185,150,255});
     DrawText("Press [R] to restart or [Q] to quit",
-             SCREEN_W/2-MeasureText("Press [R] to restart or [Q] to quit",14)/2,
-             SCREEN_H/2+50,14,CLITERAL(Color){150,135,100,255});
+             GetScreenWidth()/2-MeasureText("Press [R] to restart or [Q] to quit",14)/2,
+             GetScreenHeight()/2+50,14,CLITERAL(Color){150,135,100,255});
 }
 
 void draw_placement_bar(GameState *gs, UIState *ui){
@@ -111,27 +111,27 @@ void draw_placement_bar(GameState *gs, UIState *ui){
     int tw=MeasureText(buf,12);
     Color bg = gs->build_mode.valid ?
         CLITERAL(Color){20,60,20,230} : CLITERAL(Color){60,20,20,230};
-    DrawRectangle(SCREEN_W/2-tw/2-8,HUD_TOP_H+2,tw+16,20,bg);
-    DrawRectangleLinesEx((Rectangle){(float)(SCREEN_W/2-tw/2-8),(float)(HUD_TOP_H+2),(float)(tw+16),20},
+    DrawRectangle(GetScreenWidth()/2-tw/2-8,HUD_TOP_H+2,tw+16,20,bg);
+    DrawRectangleLinesEx((Rectangle){(float)(GetScreenWidth()/2-tw/2-8),(float)(HUD_TOP_H+2),(float)(tw+16),20},
                          1,gs->build_mode.valid?CLITERAL(Color){60,180,60,200}:CLITERAL(Color){180,60,60,200});
-    DrawText(buf,SCREEN_W/2-tw/2,HUD_TOP_H+5,12,
+    DrawText(buf,GetScreenWidth()/2-tw/2,HUD_TOP_H+5,12,
              gs->build_mode.valid?CLITERAL(Color){180,240,180,255}:CLITERAL(Color){240,160,160,255});
 }
 
 void draw_menu(GameState *gs, UIState *ui){
-    DrawRectangleGradientV(0,0,SCREEN_W,SCREEN_H,
+    DrawRectangleGradientV(0,0,GetScreenWidth(),GetScreenHeight(),
         CLITERAL(Color){8,12,22,255},CLITERAL(Color){18,28,48,255});
     for(int i=0;i<60;i++){
-        int sx=(i*137)%SCREEN_W, sy=(i*197)%SCREEN_H;
+        int sx=(i*137)%GetScreenWidth(), sy=(i*197)%GetScreenHeight();
         int bs=(i%3==0)?2:1;
         DrawRectangle(sx,sy,bs,bs,CLITERAL(Color){255,255,255,(unsigned char)(100+i*3)});
     }
     const char *t1="AGE OF EMPIRES II";
     const char *t2="Raylib Edition";
     int f1=48, f2=22;
-    DrawText(t1,SCREEN_W/2-MeasureText(t1,f1)/2,SCREEN_H/2-140,f1,CLITERAL(Color){220,185,40,255});
-    DrawText(t2,SCREEN_W/2-MeasureText(t2,f2)/2,SCREEN_H/2-85,f2,CLITERAL(Color){170,155,110,255});
-    DrawRectangle(SCREEN_W/2-120,SCREEN_H/2-58,240,2,CLITERAL(Color){130,110,60,200});
+    DrawText(t1,GetScreenWidth()/2-MeasureText(t1,f1)/2,GetScreenHeight()/2-140,f1,CLITERAL(Color){220,185,40,255});
+    DrawText(t2,GetScreenWidth()/2-MeasureText(t2,f2)/2,GetScreenHeight()/2-85,f2,CLITERAL(Color){170,155,110,255});
+    DrawRectangle(GetScreenWidth()/2-120,GetScreenHeight()/2-58,240,2,CLITERAL(Color){130,110,60,200});
     const char *lines[]={
         "Gather resources  •  Build structures  •  Train armies",
         "Destroy the enemy Town Center to win!",
@@ -140,9 +140,9 @@ void draw_menu(GameState *gs, UIState *ui){
         "Click to select | Drag to box-select | Click (selected) = command"
     };
     for(int i=0;i<5;i++)
-        DrawText(lines[i],SCREEN_W/2-MeasureText(lines[i],12)/2,
-                 SCREEN_H/2-30+i*18,12,CLITERAL(Color){150,140,110,220});
-    int bw=220,bh=48,bx=SCREEN_W/2-bw/2,by=SCREEN_H/2+40;
+        DrawText(lines[i],GetScreenWidth()/2-MeasureText(lines[i],12)/2,
+                 GetScreenHeight()/2-30+i*18,12,CLITERAL(Color){150,140,110,220});
+    int bw=220,bh=48,bx=GetScreenWidth()/2-bw/2,by=GetScreenHeight()/2+40;
     
     /* Solo button */
     if(draw_button("Start Solo Campaign", bx, by, bw, bh, true)){
@@ -191,7 +191,7 @@ void draw_menu(GameState *gs, UIState *ui){
         }
     }
 
-    DrawText("Built with Raylib 5.5 + ENet",8,SCREEN_H-20,10,CLITERAL(Color){60,55,40,200});
+    DrawText("Built with Raylib 5.5 + ENet",8,GetScreenHeight()-20,10,CLITERAL(Color){60,55,40,200});
 }
 
 static const char *_age_names_unused(void){ return age_names[0]; } /* suppress warning */

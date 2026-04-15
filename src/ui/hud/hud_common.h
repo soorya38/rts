@@ -5,10 +5,10 @@
 
 #define HUD_TOP_H    42
 #define HUD_BOT_H   130
-#define HUD_BOT_Y   (SCREEN_H - HUD_BOT_H)
+#define HUD_BOT_Y   (GetScreenHeight() - HUD_BOT_H)
 #define MINI_SIZE   180
-#define MINI_X      (SCREEN_W - MINI_SIZE - 8)
-#define MINI_Y      (SCREEN_H - MINI_SIZE - 8)
+#define MINI_X      (GetScreenWidth()  - MINI_SIZE - 8)
+#define MINI_Y      (GetScreenHeight() - MINI_SIZE - 8)
 
 #define C_HUD_BG    CLITERAL(Color){ 22, 17, 10, 235}
 #define C_HUD_LINE  CLITERAL(Color){ 80, 65, 40, 220}
