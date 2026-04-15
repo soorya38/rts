@@ -111,7 +111,7 @@ void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
 
 void unit_give_move_order(GameState *gs, Unit *u, int tx, int ty){
     int sx=(int)(u->wx/TILE_SIZE), sy=(int)(u->wy/TILE_SIZE);
-    u->path_len = pathfind(gs,sx,sy,tx,ty,u->path,MAX_PATH);
+    u->path_len = pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
     u->path_idx = 0;
     u->state    = (u->path_len>0) ? US_MOVING : US_IDLE;
     u->target_unit=-1; u->target_bld=-1;
@@ -135,7 +135,7 @@ void unit_give_gather_order(GameState *gs, Unit *u, int tx, int ty){
     find_adjacent_tile(gs,tx,ty,1,1,u->wx,u->wy,&bx,&by);
     if(bx<0){u->state=US_GATHERING;return;}
     int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,MAX_PATH);
+    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,ASTAR_PATH_CAP);
     u->path_idx=0;
     u->state=(u->path_len>0)?US_MOVING:US_GATHERING;
     u->target_unit=-1; u->target_bld=-1;
@@ -165,7 +165,7 @@ void unit_give_dropoff_order(GameState *gs, Unit *u, int tx, int ty){
         return;
     }
     
-    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,MAX_PATH);
+    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,ASTAR_PATH_CAP);
     u->path_idx=0;
     u->state=(u->path_len>0)?US_RETURNING:US_IDLE;
     u->target_unit=-1; u->target_bld=-1;
@@ -184,7 +184,7 @@ void unit_give_attack_order(GameState *gs, Unit *u, int tunit, int tbld){
         tx=b->tx+b->tw/2; ty=b->ty+b->th/2;
     } else { u->state=US_IDLE; return; }
     int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-    u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,MAX_PATH);
+    u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
     u->path_idx=0;
     u->state=US_MOVING;
 }
@@ -197,7 +197,7 @@ void unit_give_build_order(GameState *gs, Unit *u, int bld_id){
     find_adjacent_tile(gs,b->tx,b->ty,b->tw,b->th,u->wx,u->wy,&bx,&by);
     if(bx<0){u->state=US_IDLE;return;}
     int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,MAX_PATH);
+    u->path_len=pathfind(gs,sx,sy,bx,by,u->path,ASTAR_PATH_CAP);
     u->path_idx=0;
     u->state=(u->path_len>0)?US_MOVING:US_BUILDING;
     u->gather_tx=-1; u->target_unit=-1; u->target_bld=-1;

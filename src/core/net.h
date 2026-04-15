@@ -4,19 +4,27 @@
 #include <stdint.h>
 
 /* ── Windows compatibility ──────────────────────────────────────────────────
- * ENet includes winsock2.h → windows.h → wingdi.h + winuser.h which declare
- * Rectangle(), CloseWindow(), ShowCursor() and DrawText() — all of which
- * conflict with Raylib's own definitions.  Define these exclusion guards
- * BEFORE any Windows headers are pulled in.
- * These are no-ops on Linux/macOS.
+ * ENet includes winsock2.h → windows.h, which in turn includes:
+ *   wingdi.h   → declares Rectangle() ← conflicts with Raylib's Rectangle typedef
+ *   winuser.h  → declares CloseWindow(), ShowCursor(), DrawText() ← conflict
+ *   winscard.h → pulls in ole2.h → oleidl.h → needs LPMSG (from winuser.h)
+ *
+ * Fix:
+ *   WIN32_LEAN_AND_MEAN  → tells windows.h to skip winscard.h/OLE/COM entirely
+ *   NOGDI                → also skip wingdi.h (Rectangle conflict)
+ *   NOUSER               → also skip winuser.h (CloseWindow etc.)
+ *   With WIN32_LEAN_AND_MEAN the NOUSER/LPMSG cascade never starts.
+ *
+ * These defines are Windows-only no-ops elsewhere.
  */
 #ifdef _WIN32
-  #define NOGDI    /* exclude wingdi.h → no Rectangle() GDI conflict  */
-  #define NOUSER   /* exclude winuser.h → no CloseWindow/ShowCursor/DrawText */
+  #define WIN32_LEAN_AND_MEAN   /* skip OLE/COM/winscard cascade */
+  #define NOGDI                 /* skip wingdi.h  → no Rectangle() conflict */
+  #define NOUSER                /* skip winuser.h → no CloseWindow/ShowCursor/DrawText */
 #endif
 #include "enet.h"
 #ifdef _WIN32
-  /* Re-expose the WinAPI symbols that Raylib itself re-declares properly */
+  #undef WIN32_LEAN_AND_MEAN
   #undef NOGDI
   #undef NOUSER
 #endif

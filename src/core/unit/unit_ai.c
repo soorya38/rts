@@ -107,7 +107,7 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
             if(bx<0){ u->state=US_IDLE; }
             else {
                 int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-                u->path_len=pathfind(gs,sx,sy,bx,by,u->path,MAX_PATH);
+                u->path_len=pathfind(gs,sx,sy,bx,by,u->path,ASTAR_PATH_CAP);
                 u->path_idx=0;
                 u->state=(u->path_len>0)?US_RETURNING:US_IDLE;
             }
@@ -226,7 +226,7 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                 if(bx<0){tx=b->tx;ty=b->ty;} else {tx=bx;ty=by;}
             }
             int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-            u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,MAX_PATH);
+            u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
             u->path_idx=0;
         }
         unit_step_path(u,dt);

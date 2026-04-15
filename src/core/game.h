@@ -20,7 +20,7 @@ typedef struct { float x, y; } Vec2;
 #define TILE_SIZE       32          /* pixels per tile at zoom=1 */
 #define MAX_UNITS       256
 #define MAX_BUILDINGS   128
-#define MAX_PATH        300
+#define ASTAR_PATH_CAP  300         /* max A* path nodes (avoids conflict with Windows MAX_PATH) */
 #define NUM_PLAYERS     4
 #define POP_CAP_MAX     200
 
@@ -169,7 +169,7 @@ typedef struct {
     float     wx, wy;           /* world position (px, center) */
     float     twx, twy;         /* sub-target waypoint (px) */
 
-    PathCell  path[MAX_PATH];
+    PathCell  path[ASTAR_PATH_CAP];
     int       path_len;
     int       path_idx;
 
