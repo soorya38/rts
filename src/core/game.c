@@ -32,7 +32,7 @@ void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
     for (int i = 0; i < gs->num_players; i++) {
         gs->res[i].amount[RES_FOOD]  = 200;
         gs->res[i].amount[RES_WOOD]  = 200;
-        gs->res[i].amount[RES_GOLD]  = 0;
+        gs->res[i].amount[RES_GOLD]  = 100;
         gs->res[i].amount[RES_STONE] = 0;
         gs->res[i].age    = 0;
         gs->res[i].pop_cap = 5;
