@@ -23,10 +23,12 @@ void update_camera(GameState *gs, UIState *ui, float dt) {
 
 #if defined(PLATFORM_ANDROID) || defined(ANDROID)
     /* Touch drag panning (swiping) */
-    if (IsGestureDetected(GESTURE_DRAG)) {
-        Vector2 delta = GetGestureDragVector();
-        cam->target.x -= delta.x / cam->zoom;
-        cam->target.y -= delta.y / cam->zoom;
+    if (GetTouchPointCount() == 1) {
+        if (IsMouseButtonDown(MOUSE_LEFT_BUTTON)) {
+            Vector2 delta = GetMouseDelta();
+            cam->target.x -= delta.x / cam->zoom;
+            cam->target.y -= delta.y / cam->zoom;
+        }
     }
 #else
     /* Right-click drag panning for PC */

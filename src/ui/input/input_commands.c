@@ -37,7 +37,13 @@ static void update_build_mode(GameState *gs, UIState *ui) {
     gs->build_mode.valid = map_is_buildable(gs, tx, ty, tw, th) &&
                            res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));
 
-    if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsGestureDetected(GESTURE_TAP)) && gs->build_mode.valid) {
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    bool place_trigger = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+#else
+    bool place_trigger = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+#endif
+
+    if (place_trigger && gs->build_mode.valid) {
         if (g_net_active) {
             NetPacket pkt = {0};
             pkt.type = PKT_PLACE_BLD;
