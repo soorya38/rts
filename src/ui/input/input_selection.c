@@ -5,8 +5,7 @@
 #include "ui_state.h"
 #include <math.h>
 #include "net.h"
-
-#define MINI_SIZE 180
+#include "hud_common.h"   /* HUD_TOP_H, HUD_BOT_H, MINI_SIZE */
 
 /* ─── Selection helpers ───────────────────────────────────── */
 bool point_in_unit(Unit *u, Vector2 wp) {
@@ -208,14 +207,13 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
 /* ─── Left-click start ────────────────────────────────────── */
 void handle_left_down(GameState *gs, UIState *ui) {
     Vector2 mp = GetMousePosition();
-    bool over_hud = mp.y < 42 || mp.y > GetScreenHeight() - 130 ||
-                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - 130 - 8);
+    bool over_hud = mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - HUD_BOT_H - 8);
     if (over_hud) return;
     if (gs->build_mode.active || ui->build_panel_open) return;
-#if !defined(PLATFORM_ANDROID) && !defined(ANDROID)
+    /* Always set box_selecting; Android will clear is_box flag in handle_left_up */
     ui->box_selecting = true;
     ui->box_start = mp;
-#endif
 }
 
 /* ─── Left-click release ──────────────────────────────────── */
@@ -225,14 +223,15 @@ void handle_left_up(GameState *gs, UIState *ui) {
     Vector2 mp = GetMousePosition();
     Vector2 ws = GetScreenToWorld2D(ui->box_start, ui->camera);
     Vector2 we = GetScreenToWorld2D(mp, ui->camera);
-    bool over_hud = mp.y < 42 || mp.y > GetScreenHeight() - 130 ||
-                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - 130 - 8);
+    bool over_hud = mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - HUD_BOT_H - 8);
     if (over_hud) return;
 
     // Use screen-space distance for more reliable thresholding
     float sdx = fabsf(mp.x - ui->box_start.x), sdy = fabsf(mp.y - ui->box_start.y);
     bool is_box = (sdx > 15 || sdy > 15);
 
+    /* Never box-select on touch — every tap is treated as a point click */
 #if defined(PLATFORM_ANDROID) || defined(ANDROID)
     is_box = false;
 #endif
@@ -314,11 +313,79 @@ void handle_left_up(GameState *gs, UIState *ui) {
     }
 }
 
+/* ─── Direct tap handler for Android ─────────────────────── */
+/* Called when GESTURE_TAP is detected.  Does NOT rely on box_selecting.  */
+void handle_tap(GameState *gs, UIState *ui) {
+    /* Use touch position directly */
+    Vector2 mp = GetTouchPointCount() > 0 ? GetTouchPosition(0) : GetMousePosition();
+    bool over_hud = mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - HUD_BOT_H - 8);
+    if (over_hud) return;
+    if (gs->build_mode.active || ui->build_panel_open) return;
+
+    Vector2 we = GetScreenToWorld2D(mp, ui->camera);
+    bool shift = IsKeyDown(KEY_LEFT_SHIFT);
+    int fu = find_friendly_unit_at(gs, we);
+    int fb = find_friendly_building_at(gs, we);
+
+    bool has_villagers = false;
+    for (int i = 0; i < ui->sel_count; i++)
+        if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { has_villagers = true; break; }
+
+    if (fu >= 0) {
+        if (!shift) clear_selection(gs, ui);
+        select_unit(gs, ui, fu);
+        ui->sel_tile_x = -1; ui->sel_tile_y = -1;
+    } else if (fb >= 0 && gs->buildings[fb].complete) {
+        if (has_villagers && gs->buildings[fb].type == BLD_FARM) {
+            issue_command_at(gs, ui, we);
+        } else {
+            BldType bt = gs->buildings[fb].type;
+            bool is_dropoff_bld = (bt == BLD_TOWN_CENTER || bt == BLD_MILL ||
+                                   bt == BLD_LUMBER_CAMP  || bt == BLD_MINING_CAMP);
+            bool has_carrying_villager = false;
+            for (int i = 0; i < ui->sel_count; i++) {
+                Unit *u = &gs->units[ui->sel_units[i]];
+                if (u->type == UNIT_VILLAGER && u->carry_amt > 0) {
+                    has_carrying_villager = true; break;
+                }
+            }
+            if (is_dropoff_bld && has_carrying_villager) {
+                issue_command_at(gs, ui, we);
+            } else {
+                clear_selection(gs, ui);
+                ui->sel_building = fb;
+                gs->buildings[fb].selected = true;
+                ui->sel_tile_x = -1; ui->sel_tile_y = -1;
+            }
+        }
+    } else if (ui->sel_count > 0) {
+        issue_command_at(gs, ui, we);
+        Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));
+        int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
+        if (map_in_bounds(tx, ty)) {
+            TileType tt = gs->map[ty][tx].type;
+            if (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE || tt == TILE_BERRIES || tt == TILE_FARM)
+                { ui->sel_tile_x = tx; ui->sel_tile_y = ty; }
+            else { ui->sel_tile_x = -1; ui->sel_tile_y = -1; }
+        }
+    } else {
+        Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));
+        int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
+        if (map_in_bounds(tx, ty)) {
+            TileType tt = gs->map[ty][tx].type;
+            if (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE || tt == TILE_BERRIES || tt == TILE_FARM)
+                { ui->sel_tile_x = tx; ui->sel_tile_y = ty; }
+            else { ui->sel_tile_x = -1; ui->sel_tile_y = -1; clear_selection(gs, ui); }
+        }
+    }
+}
+
 /* ─── Hover detection ─────────────────────────────────────── */
 void update_hover(GameState *gs, UIState *ui) {
     Vector2 mp = GetMousePosition();
-    bool over_hud = mp.y < 42 || mp.y > GetScreenHeight() - 130 ||
-                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - 130 - 8);
+    bool over_hud = mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - HUD_BOT_H - 8);
     ui->hover_unit = -1; ui->hover_building = -1;
     ui->hover_tile_x = -1; ui->hover_tile_y = -1;
     if (over_hud || gs->phase != PHASE_PLAYING) return;

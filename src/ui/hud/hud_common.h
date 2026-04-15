@@ -2,11 +2,14 @@
  * hud_common.h  –  Shared HUD constants and helpers (internal)
  *=============================================================*/
 #pragma once
+#include "ui_state.h"   /* for hud_scale() */
 
-#define HUD_TOP_H    42
-#define HUD_BOT_H   130
+/* All size macros are scale-aware so the HUD looks right on phones.
+   hud_scale() returns GetScreenHeight()/720 clamped to [1.0, 2.5]. */
+#define HUD_TOP_H    ((int)(42  * hud_scale()))
+#define HUD_BOT_H    ((int)(130 * hud_scale()))
 #define HUD_BOT_Y   (GetScreenHeight() - HUD_BOT_H)
-#define MINI_SIZE   180
+#define MINI_SIZE    ((int)(180 * hud_scale()))
 #define MINI_X      (GetScreenWidth()  - MINI_SIZE - 8)
 #define MINI_Y      (GetScreenHeight() - MINI_SIZE - 8)
 

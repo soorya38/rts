@@ -39,6 +39,9 @@ typedef struct {
 
 void ui_state_init(UIState *ui, GameState *gs);
 void ui_center_on_tc(UIState *ui, GameState *gs);
+/* Returns a scale factor relative to 720p so HUD elements are legible on any
+   screen size, including high-DPI phones.  Range [1.0, 2.5]. */
+float hud_scale(void);
 
 /* Abstracted prototypes that now take UIState for rendering / input */
 void renderer_draw_world(GameState *gs, UIState *ui);

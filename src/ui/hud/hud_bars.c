@@ -13,30 +13,38 @@ static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial 
 
 void draw_top_bar(GameState *gs, UIState *ui){
     (void)ui;
+    float sc = hud_scale();
     int lp = net_get_local_player();
     PlayerRes *pr=&gs->res[lp];
-    DrawRectangle(0,0,GetScreenWidth(),HUD_TOP_H,C_HUD_BG);
-    DrawRectangle(0,HUD_TOP_H-1,GetScreenWidth(),2,C_HUD_LINE);
+    int th = HUD_TOP_H;
+    DrawRectangle(0,0,GetScreenWidth(),th,C_HUD_BG);
+    DrawRectangle(0,th-1,GetScreenWidth(),2,C_HUD_LINE);
     char buf[32];
-    int cx=10;
-    int f0=cx; draw_food_icon(cx,11); cx+=20;
+    int icon = (int)(20*sc);   /* icon column width */
+    int fs14 = (int)(14*sc);
+    int fs13 = (int)(13*sc);
+    int fs12 = (int)(12*sc);
+    int fs10 = (int)(10*sc);
+    int fs11 = (int)(11*sc);
+    int cx=10, cy=(th-fs14)/2;
+    int f0=cx; draw_food_icon(cx,(th-icon)/2); cx+=icon+2;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_FOOD]);
-    DrawText(buf,cx,14,14,C_FOOD); int f1=cx+MeasureText(buf,14); cx=f1+18;
-    int w0=cx; draw_wood_icon(cx,11); cx+=20;
+    DrawText(buf,cx,cy,fs14,C_FOOD); int f1=cx+MeasureText(buf,fs14); cx=f1+(int)(18*sc);
+    int w0=cx; draw_wood_icon(cx,(th-icon)/2); cx+=icon+2;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_WOOD]);
-    DrawText(buf,cx,14,14,C_WOOD); int w1=cx+MeasureText(buf,14); cx=w1+18;
-    int g0=cx; draw_gold_icon(cx,11); cx+=20;
+    DrawText(buf,cx,cy,fs14,C_WOOD); int w1=cx+MeasureText(buf,fs14); cx=w1+(int)(18*sc);
+    int g0=cx; draw_gold_icon(cx,(th-icon)/2); cx+=icon+2;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_GOLD]);
-    DrawText(buf,cx,14,14,C_GOLD); int g1=cx+MeasureText(buf,14); cx=g1+18;
-    int s0=cx; draw_stone_icon(cx,11); cx+=20;
+    DrawText(buf,cx,cy,fs14,C_GOLD); int g1=cx+MeasureText(buf,fs14); cx=g1+(int)(18*sc);
+    int s0=cx; draw_stone_icon(cx,(th-icon)/2); cx+=icon+2;
     snprintf(buf,sizeof(buf),"%d",pr->amount[RES_STONE]);
-    DrawText(buf,cx,14,14,C_STONE); int s1=cx+MeasureText(buf,14); cx=s1+18;
+    DrawText(buf,cx,cy,fs14,C_STONE); int s1=cx+MeasureText(buf,fs14); cx=s1+(int)(18*sc);
     int p0=cx;
     Color pc=(pr->population>=pr->pop_cap)?C_POP_WARN:C_POP_OK;
     snprintf(buf,sizeof(buf),"Pop: %d/%d",pr->population,pr->pop_cap);
-    DrawText(buf,cx,14,13,pc); int p1=cx+MeasureText(buf,13);
+    DrawText(buf,cx,cy,fs13,pc); int p1=cx+MeasureText(buf,fs13);
     Vector2 mp = GetMousePosition();
-    if(mp.y < HUD_TOP_H){
+    if(mp.y < th){
         if(mp.x >= f0 && mp.x <= f1) draw_tooltip("Food: Used to train villagers and most units", (int)mp.x+5, (int)mp.y+15);
         if(mp.x >= w0 && mp.x <= w1) draw_tooltip("Wood: Used for buildings and archers", (int)mp.x+5, (int)mp.y+15);
         if(mp.x >= g0 && mp.x <= g1) draw_tooltip("Gold: Used for advanced units and aging up", (int)mp.x+5, (int)mp.y+15);
@@ -46,17 +54,18 @@ void draw_top_bar(GameState *gs, UIState *ui){
     const char *an=age_names[pr->age];
     if(pr->advancing){
         snprintf(buf,sizeof(buf),"-> %s (%.0fs)",age_names[pr->age+1],pr->advance_timer);
-        DrawText(buf,GetScreenWidth()/2-MeasureText(buf,12)/2,14,12,C_AGE);
+        DrawText(buf,GetScreenWidth()/2-MeasureText(buf,fs12)/2,cy,fs12,C_AGE);
     } else {
-        DrawText(an,GetScreenWidth()/2-MeasureText(an,13)/2,14,13,C_AGE);
+        DrawText(an,GetScreenWidth()/2-MeasureText(an,fs13)/2,cy,fs13,C_AGE);
     }
+    int btn_w=(int)(208*sc);
     if(pr->age<3 && !pr->advancing){
         Cost c=age_advance_cost(pr->age);
         bool can=res_can_afford(pr,c);
         char label[40];
         if(c.gold>0) snprintf(label,sizeof(label),"Advance Age: %dF %dG",c.food,c.gold);
         else         snprintf(label,sizeof(label),"Advance Age: %dF",c.food);
-        if(draw_button(label,GetScreenWidth()-208,6,200,30,can)) {
+        if(draw_button(label,GetScreenWidth()-btn_w-8,6,btn_w,(int)(30*sc),can)) {
             if (g_net_active) {
                 NetPacket pkt = {0};
                 pkt.type = PKT_AGE_ADVANCE;
@@ -70,23 +79,34 @@ void draw_top_bar(GameState *gs, UIState *ui){
             char need[48]="Need:";
             if(pr->amount[RES_FOOD]<c.food){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dF",c.food-pr->amount[RES_FOOD]); strcat(need,tmp); }
             if(c.gold>0&&pr->amount[RES_GOLD]<c.gold){ char tmp[20]; snprintf(tmp,sizeof(tmp)," %dG",c.gold-pr->amount[RES_GOLD]); strcat(need,tmp); }
-            DrawText(need,GetScreenWidth()-206,38,10,CLITERAL(Color){220,160,80,220});
+            DrawText(need,GetScreenWidth()-btn_w-6,(int)(38*sc),fs10,CLITERAL(Color){220,160,80,220});
         }
     } else if(pr->advancing){
         char buf2[48];
         snprintf(buf2,sizeof(buf2),"Advancing... %.0fs left",pr->advance_timer);
-        DrawText(buf2,GetScreenWidth()-210,12,11,C_AGE);
+        DrawText(buf2,GetScreenWidth()-btn_w-6,(int)(12*sc),fs11,C_AGE);
     }
     int minutes=(int)(gs->game_time/60), seconds=(int)(gs->game_time)%60;
     snprintf(buf,sizeof(buf),"%02d:%02d",minutes,seconds);
-    DrawText(buf,GetScreenWidth()-48,14,12,CLITERAL(Color){140,130,100,255});
+    DrawText(buf,GetScreenWidth()-(int)(48*sc),cy,fs12,CLITERAL(Color){140,130,100,255});
 }
 
 void draw_bottom_panel(GameState *gs, UIState *ui){
-    DrawRectangle(0,HUD_BOT_Y,GetScreenWidth()-MINI_SIZE-16,HUD_BOT_H,C_HUD_BG);
-    DrawRectangle(0,HUD_BOT_Y,GetScreenWidth()-MINI_SIZE-16,2,C_HUD_LINE);
+    float sc = hud_scale();
+    int by_start = HUD_BOT_Y;
     int panel_w = GetScreenWidth()-MINI_SIZE-16;
+    DrawRectangle(0,by_start,panel_w,HUD_BOT_H,C_HUD_BG);
+    DrawRectangle(0,by_start,panel_w,2,C_HUD_LINE);
     char buf[64];
+
+    int fs16=(int)(16*sc);
+    int fs14=(int)(14*sc);
+    int fs13=(int)(13*sc);
+    int fs12=(int)(12*sc);
+    int fs11=(int)(11*sc);
+    int fs10=(int)(10*sc);
+    int fs9 =(int)(9*sc);
+    int pad =(int)(12*sc);
 
     if(ui->sel_building>=0){
         Building *b=&gs->buildings[ui->sel_building];
@@ -96,47 +116,51 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             "Blacksmith","Market",
             "Mill","Lumber Camp","Mining Camp","Farm"
         };
-        DrawText(BLD_NAMES[b->type],12,HUD_BOT_Y+8,16,C_HUD_TXT);
+        DrawText(BLD_NAMES[b->type],pad,by_start+(int)(8*sc),fs16,C_HUD_TXT);
         snprintf(buf,sizeof(buf),"HP: %d / %d",b->hp,b->max_hp);
-        DrawText(buf,12,HUD_BOT_Y+28,12,CLITERAL(Color){180,165,130,255});
+        DrawText(buf,pad,by_start+(int)(28*sc),fs12,CLITERAL(Color){180,165,130,255});
         if(!b->complete){
             int builders=0;
             for(int i=0;i<MAX_UNITS;i++){ Unit *u=&gs->units[i]; if(u->active&&u->build_id==b->id) builders++; }
-            DrawRectangle(12,HUD_BOT_Y+44,200,7,CLITERAL(Color){35,28,16,255});
-            DrawRectangle(12,HUD_BOT_Y+44,(int)(200*b->construction),7,CLITERAL(Color){200,160,40,255});
+            int bar_w=(int)(200*sc), bar_h=(int)(7*sc);
+            DrawRectangle(pad,by_start+(int)(44*sc),bar_w,bar_h,CLITERAL(Color){35,28,16,255});
+            DrawRectangle(pad,by_start+(int)(44*sc),(int)(bar_w*b->construction),bar_h,CLITERAL(Color){200,160,40,255});
             snprintf(buf,sizeof(buf),"Construction: %.0f%%",b->construction*100);
-            DrawText(buf,12,HUD_BOT_Y+56,12,CLITERAL(Color){200,180,100,255});
-            if(builders==0) DrawText("No builders!  Select a villager and click this building",12,HUD_BOT_Y+72,11,CLITERAL(Color){220,100,60,230});
-            else { snprintf(buf,sizeof(buf),"%d builder%s  (%dx speed)",builders,builders>1?"s":"",builders); DrawText(buf,12,HUD_BOT_Y+72,11,CLITERAL(Color){120,200,100,220}); }
+            DrawText(buf,pad,by_start+(int)(56*sc),fs12,CLITERAL(Color){200,180,100,255});
+            if(builders==0) DrawText("No builders!  Select a villager and click this building",pad,by_start+(int)(72*sc),fs11,CLITERAL(Color){220,100,60,230});
+            else { snprintf(buf,sizeof(buf),"%d builder%s  (%dx speed)",builders,builders>1?"s":"",builders); DrawText(buf,pad,by_start+(int)(72*sc),fs11,CLITERAL(Color){120,200,100,220}); }
             return;
         }
         if(b->active_tech != TECH_NONE){
             float full=tech_time(b->active_tech);
             float prog=1.0f-(b->tech_timer/full);
             snprintf(buf,sizeof(buf),"Researching: %s (%.0fs)",tech_name(b->active_tech),b->tech_timer);
-            DrawText(buf,12,HUD_BOT_Y+44,12,CLITERAL(Color){100,180,255,255});
-            DrawRectangle(12,HUD_BOT_Y+60,160,6,CLITERAL(Color){20,30,50,255});
-            DrawRectangle(12,HUD_BOT_Y+60,(int)(160*prog),6,CLITERAL(Color){60,140,255,255});
+            DrawText(buf,pad,by_start+(int)(44*sc),fs12,CLITERAL(Color){100,180,255,255});
+            int bar_w=(int)(160*sc), bar_h=(int)(6*sc);
+            DrawRectangle(pad,by_start+(int)(60*sc),bar_w,bar_h,CLITERAL(Color){20,30,50,255});
+            DrawRectangle(pad,by_start+(int)(60*sc),(int)(bar_w*prog),bar_h,CLITERAL(Color){60,140,255,255});
         } else if(b->queue_len>0){
             static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
             snprintf(buf,sizeof(buf),"Training: %s (%.0fs)",UN[b->queue[0]],b->train_timer);
-            DrawText(buf,12,HUD_BOT_Y+44,12,C_GOLD);
+            DrawText(buf,pad,by_start+(int)(44*sc),fs12,C_GOLD);
             float prog=1.0f-(b->train_timer/building_train_time(b->queue[0]));
-            DrawRectangle(12,HUD_BOT_Y+60,160,6,CLITERAL(Color){40,35,20,255});
-            DrawRectangle(12,HUD_BOT_Y+60,(int)(160*prog),6,CLITERAL(Color){50,200,60,255});
+            int bar_w=(int)(160*sc), bar_h=(int)(6*sc);
+            DrawRectangle(pad,by_start+(int)(60*sc),bar_w,bar_h,CLITERAL(Color){40,35,20,255});
+            DrawRectangle(pad,by_start+(int)(60*sc),(int)(bar_w*prog),bar_h,CLITERAL(Color){50,200,60,255});
         }
-        int bx=220, by=HUD_BOT_Y+10;
+        int btn_w=(int)(80*sc), btn_h=(int)(50*sc), btn_gap=(int)(8*sc);
+        int bx=(int)(220*sc), bby=by_start+(int)(10*sc);
         int lp = net_get_local_player();
         switch(b->type){
             case BLD_TOWN_CENTER:
-                if(draw_button("Villager\n50F",bx,by,80,50,gs->res[lp].amount[RES_FOOD]>=50)) {
+                if(draw_button("Villager\n50F",bx,bby,btn_w,btn_h,gs->res[lp].amount[RES_FOOD]>=50)) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_VILLAGER;
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_VILLAGER);
                 }
-                if(draw_button("Scout\n80F",bx+88,by,80,50,gs->res[lp].amount[RES_FOOD]>=80)) {
+                if(draw_button("Scout\n80F",bx+btn_w+btn_gap,bby,btn_w,btn_h,gs->res[lp].amount[RES_FOOD]>=80)) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_SCOUT;
@@ -144,15 +168,16 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_SCOUT);
                 }
                 break;
-            case BLD_BARRACKS:
-                if(draw_button("Militia\n60F 20G",bx,by,90,50,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
+            case BLD_BARRACKS: {
+                int bw2=(int)(90*sc);
+                if(draw_button("Militia\n60F 20G",bx,bby,bw2,btn_h,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_MILITIA;
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_MILITIA);
                 }
-                if(gs->res[lp].age>=1&&draw_button("Man@Arms\n60F 20G",bx+98,by,90,50,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
+                if(gs->res[lp].age>=1&&draw_button("Man@Arms\n60F 20G",bx+bw2+btn_gap,bby,bw2,btn_h,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
                      if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_MAN_AT_ARMS;
@@ -160,8 +185,10 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_MAN_AT_ARMS);
                 }
                 break;
-            case BLD_ARCHERY_RANGE:
-                if(draw_button("Archer\n25W 45G",bx,by,90,50,gs->res[lp].amount[RES_WOOD]>=25&&gs->res[lp].amount[RES_GOLD]>=45)) {
+            }
+            case BLD_ARCHERY_RANGE: {
+                int bw2=(int)(90*sc);
+                if(draw_button("Archer\n25W 45G",bx,bby,bw2,btn_h,gs->res[lp].amount[RES_WOOD]>=25&&gs->res[lp].amount[RES_GOLD]>=45)) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_ARCHER;
@@ -169,8 +196,10 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_ARCHER);
                 }
                 break;
-            case BLD_STABLE:
-                if(draw_button("Knight\n60F 75G",bx,by,90,50,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=75)) {
+            }
+            case BLD_STABLE: {
+                int bw2=(int)(90*sc);
+                if(draw_button("Knight\n60F 75G",bx,bby,bw2,btn_h,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=75)) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_KNIGHT;
@@ -178,33 +207,35 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_KNIGHT);
                 }
                 break;
+            }
             case BLD_BLACKSMITH:
-                DrawText("No units  —  research upgrades below",bx,by+18,11,CLITERAL(Color){160,145,110,200});
+                DrawText("No units  —  research upgrades below",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
                 break;
             case BLD_MARKET: {
-                /* Trade buttons: sell resources for gold, buy food with gold */
+                int bw2=(int)(100*sc), bgap2=(int)(8*sc);
                 bool can_w = (gs->res[lp].amount[RES_WOOD]  >= 100);
                 bool can_f = (gs->res[lp].amount[RES_FOOD]  >= 100);
                 bool can_g = (gs->res[lp].amount[RES_GOLD]  >= 100);
-                if(draw_button("100W -> 75G", bx,     by, 100, 42, can_w && !g_net_active)){
+                int bbt_h=(int)(42*sc);
+                if(draw_button("100W -> 75G", bx,         bby, bw2, bbt_h, can_w && !g_net_active)){
                     res_deduct(&gs->res[lp], (Cost){0,100,0,0});
                     res_add   (&gs->res[lp], RES_GOLD, 75);
                 }
-                if(draw_button("100F -> 50G", bx+108, by, 100, 42, can_f && !g_net_active)){
+                if(draw_button("100F -> 50G", bx+bw2+bgap2, bby, bw2, bbt_h, can_f && !g_net_active)){
                     res_deduct(&gs->res[lp], (Cost){100,0,0,0});
                     res_add   (&gs->res[lp], RES_GOLD, 50);
                 }
-                if(draw_button("100G -> 150F",bx+216, by, 106, 42, can_g && !g_net_active)){
+                if(draw_button("100G -> 150F",bx+2*(bw2+bgap2), bby, (int)(106*sc), bbt_h, can_g && !g_net_active)){
                     res_deduct(&gs->res[lp], (Cost){0,0,100,0});
                     res_add   (&gs->res[lp], RES_FOOD, 150);
                 }
                 if(g_net_active)
-                    DrawText("(Solo only)", bx, by+46, 9, CLITERAL(Color){180,120,60,200});
+                    DrawText("(Solo only)", bx, bby+(int)(46*sc), fs9, CLITERAL(Color){180,120,60,200});
                 break;
             }
             default: break;
         }
-        /* Research tech buttons by building type */
+        /* Research tech buttons */
         bool busy = (b->active_tech != TECH_NONE || b->queue_len > 0);
         if(b->player == lp){
             TechType techs[2] = {TECH_NONE, TECH_NONE};
@@ -214,34 +245,34 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             else if(b->type == BLD_ARCHERY_RANGE){ techs[0]=TECH_COMPOSITE_BOWS; tc=1; }
             else if(b->type == BLD_STABLE){ techs[0]=TECH_MOUNTED_ARMOR; tc=1; }
             else if(b->type == BLD_BLACKSMITH){ techs[0]=TECH_SCALE_ARMOR; techs[1]=TECH_FORGED_ARROWS; tc=2; }
+            int tech_btn_w=(int)(107*sc), tech_btn_h=(int)(40*sc), tech_gap=(int)(5*sc);
             for(int ti=0; ti<tc; ti++){
-                TechType tt = techs[ti];
-                int tbx = bx + ti*112;
-                if(!gs->res[lp].tech_unlocked[tt]){
-                    Cost tc2 = tech_cost(tt);
+                TechType tt2 = techs[ti];
+                int tbx = bx + ti*(tech_btn_w+tech_gap);
+                if(!gs->res[lp].tech_unlocked[tt2]){
+                    Cost tc2 = tech_cost(tt2);
                     bool can = res_can_afford(&gs->res[lp], tc2) && !busy;
                     char tbuf[80];
-                    snprintf(tbuf,sizeof(tbuf),"%s",tech_name(tt));
-                    if(draw_button(tbuf, tbx, by+58, 107, 40, can)){
+                    snprintf(tbuf,sizeof(tbuf),"%s",tech_name(tt2));
+                    if(draw_button(tbuf, tbx, bby+(int)(58*sc), tech_btn_w, tech_btn_h, can)){
                         if(g_net_active){
                             NetPacket pkt={0}; pkt.type=PKT_RESEARCH;
-                            pkt.player=lp; pkt.target_id=ui->sel_building; pkt.extra=(int32_t)tt;
+                            pkt.player=lp; pkt.target_id=ui->sel_building; pkt.extra=(int32_t)tt2;
                             net_dispatch_packet(gs,&pkt);
-                        } else building_start_tech(gs,b,tt);
+                        } else building_start_tech(gs,b,tt2);
                     }
-                    DrawText(tech_desc(tt), tbx, by+100, 10, CLITERAL(Color){160,200,255,200});
+                    DrawText(tech_desc(tt2), tbx, bby+(int)(100*sc), fs10, CLITERAL(Color){160,200,255,200});
                 } else {
-                    DrawText(tech_name(tt), tbx, by+62, 10, CLITERAL(Color){80,220,100,220});
-                    DrawText("[Researched]", tbx, by+74, 9, CLITERAL(Color){60,180,80,200});
+                    DrawText(tech_name(tt2), tbx, bby+(int)(62*sc), fs10, CLITERAL(Color){80,220,100,220});
+                    DrawText("[Researched]", tbx, bby+(int)(74*sc), fs9, CLITERAL(Color){60,180,80,200});
                 }
             }
         }
-
-        /* Sell button – shown for own complete buildings (not Town Center) */
+        /* Demolish button */
         if(b->player == lp && b->complete && b->type != BLD_TOWN_CENTER){
             Cost refund = building_cost(b->type);
             snprintf(buf, sizeof(buf), "Demolish\n+%dW +%dF", (int)(refund.wood*0.95f), (int)(refund.food*0.95f));
-            if(draw_button(buf, 12, HUD_BOT_Y+80, 115, 36, true)){
+            if(draw_button(buf, pad, by_start+(int)(80*sc), (int)(115*sc), (int)(36*sc), true)){
                 int sell_id = ui->sel_building;
                 ui->sel_building = -1;
                 if(g_net_active){
@@ -263,7 +294,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 static const char *TILE_LABEL[]={"Grass","Water","Forest","Gold Deposit","Stone Deposit","Berry Bush","Farmland"};
                 static Color TILE_COLOR[]={{80,120,60,255},{60,100,170,255},{60,130,50,255},{210,175,30,255},{160,155,140,255},{180,60,80,255},{160,140,80,255}};
                 Color col=TILE_COLOR[t->type];
-                DrawText(TILE_LABEL[t->type],12,HUD_BOT_Y+8,18,col);
+                DrawText(TILE_LABEL[t->type],pad,by_start+(int)(8*sc),fs16+4,col);
                 char rbuf[48];
                 static const char *RNAME[]={"Food","Wood","Gold","Stone"};
                 ResType rtype;
@@ -274,21 +305,22 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     default:          rtype=RES_FOOD; break;
                 }
                 snprintf(rbuf,sizeof(rbuf),"%s remaining: %d",RNAME[rtype],t->resource_amt);
-                DrawText(rbuf,12,HUD_BOT_Y+30,12,CLITERAL(Color){200,185,140,220});
+                DrawText(rbuf,pad,by_start+(int)(30*sc),fs12,CLITERAL(Color){200,185,140,220});
                 static const int MAX_AMT[]={0,0,250,900,800,500,400};
                 int maxv=MAX_AMT[t->type]; if(maxv<=0) maxv=500;
-                int bar_w=(int)(200.0f*((float)t->resource_amt/(float)maxv));
-                if(bar_w<0)bar_w=0; if(bar_w>200)bar_w=200;
-                DrawRectangle(12,HUD_BOT_Y+46,200,8,CLITERAL(Color){20,18,12,220});
-                DrawRectangle(12,HUD_BOT_Y+46,bar_w,8,col);
-                DrawRectangleLinesEx((Rectangle){12,HUD_BOT_Y+46,200,8},1,CLITERAL(Color){80,70,50,200});
-                DrawText("Click to inspect  |  Select villager + click to gather",12,HUD_BOT_Y+62,10,CLITERAL(Color){90,80,55,180});
+                int bar_w=(int)(200*sc), bar_h=(int)(8*sc);
+                int bar_val=(int)((float)bar_w*((float)t->resource_amt/(float)maxv));
+                if(bar_val<0)bar_val=0; if(bar_val>bar_w)bar_val=bar_w;
+                DrawRectangle(pad,by_start+(int)(46*sc),bar_w,bar_h,CLITERAL(Color){20,18,12,220});
+                DrawRectangle(pad,by_start+(int)(46*sc),bar_val,bar_h,col);
+                DrawRectangleLinesEx((Rectangle){(float)pad,(float)(by_start+(int)(46*sc)),(float)bar_w,(float)bar_h},1,CLITERAL(Color){80,70,50,200});
+                DrawText("Tap to inspect  |  Select villager + tap to gather",pad,by_start+(int)(62*sc),fs10,CLITERAL(Color){90,80,55,180});
                 return;
             }
         }
-        DrawText("No units selected",12,HUD_BOT_Y+8,13,CLITERAL(Color){100,90,65,200});
-        DrawText("Click unit/building to select  |  Drag to box-select",12,HUD_BOT_Y+28,11,CLITERAL(Color){90,80,55,180});
-        DrawText("B: build menu  |  WASD: scroll  |  Mouse wheel: zoom",12,HUD_BOT_Y+44,11,CLITERAL(Color){90,80,55,180});
+        DrawText("No units selected",pad,by_start+(int)(8*sc),fs13,CLITERAL(Color){100,90,65,200});
+        DrawText("Tap unit/building to select  |  Drag to box-select",pad,by_start+(int)(28*sc),fs11,CLITERAL(Color){90,80,55,180});
+        DrawText("B: build menu  |  WASD: scroll  |  Pinch: zoom",pad,by_start+(int)(44*sc),fs11,CLITERAL(Color){90,80,55,180});
         return;
     }
 
@@ -296,43 +328,46 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         Unit *u=&gs->units[ui->sel_units[0]];
         static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
         static const char *ST[]={"Idle","Moving","Gathering","Returning","Building","Attacking","Dying","Dead"};
-        DrawText(UN[u->type],12,HUD_BOT_Y+8,16,CLITERAL(Color){220,200,155,255});
+        DrawText(UN[u->type],pad,by_start+(int)(8*sc),fs16,CLITERAL(Color){220,200,155,255});
         snprintf(buf,sizeof(buf),"HP: %d/%d  Atk: %d  Armor: %d",u->hp,u->max_hp,u->attack_dmg,u->armor);
-        DrawText(buf,12,HUD_BOT_Y+28,12,CLITERAL(Color){180,165,130,255});
+        DrawText(buf,pad,by_start+(int)(28*sc),fs12,CLITERAL(Color){180,165,130,255});
         if(u->player == net_get_local_player() && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT){
             snprintf(buf,sizeof(buf),"State: %s   Stance: %s",ST[u->state], u->stance_manual ? "Manual" : "Auto");
         } else {
             snprintf(buf,sizeof(buf),"State: %s",ST[u->state]);
         }
-        DrawText(buf,12,HUD_BOT_Y+44,12,CLITERAL(Color){160,145,110,255});
+        DrawText(buf,pad,by_start+(int)(44*sc),fs12,CLITERAL(Color){160,145,110,255});
         if(u->type==UNIT_VILLAGER && u->carry_amt>0){
             static const char *RT[]={"Food","Wood","Gold","Stone"};
             snprintf(buf,sizeof(buf),"Carrying: %d %s",u->carry_amt,RT[u->carry_type]);
-            DrawText(buf,12,HUD_BOT_Y+60,12,C_GOLD);
+            DrawText(buf,pad,by_start+(int)(60*sc),fs12,C_GOLD);
         }
-        DrawRectangle(panel_w-60,HUD_BOT_Y+8,48,48,CLITERAL(Color){35,28,16,255});
-        DrawRectangleLinesEx((Rectangle){(float)(panel_w-60),(float)(HUD_BOT_Y+8),48,48},1.5f,C_HUD_LINE);
-        DrawCircle(panel_w-36,HUD_BOT_Y+24,8,CLITERAL(Color){220,185,145,255});
-        DrawRectangle(panel_w-42,HUD_BOT_Y+35,12,14,player_color(u->player));
+        int portrait=(int)(48*sc);
+        DrawRectangle(panel_w-portrait-pad,by_start+(int)(8*sc),portrait,portrait,CLITERAL(Color){35,28,16,255});
+        DrawRectangleLinesEx((Rectangle){(float)(panel_w-portrait-pad),(float)(by_start+(int)(8*sc)),(float)portrait,(float)portrait},1.5f,C_HUD_LINE);
+        DrawCircle(panel_w-portrait/2-pad,by_start+(int)(8*sc)+(int)(16*sc),(int)(8*sc),CLITERAL(Color){220,185,145,255});
+        DrawRectangle(panel_w-portrait/2-pad-(int)(6*sc),by_start+(int)(8*sc)+(int)(27*sc),(int)(12*sc),(int)(14*sc),player_color(u->player));
     } else {
         snprintf(buf,sizeof(buf),"%d units selected",ui->sel_count);
-        DrawText(buf,12,HUD_BOT_Y+8,14,C_HUD_TXT);
+        DrawText(buf,pad,by_start+(int)(8*sc),fs14,C_HUD_TXT);
+        int uw=(int)(22*sc);
         for(int i=0;i<ui->sel_count&&i<12;i++){
             Unit *u=&gs->units[ui->sel_units[i]];
             Color mc=player_color(u->player);
-            DrawRectangle(12+i*22,HUD_BOT_Y+30,18,18,mc);
-            DrawRectangleLinesEx((Rectangle){12.0f+i*22,HUD_BOT_Y+30.0f,18,18},1,C_HUD_LINE);
+            DrawRectangle(pad+i*uw,by_start+(int)(30*sc),(int)(18*sc),(int)(18*sc),mc);
+            DrawRectangleLinesEx((Rectangle){(float)(pad+i*uw),(float)(by_start+(int)(30*sc)),(float)(int)(18*sc),(float)(int)(18*sc)},1,C_HUD_LINE);
             float frac=(float)u->hp/u->max_hp;
-            DrawRectangle(12+i*22,HUD_BOT_Y+50,18,3,CLITERAL(Color){30,30,30,200});
-            DrawRectangle(12+i*22,HUD_BOT_Y+50,(int)(18*frac),3,frac>0.5f?CLITERAL(Color){50,200,60,255}:CLITERAL(Color){210,50,40,255});
+            DrawRectangle(pad+i*uw,by_start+(int)(50*sc),(int)(18*sc),(int)(3*sc),CLITERAL(Color){30,30,30,200});
+            DrawRectangle(pad+i*uw,by_start+(int)(50*sc),(int)((18*sc)*frac),(int)(3*sc),frac>0.5f?CLITERAL(Color){50,200,60,255}:CLITERAL(Color){210,50,40,255});
         }
     }
     if(ui->sel_count>=1){
         bool vil=false;
         for(int i=0;i<ui->sel_count;i++) if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
+        int bb_h=(int)(36*sc), bb_w=(int)(90*sc);
         if(vil){
             bool menu_active = ui->build_panel_open || gs->build_mode.active;
-            if(draw_button(menu_active?"[B] Cancel":"[B] Build",12,HUD_BOT_Y+80,90,36,true)){
+            if(draw_button(menu_active?"[B] Cancel":"[B] Build",pad,by_start+(int)(80*sc),bb_w,bb_h,true)){
                 if(menu_active){ ui->build_panel_open=false; gs->build_mode.active=false; }
                 else { ui->build_panel_open=true; gs->build_mode.active=false; }
             }
@@ -349,9 +384,9 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
         }
         if(military){
-            int bx = vil ? 110 : 12;
+            int bx2 = vil ? pad+bb_w+(int)(8*sc) : pad;
             const char *lbl = all_manual ? "Stance: Manual" : "Stance: Auto";
-            if(draw_button(lbl, bx, HUD_BOT_Y+80, 120, 36, true)){
+            if(draw_button(lbl, bx2, by_start+(int)(80*sc), (int)(120*sc), bb_h, true)){
                 bool new_stance = !all_manual;
                 if (g_net_active) {
                     NetPacket pkt = {0}; pkt.type = PKT_STANCE; pkt.player = lp;
@@ -393,7 +428,6 @@ void draw_minimap(GameState *gs, UIState *ui){
     DrawLineEx(pt_bot, pt_left, 1.5f, C_HUD_LINE);
     DrawLineEx(pt_left, pt_top, 1.5f, C_HUD_LINE);
 
-    /* Helper macro to map world tile coordinates to minimap screen coords */
     #define MAP_TO_MINI(tx, ty, out_x, out_y) do { \
         float iso_x = ((tx) - (ty)) / (float)MAP_W; \
         float iso_y = ((tx) + (ty)) / (float)(MAP_W + MAP_H); \
@@ -445,17 +479,6 @@ void draw_minimap(GameState *gs, UIState *ui){
     }
 
     /* Camera view box */
-    float cam_w = GetScreenWidth() / ui->camera.zoom;
-    float cam_h = GetScreenHeight() / ui->camera.zoom;
-    
-    /* Calculate corners of the camera view in world coordinates */
-    /* Target in ui->camera.target is already in ISO space!
-       Let's convert it back to world space to map to the minimap. */
-    Vec2 world_center = iso_to_world(ui->camera.target.x, ui->camera.target.y);
-    float t_cx = world_center.x / TILE_SIZE;
-    float t_cy = world_center.y / TILE_SIZE;
-
-    /* To draw a proper camera quad on the minimap, we need the 4 corners of the screen in world coords */
     Vector2 cam_tl = GetScreenToWorld2D((Vector2){0, 0}, ui->camera);
     Vector2 cam_tr = GetScreenToWorld2D((Vector2){GetScreenWidth(), 0}, ui->camera);
     Vector2 cam_bl = GetScreenToWorld2D((Vector2){0, GetScreenHeight()}, ui->camera);
@@ -476,29 +499,20 @@ void draw_minimap(GameState *gs, UIState *ui){
     DrawLineEx((Vector2){mini_br_x, mini_br_y}, (Vector2){mini_bl_x, mini_bl_y}, 1.5f, CLITERAL(Color){220,200,150,200});
     DrawLineEx((Vector2){mini_bl_x, mini_bl_y}, (Vector2){mini_tl_x, mini_tl_y}, 1.5f, CLITERAL(Color){220,200,150,200});
 
-    /* Minimap clicking to move camera */
+    /* Minimap clicking/tapping to move camera */
     bool minimap_pressed = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || GetTouchPointCount() > 0;
     if(minimap_pressed){
         Vector2 mp = GetTouchPointCount() > 0 ? GetTouchPosition(0) : GetMousePosition();
-        /* Check if inside the diamond bounding box */
         if(mp.x >= MINI_X && mp.x <= MINI_X+MINI_SIZE && mp.y >= MINI_Y && mp.y <= MINI_Y+MINI_SIZE){
-            /* Inverse map the point */
             float dx = mp.x - cx;
             float dy = mp.y - cy;
-            /* iso_x = dx / half_w; iso_y = dy / MINI_SIZE; 
-               iso_x = (x - y)/W; iso_y = (x + y)/(W+H); */
-               
             float iso_x = dx / half_w;
             float iso_y = dy / MINI_SIZE;
             
             float target_tx = (iso_y * (MAP_W + MAP_H) + iso_x * MAP_W) / 2.0f;
             float target_ty = (iso_y * (MAP_W + MAP_H) - iso_x * MAP_W) / 2.0f;
-
-            /* clamp */
             target_tx = clampf(target_tx, 0, MAP_W-1);
             target_ty = clampf(target_ty, 0, MAP_H-1);
-
-            /* set target */
             Vec2 new_iso = world_to_iso(target_tx * TILE_SIZE, target_ty * TILE_SIZE);
             ui->camera.target = to_rvec2(new_iso);
         }

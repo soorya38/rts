@@ -41,3 +41,11 @@ void ui_center_on_tc(UIState *ui, GameState *gs) {
     Vec2 iso_target = world_to_iso(target_wx, target_wy);
     ui->camera.target = to_rvec2(iso_target);
 }
+
+/* Scale factor relative to 720p so all HUD elements are readable on phones */
+float hud_scale(void) {
+    float s = GetScreenHeight() / 720.0f;
+    if (s < 1.0f) s = 1.0f;
+    if (s > 2.5f) s = 2.5f;
+    return s;
+}

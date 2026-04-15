@@ -6,6 +6,7 @@
 #include <math.h>
 #include <stdio.h>
 #include "net.h"
+#include "hud_common.h"   /* HUD_TOP_H, HUD_BOT_H */
 
 /* Forward declarations from input split files */
 extern void update_camera(GameState *gs, UIState *ui, float dt);
@@ -13,13 +14,18 @@ extern void update_hover(GameState *gs, UIState *ui);
 extern void clear_selection(GameState *gs, UIState *ui);
 extern void handle_left_down(GameState *gs, UIState *ui);
 extern void handle_left_up(GameState *gs, UIState *ui);
+extern void handle_tap(GameState *gs, UIState *ui);
 
 /* ─── Build ghost placement ───────────────────────────────── */
 static void update_build_mode(GameState *gs, UIState *ui) {
     if (!gs->build_mode.active) return;
     Vector2 mp = GetMousePosition();
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    /* On Android use touch position for ghost placement */
+    if (GetTouchPointCount() > 0) mp = GetTouchPosition(0);
+#endif
     if (IsKeyPressed(KEY_ESCAPE)) { gs->build_mode.active = false; return; }
-    if (mp.y < 42 || mp.y > SCREEN_H - 130) return;
+    if (mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H) return;
 
     Vector2 wp = GetScreenToWorld2D(mp, ui->camera);
     Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
@@ -159,8 +165,10 @@ void input_update(GameState *gs, UIState *ui) {
     update_hotkeys(gs, ui);
 
 #if defined(PLATFORM_ANDROID) || defined(ANDROID)
-    bool tap = IsGestureDetected(GESTURE_TAP);
-    if (tap) { handle_left_down(gs, ui); handle_left_up(gs, ui); }
+    /* On Android: GESTURE_TAP drives selection/commands; GESTURE_DRAG is panning (camera). */
+    if (IsGestureDetected(GESTURE_TAP)) {
+        handle_tap(gs, ui);
+    }
 #else
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))   handle_left_down(gs, ui);
     if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON))  handle_left_up(gs, ui);
