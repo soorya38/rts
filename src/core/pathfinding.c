@@ -23,7 +23,11 @@ int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
 
     for(int i=0;i<CELLS;i++){ g[i]=1e30f; from[i]=-1; closed[i]=false; }
 
-    PriorityQueue open;
+    /* Static workspace – fine for single-threaded game.
+     * NOTE: PriorityQueue is 64KB — MUST be static, not on the stack.
+     *       Android's game thread stack is ~1MB and multiple pathfind()
+     *       calls during AI update would overflow it. */
+    static PriorityQueue open;
     pq_init(&open);
 
     int start = sy*MAP_W + sx;
