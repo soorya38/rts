@@ -172,6 +172,22 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 break;
             default: break;
         }
+        /* Sell button – shown for own complete buildings (not Town Center) */
+        if(b->player == lp && b->complete && b->type != BLD_TOWN_CENTER){
+            Cost refund = building_cost(b->type);
+            snprintf(buf, sizeof(buf), "Demolish\n+%dW+%dF", (int)(refund.wood*0.95f), (int)(refund.food*0.95f));
+            if(draw_button(buf, 12, HUD_BOT_Y+80, 115, 36, true)){
+                int sell_id = ui->sel_building;
+                ui->sel_building = -1;
+                if(g_net_active){
+                    NetPacket pkt={0}; pkt.type=PKT_DELETE_BLD;
+                    pkt.player=lp; pkt.target_id=sell_id;
+                    net_dispatch_packet(gs,&pkt);
+                } else {
+                    building_sell(gs, sell_id);
+                }
+            }
+        }
         return;
     }
 

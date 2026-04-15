@@ -76,6 +76,17 @@ void building_destroy(GameState *gs, int bid){
     b->selected = false;
 }
 
+void building_sell(GameState *gs, int bid){
+    Building *b = &gs->buildings[bid];
+    if(!b->active) return;
+    Cost cost = building_cost(b->type);
+    res_add(&gs->res[b->player], RES_FOOD, (int)(cost.food * 0.95f));
+    res_add(&gs->res[b->player], RES_WOOD, (int)(cost.wood * 0.95f));
+    res_add(&gs->res[b->player], RES_GOLD, (int)(cost.gold * 0.95f));
+    res_add(&gs->res[b->player], RES_STONE, (int)(cost.stone * 0.95f));
+    building_destroy(gs, bid);
+}
+
 /* Place a pre-built building (for game init) */
 static int building_place_complete(GameState *gs,int player,BldType type,int tx,int ty){
     int w=building_tw(type),h=building_th(type);

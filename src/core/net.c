@@ -143,7 +143,7 @@ static void apply_packet(GameState *gs, NetPacket *pkt) {
             building_enqueue_unit(gs, &gs->buildings[pkt->target_id], (UnitType)pkt->extra);
     }
     else if (pkt->type == PKT_DELETE_BLD) {
-        building_destroy(gs, pkt->target_id);
+        building_sell(gs, pkt->target_id);
     }
     else if (pkt->type == PKT_AGE_ADVANCE) {
         res_try_advance_age(gs, pkt->player);
