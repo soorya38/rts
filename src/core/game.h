@@ -127,6 +127,8 @@ typedef enum {
     TECH_IRON_WEAPONRY,
     TECH_COMPOSITE_BOWS,
     TECH_MOUNTED_ARMOR,
+    TECH_SCALE_ARMOR,       /* Blacksmith: +1 armor all military */
+    TECH_FORGED_ARROWS,     /* Blacksmith: +1 atk archers */
     TECH_COUNT,
     TECH_NONE = -1
 } TechType;
@@ -202,6 +204,7 @@ typedef struct {
 typedef enum {
     BLD_TOWN_CENTER=0, BLD_HOUSE,
     BLD_BARRACKS, BLD_ARCHERY_RANGE, BLD_STABLE,
+    BLD_BLACKSMITH, BLD_MARKET,
     BLD_MILL, BLD_LUMBER_CAMP, BLD_MINING_CAMP,
     BLD_FARM, BLD_COUNT
 } BldType;

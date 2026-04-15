@@ -7,8 +7,9 @@
 int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     int w=building_tw(type), h=building_th(type);
     if(!map_is_buildable(gs,tx,ty,w,h)) { printf("building_place failed: map_is_buildable\n"); return -1; }
-    /* Age gate: Archery Range and Stable require Feudal Age (age >= 1) */
-    if((type==BLD_ARCHERY_RANGE||type==BLD_STABLE) && gs->res[player].age<1) {
+    /* Age gate: Feudal Age (age >= 1) required for military/economic buildings */
+    if((type==BLD_ARCHERY_RANGE||type==BLD_STABLE||
+        type==BLD_BLACKSMITH  ||type==BLD_MARKET) && gs->res[player].age<1) {
         printf("building_place failed: requires Feudal Age\n"); return -1;
     }
     Cost c=building_cost(type);
@@ -173,6 +174,21 @@ void building_update(GameState *gs, Building *b, float dt){
                         u->hp += 20;
                     }
                 }
+            } else if (t_id == TECH_SCALE_ARMOR) {
+                for (int i=0; i<MAX_UNITS; i++) {
+                    Unit *u = &gs->units[i];
+                    if (u->active && u->player == b->player &&
+                        u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT) {
+                        u->armor += 1;
+                    }
+                }
+            } else if (t_id == TECH_FORGED_ARROWS) {
+                for (int i=0; i<MAX_UNITS; i++) {
+                    Unit *u = &gs->units[i];
+                    if (u->active && u->player == b->player && u->type == UNIT_ARCHER) {
+                        u->attack_dmg += 1;
+                    }
+                }
             }
         }
         return; /* Block unit training while researching */
@@ -199,6 +215,8 @@ Cost tech_cost(TechType t) {
         case TECH_IRON_WEAPONRY:  return (Cost){100, 0, 50, 0};
         case TECH_COMPOSITE_BOWS: return (Cost){100, 50, 50, 0};
         case TECH_MOUNTED_ARMOR:  return (Cost){150, 0, 100, 0};
+        case TECH_SCALE_ARMOR:    return (Cost){100, 0, 75, 0};
+        case TECH_FORGED_ARROWS:  return (Cost){75, 50, 50, 0};
         default: return (Cost){0,0,0,0};
     }
 }
@@ -210,6 +228,8 @@ float tech_time(TechType t) {
         case TECH_IRON_WEAPONRY:  return 40.0f;
         case TECH_COMPOSITE_BOWS: return 35.0f;
         case TECH_MOUNTED_ARMOR:  return 50.0f;
+        case TECH_SCALE_ARMOR:    return 40.0f;
+        case TECH_FORGED_ARROWS:  return 35.0f;
         default: return 10.0f;
     }
 }
@@ -221,6 +241,8 @@ const char* tech_name(TechType t) {
         case TECH_IRON_WEAPONRY:  return "Iron Weaponry";
         case TECH_COMPOSITE_BOWS: return "Composite Bows";
         case TECH_MOUNTED_ARMOR:  return "Mounted Armor";
+        case TECH_SCALE_ARMOR:    return "Scale Armor";
+        case TECH_FORGED_ARROWS:  return "Forged Arrows";
         default: return "Unknown Tech";
     }
 }
@@ -232,6 +254,8 @@ const char* tech_desc(TechType t) {
         case TECH_IRON_WEAPONRY:  return "+1 Att, +10 HP (Infantry)";
         case TECH_COMPOSITE_BOWS: return "+1 Att, +1 Range (Archers)";
         case TECH_MOUNTED_ARMOR:  return "+20 HP (Cavalry)";
+        case TECH_SCALE_ARMOR:    return "+1 Armor (All Military)";
+        case TECH_FORGED_ARROWS:  return "+1 Att (Archers)";
         default: return "";
     }
 }

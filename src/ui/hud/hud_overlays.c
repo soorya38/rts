@@ -101,6 +101,7 @@ void draw_placement_bar(GameState *gs, UIState *ui){
     if(!gs->build_mode.active) return;
     static const char *BLD_NAMES[BLD_COUNT]={
         "Town Center","House","Barracks","Archery Range","Stable",
+        "Blacksmith","Market",
         "Mill","Lumber Camp","Mining Camp","Farm"
     };
     char buf[80];

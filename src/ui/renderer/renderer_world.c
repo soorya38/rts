@@ -80,6 +80,21 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             }
             break;
         }
+        case BLD_BLACKSMITH: {
+            /* Dark iron-grey walls with glowing forge */
+            draw_iso_box(px+2, py+2, w-4, h-4, 12, CLITERAL(Color){90,85,80,255}, CLITERAL(Color){70,65,60,255}, CLITERAL(Color){50,45,40,255});
+            /* Forge glow — orange ember dot at center */
+            Vector2 fc = to_rvec2(world_to_iso(px + w*0.5f, py + h*0.5f));
+            DrawCircle((int)fc.x, (int)fc.y - 10, 6, CLITERAL(Color){255,140,30,200});
+            DrawCircle((int)fc.x, (int)fc.y - 10, 3, CLITERAL(Color){255,220,80,255});
+            break;
+        }
+        case BLD_MARKET: {
+            /* Warm ochre building with merchant awning stripe */
+            draw_iso_box(px+2, py+2, w-4, h-4, 12, CLITERAL(Color){195,160,90,255}, CLITERAL(Color){175,140,70,255}, CLITERAL(Color){145,110,50,255});
+            draw_iso_box(px+4, py+4, w-8, 10, 16, mc, dc, dc);   /* coloured awning */
+            break;
+        }
         default:
             draw_iso_box(px+2, py+2, w-4, h-4, 15, CLITERAL(Color){140,120,90,255}, dc, dc);
             break;

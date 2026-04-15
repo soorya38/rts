@@ -93,6 +93,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         if(!b->active){ui->sel_building=-1;return;}
         static const char *BLD_NAMES[BLD_COUNT]={
             "Town Center","House","Barracks","Archery Range","Stable",
+            "Blacksmith","Market",
             "Mill","Lumber Camp","Mining Camp","Farm"
         };
         DrawText(BLD_NAMES[b->type],12,HUD_BOT_Y+8,16,C_HUD_TXT);
@@ -177,6 +178,30 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_KNIGHT);
                 }
                 break;
+            case BLD_BLACKSMITH:
+                DrawText("No units  —  research upgrades below",bx,by+18,11,CLITERAL(Color){160,145,110,200});
+                break;
+            case BLD_MARKET: {
+                /* Trade buttons: sell resources for gold, buy food with gold */
+                bool can_w = (gs->res[lp].amount[RES_WOOD]  >= 100);
+                bool can_f = (gs->res[lp].amount[RES_FOOD]  >= 100);
+                bool can_g = (gs->res[lp].amount[RES_GOLD]  >= 100);
+                if(draw_button("100W -> 75G", bx,     by, 100, 42, can_w && !g_net_active)){
+                    res_deduct(&gs->res[lp], (Cost){0,100,0,0});
+                    res_add   (&gs->res[lp], RES_GOLD, 75);
+                }
+                if(draw_button("100F -> 50G", bx+108, by, 100, 42, can_f && !g_net_active)){
+                    res_deduct(&gs->res[lp], (Cost){100,0,0,0});
+                    res_add   (&gs->res[lp], RES_GOLD, 50);
+                }
+                if(draw_button("100G -> 150F",bx+216, by, 106, 42, can_g && !g_net_active)){
+                    res_deduct(&gs->res[lp], (Cost){0,0,100,0});
+                    res_add   (&gs->res[lp], RES_FOOD, 150);
+                }
+                if(g_net_active)
+                    DrawText("(Solo only)", bx, by+46, 9, CLITERAL(Color){180,120,60,200});
+                break;
+            }
             default: break;
         }
         /* Research tech buttons by building type */
@@ -188,6 +213,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             else if(b->type == BLD_BARRACKS){ techs[0]=TECH_IRON_WEAPONRY; tc=1; }
             else if(b->type == BLD_ARCHERY_RANGE){ techs[0]=TECH_COMPOSITE_BOWS; tc=1; }
             else if(b->type == BLD_STABLE){ techs[0]=TECH_MOUNTED_ARMOR; tc=1; }
+            else if(b->type == BLD_BLACKSMITH){ techs[0]=TECH_SCALE_ARMOR; techs[1]=TECH_FORGED_ARROWS; tc=2; }
             for(int ti=0; ti<tc; ti++){
                 TechType tt = techs[ti];
                 int tbx = bx + ti*112;

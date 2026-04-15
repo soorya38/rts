@@ -80,6 +80,8 @@ Cost building_cost(BldType t){
         case BLD_BARRACKS:     return (Cost){0,175,0,0};
         case BLD_ARCHERY_RANGE:return (Cost){0,175,0,0};
         case BLD_STABLE:       return (Cost){0,175,0,0};
+        case BLD_BLACKSMITH:   return (Cost){0,150,0,0};
+        case BLD_MARKET:       return (Cost){0,175,0,0};
         case BLD_MILL:         return (Cost){0,100,0,0};
         case BLD_LUMBER_CAMP:  return (Cost){0,100,0,0};
         case BLD_MINING_CAMP:  return (Cost){0,100,0,0};
@@ -94,6 +96,8 @@ int building_tw(BldType t){
         case BLD_STABLE:      return 4;
         case BLD_BARRACKS:    return 3;
         case BLD_ARCHERY_RANGE:return 3;
+        case BLD_BLACKSMITH:  return 3;
+        case BLD_MARKET:      return 3;
         case BLD_FARM:        return 3;
         case BLD_HOUSE:       return 2;
         case BLD_MILL:        return 2;
@@ -112,6 +116,8 @@ int building_max_hp(BldType t){
         case BLD_BARRACKS:     return 1200;
         case BLD_ARCHERY_RANGE:return 1300;
         case BLD_STABLE:       return 1400;
+        case BLD_BLACKSMITH:   return 1200;
+        case BLD_MARKET:       return 800;
         case BLD_MILL:         return 1000;
         case BLD_LUMBER_CAMP:  return 600;
         case BLD_MINING_CAMP:  return 600;

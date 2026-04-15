@@ -110,7 +110,8 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
             gs->build_mode.active = true;
             ui->build_panel_open = false;
             static const char *BN[BLD_COUNT] = {
-                "Town Center","House","Barracks","Archery Range","Stable","Mill","Lumber Camp","Mining Camp","Farm"};
+                "Town Center","House","Barracks","Archery Range","Stable",
+                "Blacksmith","Market","Mill","Lumber Camp","Mining Camp","Farm"};
             char msg[48];
             snprintf(msg, sizeof(msg), "Placing: %s", BN[qt]);
             game_set_alert(gs, msg);

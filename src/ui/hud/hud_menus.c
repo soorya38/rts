@@ -26,11 +26,12 @@ static void draw_build_menu(GameState *gs, UIState *ui){
 
     static const char *BLD_NAMES[BLD_COUNT]={
         "Town Center","House","Barracks","Archery Range","Stable",
+        "Blacksmith","Market",
         "Mill","Lumber Camp","Mining Camp","Farm"
     };
 
-    int mx=100, my=HUD_BOT_Y-238, bw=116, bh=48, gap=6;
-    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*3+gap*2+36);
+    int mx=100, my=HUD_BOT_Y-292, bw=116, bh=48, gap=6;
+    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*4+gap*3+36);
     DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
     DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
     DrawText("BUILD MENU  — select a structure",mx,my-22,12,CLITERAL(Color){200,180,100,255});
@@ -40,14 +41,16 @@ static void draw_build_menu(GameState *gs, UIState *ui){
     bool has_mill=(building_find(gs,lp,BLD_MILL,true)>=0);
     bool is_feudal = (cur_age >= 1); /* Feudal Age or higher */
     struct { BldType t; const char *n; Cost c; } items[]={
-        {BLD_HOUSE,        "House (H)\n25 Wood",        {0,25, 0,0}},
-        {BLD_MILL,         "Mill (M)\n100 Wood",        {0,100,0,0}},
-        {BLD_LUMBER_CAMP,  "Lumber Camp\n100 Wood",     {0,100,0,0}},
-        {BLD_MINING_CAMP,  "Mining Camp\n100 Wood",     {0,100,0,0}},
-        {BLD_BARRACKS,     "Barracks (R)\n175 Wood",    {0,175,0,0}},
-        {BLD_ARCHERY_RANGE,"Arch.Range (A)\n175 Wood",  {0,175,0,0}},
-        {BLD_STABLE,       "Stable\n175 Wood",          {0,175,0,0}},
-        {BLD_FARM,         "Farm (F)\n60 Wood",         {0,60, 0,0}},
+        {BLD_HOUSE,        "House (H)\n25 Wood",         {0,25, 0,0}},
+        {BLD_MILL,         "Mill (M)\n100 Wood",         {0,100,0,0}},
+        {BLD_LUMBER_CAMP,  "Lumber Camp\n100 Wood",      {0,100,0,0}},
+        {BLD_MINING_CAMP,  "Mining Camp\n100 Wood",      {0,100,0,0}},
+        {BLD_BARRACKS,     "Barracks (R)\n175 Wood",     {0,175,0,0}},
+        {BLD_ARCHERY_RANGE,"Arch.Range (A)\n175 Wood",   {0,175,0,0}},
+        {BLD_STABLE,       "Stable\n175 Wood",           {0,175,0,0}},
+        {BLD_BLACKSMITH,   "Blacksmith\n150 Wood",       {0,150,0,0}},
+        {BLD_MARKET,       "Market\n175 Wood",           {0,175,0,0}},
+        {BLD_FARM,         "Farm (F)\n60 Wood",          {0,60, 0,0}},
     };
     int n=(int)(sizeof(items)/sizeof(items[0]));
     for(int i=0;i<n;i++){
@@ -56,13 +59,15 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         bool can=res_can_afford(&gs->res[lp],items[i].c);
         bool prereq_ok=true;
         if(items[i].t==BLD_FARM && !has_mill) prereq_ok=false;
-        /* Archery Range and Stable require Feudal Age */
-        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE) && !is_feudal) prereq_ok=false;
+        /* Archery Range, Stable, Blacksmith, Market require Feudal Age */
+        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
+            items[i].t==BLD_BLACKSMITH    || items[i].t==BLD_MARKET) && !is_feudal) prereq_ok=false;
         bool clickable = can && prereq_ok;
         bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
         if(items[i].t==BLD_FARM && !has_mill)
             DrawText("Needs Mill",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
-        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE) && !is_feudal)
+        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
+            items[i].t==BLD_BLACKSMITH    || items[i].t==BLD_MARKET) && !is_feudal)
             DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if(pressed && clickable){
             gs->build_mode.type=items[i].t;
@@ -74,7 +79,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         }
     }
     DrawText("[ESC] Cancel  |  Hotkeys: H=House R=Barracks A=Arch F=Farm M=Mill",
-             mx,my+bh*3+gap*2+4,9,CLITERAL(Color){100,90,60,200});
+             mx,my+bh*4+gap*3+4,9,CLITERAL(Color){100,90,60,200});
 }
 
 /* ─── Master HUD draw ─────────────────────────────────────── */
