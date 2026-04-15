@@ -35,8 +35,27 @@ bool draw_button(const char *label, int x, int y, int w, int h, bool enabled){
     DrawRectangle(x,y,w,h,bg);
     DrawRectangleLinesEx((Rectangle){(float)x,(float)y,(float)w,(float)h},1.5f,C_BTN_BORD);
     Color tc = enabled ? C_HUD_TXT : CLITERAL(Color){100,90,60,255};
-    int fs=12, tw=MeasureText(label,fs);
-    DrawText(label,x+(w-tw)/2,y+(h-fs)/2,fs,tc);
+    int fs=12;
+    const char *nl = strchr(label, '\n');
+    if (nl) {
+        int len1 = nl - label;
+        char line1[64];
+        if (len1 >= sizeof(line1)) len1 = sizeof(line1) - 1;
+        strncpy(line1, label, len1);
+        line1[len1] = '\0';
+        const char *line2 = nl + 1;
+        
+        int tw1 = MeasureText(line1, fs);
+        int tw2 = MeasureText(line2, fs);
+        int total_h = fs * 2 + 2; 
+        int start_y = y + (h - total_h) / 2;
+        
+        DrawText(line1, x + (w - tw1)/2, start_y, fs, tc);
+        DrawText(line2, x + (w - tw2)/2, start_y + fs + 2, fs, tc);
+    } else {
+        int tw=MeasureText(label,fs);
+        DrawText(label,x+(w-tw)/2,y+(h-fs)/2,fs,tc);
+    }
     return hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
 }
 
