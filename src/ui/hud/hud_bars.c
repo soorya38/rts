@@ -218,7 +218,11 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         DrawText(UN[u->type],12,HUD_BOT_Y+8,16,CLITERAL(Color){220,200,155,255});
         snprintf(buf,sizeof(buf),"HP: %d/%d  Atk: %d  Armor: %d",u->hp,u->max_hp,u->attack_dmg,u->armor);
         DrawText(buf,12,HUD_BOT_Y+28,12,CLITERAL(Color){180,165,130,255});
-        snprintf(buf,sizeof(buf),"State: %s",ST[u->state]);
+        if(u->player == net_get_local_player() && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT){
+            snprintf(buf,sizeof(buf),"State: %s   Stance: %s",ST[u->state], u->stance_manual ? "Manual" : "Auto");
+        } else {
+            snprintf(buf,sizeof(buf),"State: %s",ST[u->state]);
+        }
         DrawText(buf,12,HUD_BOT_Y+44,12,CLITERAL(Color){160,145,110,255});
         if(u->type==UNIT_VILLAGER && u->carry_amt>0){
             static const char *RT[]={"Food","Wood","Gold","Stone"};
@@ -264,8 +268,9 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
         }
         if(military){
+            int bx = vil ? 110 : 12;
             const char *lbl = all_manual ? "Stance: Manual" : "Stance: Auto";
-            if(draw_button(lbl, 110, HUD_BOT_Y+80, 120, 36, true)){
+            if(draw_button(lbl, bx, HUD_BOT_Y+80, 120, 36, true)){
                 bool new_stance = !all_manual;
                 if (g_net_active) {
                     NetPacket pkt = {0}; pkt.type = PKT_STANCE; pkt.player = lp;
