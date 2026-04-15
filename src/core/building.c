@@ -7,6 +7,10 @@
 int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     int w=building_tw(type), h=building_th(type);
     if(!map_is_buildable(gs,tx,ty,w,h)) { printf("building_place failed: map_is_buildable\n"); return -1; }
+    /* Age gate: Archery Range and Stable require Feudal Age (age >= 1) */
+    if((type==BLD_ARCHERY_RANGE||type==BLD_STABLE) && gs->res[player].age<1) {
+        printf("building_place failed: requires Feudal Age\n"); return -1;
+    }
     Cost c=building_cost(type);
     if(!res_can_afford(&gs->res[player],c)) { printf("building_place failed: res_can_afford\n"); return -1; }
 

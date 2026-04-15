@@ -4,6 +4,7 @@
 #include "game.h"
 #include "ui_state.h"
 #include "hud_common.h"
+#include "net.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -34,7 +35,10 @@ static void draw_build_menu(GameState *gs, UIState *ui){
     DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
     DrawText("BUILD MENU  — select a structure",mx,my-22,12,CLITERAL(Color){200,180,100,255});
 
-    bool has_mill=(building_find(gs,0,BLD_MILL,true)>=0);
+    int lp = net_get_local_player();
+    int cur_age = gs->res[lp].age;
+    bool has_mill=(building_find(gs,lp,BLD_MILL,true)>=0);
+    bool is_feudal = (cur_age >= 1); /* Feudal Age or higher */
     struct { BldType t; const char *n; Cost c; } items[]={
         {BLD_HOUSE,        "House (H)\n25 Wood",        {0,25, 0,0}},
         {BLD_MILL,         "Mill (M)\n100 Wood",        {0,100,0,0}},
@@ -49,13 +53,17 @@ static void draw_build_menu(GameState *gs, UIState *ui){
     for(int i=0;i<n;i++){
         int col=i%3, row=i/3;
         int bx=mx+col*(bw+gap), by=my+row*(bh+gap);
-        bool can=res_can_afford(&gs->res[0],items[i].c);
+        bool can=res_can_afford(&gs->res[lp],items[i].c);
         bool prereq_ok=true;
         if(items[i].t==BLD_FARM && !has_mill) prereq_ok=false;
+        /* Archery Range and Stable require Feudal Age */
+        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE) && !is_feudal) prereq_ok=false;
         bool clickable = can && prereq_ok;
         bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
         if(items[i].t==BLD_FARM && !has_mill)
             DrawText("Needs Mill",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
+        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE) && !is_feudal)
+            DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if(pressed && clickable){
             gs->build_mode.type=items[i].t;
             gs->build_mode.active=true;

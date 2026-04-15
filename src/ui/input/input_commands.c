@@ -97,12 +97,14 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { vil = true; break; }
     if (vil) {
         BldType qt = BLD_COUNT;
+        int lp = net_get_local_player();
+        int cur_age = gs->res[lp].age;
         if (IsKeyPressed(KEY_H)) qt = BLD_HOUSE;
         if (IsKeyPressed(KEY_R)) qt = BLD_BARRACKS;
-        if (IsKeyPressed(KEY_A)) qt = BLD_ARCHERY_RANGE;
+        if (IsKeyPressed(KEY_A) && cur_age >= 1) qt = BLD_ARCHERY_RANGE;
+        if (IsKeyPressed(KEY_A) && cur_age < 1)  game_set_alert(gs, "Archery Range requires Feudal Age!");
         if (IsKeyPressed(KEY_M)) qt = BLD_MILL;
         if (IsKeyPressed(KEY_F)) qt = BLD_FARM;
-        int lp = net_get_local_player();
         if (qt != BLD_COUNT && res_can_afford(&gs->res[lp], building_cost(qt))) {
             gs->build_mode.type = qt;
             gs->build_mode.active = true;
