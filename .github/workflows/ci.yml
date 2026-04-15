@@ -1,0 +1,214 @@
+name: CI — Build All Platforms
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+# Cancel in-progress runs for the same ref
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# JOBS
+# ─────────────────────────────────────────────────────────────────────────────
+jobs:
+
+  # ── macOS ─── amd64 + arm64 ────────────────────────────────────────────────
+  build-macos:
+    name: macOS (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: macos-13          # Intel runner
+          - arch: arm64
+            runner: macos-14          # Apple Silicon runner
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Raylib
+        run: brew install raylib
+
+      - name: Build
+        run: make -j$(sysctl -n hw.ncpu)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rts-macos-${{ matrix.arch }}
+          path: rts
+          if-no-files-found: error
+
+  # ── Linux ─── amd64 (native) + arm64 (cross-compile) ──────────────────────
+  build-linux:
+    name: Linux (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            cc: gcc
+            packages: ""
+            extra_cflags: ""
+            extra_libs: ""
+
+          - arch: arm64
+            cc: aarch64-linux-gnu-gcc
+            packages: gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+            extra_cflags: "-march=armv8-a"
+            extra_libs: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -qq
+          # Raylib build dependencies
+          sudo apt-get install -y --no-install-recommends \
+            cmake build-essential libgl1-mesa-dev \
+            libgles2-mesa-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxcursor-dev libxi-dev \
+            libxext-dev libwayland-dev \
+            ${{ matrix.packages }}
+
+      - name: Build Raylib from source
+        run: |
+          git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git raylib-src
+          cmake -S raylib-src -B raylib-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=${{ matrix.cc }} \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DPLATFORM=Desktop \
+            -DBUILD_EXAMPLES=OFF
+          cmake --build raylib-build -j$(nproc)
+          sudo cmake --install raylib-build --prefix /usr/local
+
+      - name: Build RTS
+        run: |
+          mkdir -p build
+          SRCS=$(find src -name '*.c')
+          INCLUDES="-Isrc -Isrc/core -Isrc/core/unit -Isrc/ui -Isrc/ui/renderer -Isrc/ui/hud -Isrc/ui/input -Isrc/ai -Isrc/core/enet -I/usr/local/include"
+          LIBS="-L/usr/local/lib -lraylib -lm -ldl -lpthread"
+          ${{ matrix.cc }} -std=c11 -Wall -O2 ${{ matrix.extra_cflags }} \
+            $INCLUDES $SRCS -o rts-linux-${{ matrix.arch }} $LIBS
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rts-linux-${{ matrix.arch }}
+          path: rts-linux-${{ matrix.arch }}
+          if-no-files-found: error
+
+  # ── Windows ─── amd64 + arm64 (cross-compile via LLVM-MinGW) ──────────────
+  build-windows:
+    name: Windows (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            triple: x86_64-w64-mingw32
+            mingw_arch: x86_64
+          - arch: arm64
+            triple: aarch64-w64-mingw32
+            mingw_arch: aarch64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install LLVM-MinGW cross-compiler
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake wget unzip xz-utils
+          LLVM_MINGW_VERSION="20240619"
+          ARCH="${{ matrix.mingw_arch }}"
+          FILE="llvm-mingw-${LLVM_MINGW_VERSION}-ucrt-ubuntu-20.04-x86_64.tar.xz"
+          wget -q "https://github.com/mstorsjo/llvm-mingw/releases/download/${LLVM_MINGW_VERSION}/${FILE}"
+          tar -xf "$FILE"
+          echo "$(pwd)/$(basename ${FILE%.tar.xz})/bin" >> $GITHUB_PATH
+
+      - name: Build Raylib for Windows
+        run: |
+          git clone --depth 1 --branch 5.0 https://github.com/raysan5/raylib.git raylib-src
+          cmake -S raylib-src -B raylib-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_SYSTEM_NAME=Windows \
+            -DCMAKE_C_COMPILER=${{ matrix.triple }}-clang \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DPLATFORM=Desktop \
+            -DBUILD_EXAMPLES=OFF \
+            -DCMAKE_INSTALL_PREFIX="$(pwd)/raylib-install"
+          cmake --build raylib-build -j$(nproc)
+          cmake --install raylib-build
+
+      - name: Build RTS
+        run: |
+          SRCS=$(find src -name '*.c')
+          INCLUDES="-Isrc -Isrc/core -Isrc/core/unit -Isrc/ui -Isrc/ui/renderer \
+                    -Isrc/ui/hud -Isrc/ui/input -Isrc/ai -Isrc/core/enet \
+                    -I$(pwd)/raylib-install/include"
+          LIBS="-L$(pwd)/raylib-install/lib -lraylib -lwinmm -lgdi32 -lopengl32"
+          ${{ matrix.triple }}-clang -std=c11 -Wall -O2 \
+            $INCLUDES $SRCS -o rts-windows-${{ matrix.arch }}.exe $LIBS
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: rts-windows-${{ matrix.arch }}
+          path: rts-windows-${{ matrix.arch }}.exe
+          if-no-files-found: error
+
+  # ── Android ─── arm64-v8a (via Gradle + CMake) ────────────────────────────
+  build-android:
+    name: Android (arm64 APK)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK / NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install NDK & CMake
+        run: |
+          sdkmanager --install \
+            "ndk;25.2.9519653" \
+            "cmake;3.22.1" \
+            "build-tools;33.0.2" \
+            "platforms;android-33"
+
+      - name: Write local.properties
+        run: |
+          cat > android/local.properties <<EOF
+          sdk.dir=$ANDROID_SDK_ROOT
+          ndk.dir=$ANDROID_SDK_ROOT/ndk/25.2.9519653
+          EOF
+
+      - name: Make gradlew executable
+        run: chmod +x android/gradlew
+
+      - name: Build Debug APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: rts-android-arm64-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error

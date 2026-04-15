@@ -1,0 +1,58 @@
+# RTS Game — .gitignore
+
+# ── Build artifacts ──────────────────────────────────────────
+build/
+rts
+rts.exe
+
+# ── Android build outputs ────────────────────────────────────
+android/app/build/
+android/app/.cxx/
+android/.gradle/
+android/local.properties
+android/gradlew.bat
+# keep android/gradlew, build.gradle, manifests, and cmake lists in git
+
+# ── Downloaded dependencies / large zips ────────────────────
+*.zip
+raylib-*/
+4.5.0.zip
+
+# ── macOS ─────────────────────────────────────────────────────
+.DS_Store
+**/.DS_Store
+*.dSYM/
+
+# ── Windows ───────────────────────────────────────────────────
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.dll
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ── Linux ─────────────────────────────────────────────────────
+*.o
+*.a
+*.so
+
+# ── Editor / IDE ──────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.clangd/
+compile_commands.json
+
+# ── CMake generated ───────────────────────────────────────────
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile.cmake
+
+# ── Logs / temp ───────────────────────────────────────────────
+*.log
