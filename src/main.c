@@ -4,10 +4,9 @@
 #include "game.h"
 #include "raylib.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include "net.h"
-
 #include "ui_state.h"
-#include <stdio.h>
 
 /* Forward declarations from other modules */
 void game_init(GameState *gs);
@@ -15,9 +14,15 @@ void game_update(GameState *gs, float dt);
 
 int main(void){
     /* ── Window ── */
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    /* On Android the window is always full-screen; pass 0x0 so Raylib
+       reads the actual device resolution and avoid the resizable flag. */
+    InitWindow(0, 0, "RTS Game");
+#else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(SCREEN_W, SCREEN_H, "Age of Empires II  –  Raylib Edition");
-    SetTargetFPS(0);
+    InitWindow(SCREEN_W, SCREEN_H, "Age of Empires II  \u2013  Raylib Edition");
+#endif
+    SetTargetFPS(60);
     SetExitKey(KEY_NULL);   /* Don't quit on ESC */
 
     /* ── Game state ── */
