@@ -25,7 +25,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: macos-13          # Intel runner
+            runner: macos-12          # Last stable Intel (x86_64) runner
           - arch: arm64
             runner: macos-14          # Apple Silicon runner
 
