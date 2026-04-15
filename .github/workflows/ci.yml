@@ -16,18 +16,10 @@ concurrency:
 # ─────────────────────────────────────────────────────────────────────────────
 jobs:
 
-  # ── macOS ─── amd64 + arm64 ────────────────────────────────────────────────
+  # ── macOS ─── arm64 ────────────────────────────────────────────────────────
   build-macos:
-    name: macOS (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: macos-13          # Latest stable Intel (x86_64) runner
-          - arch: arm64
-            runner: macos-14          # Apple Silicon runner
+    name: macOS (arm64)
+    runs-on: macos-latest
 
     steps:
       - uses: actions/checkout@v4
@@ -41,7 +33,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: rts-macos-${{ matrix.arch }}
+          name: rts-macos-arm64
           path: rts
           if-no-files-found: error
 
