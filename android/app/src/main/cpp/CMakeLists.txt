@@ -41,4 +41,22 @@ target_compile_definitions(rts PRIVATE
     PLATFORM_ANDROID=1   # explicit platform flag for our ifdefs
 )
 
+
+# ──────────────────────────────────────────────────────────────
+# CRITICAL: Force the linker to export ANativeActivity_onCreate.
+#
+# This is the JNI entry point that the Android Java runtime calls
+# to start our NativeActivity.  Because no C code in our project
+# *calls* this function (only the Java layer does), the linker
+# treats it as dead code and drops it — making the app crash
+# immediately on launch with a black screen and no error.
+#
+# -u <sym>  =  "undefined reference": treat sym as an unresolved
+#   reference that must be satisfied by the archives, even if no
+#   object file explicitly references it.  This pulls the
+#   ANativeActivity_onCreate object from libraylib.a (where
+#   android_native_app_glue was merged) into librts.so.
+# ──────────────────────────────────────────────────────────────
+target_link_options(rts PRIVATE -u ANativeActivity_onCreate)
+
 target_link_libraries(rts raylib log android EGL GLESv2)
