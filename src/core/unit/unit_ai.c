@@ -227,21 +227,28 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
         Building *b=&gs->buildings[u->target_bld];
         b->hp-=u->attack_dmg;
         if(b->hp<=0){
-            int lp = net_get_local_player();
             if(b->type==BLD_TOWN_CENTER){
-                if(b->player == lp) {
+                int lp = net_get_local_player();
+                int defeated_player = b->player;
+                
+                /* How many unique players still have a living TC (excluding this one)? */
+                bool has_tc[NUM_PLAYERS] = {false};
+                for(int i=0; i<MAX_BUILDINGS; i++){
+                    Building *eb = &gs->buildings[i];
+                    if(eb->active && eb->type==BLD_TOWN_CENTER && eb->id!=b->id)
+                        has_tc[eb->player] = true;
+                }
+                /* Local player lost their TC */
+                if(defeated_player == lp){
                     game_set_alert(gs,"DEFEATED...");
                     gs->phase = PHASE_DEFEAT;
                 } else {
-                    /* Check if any enemy TCs remain */
-                    bool enemies_left = false;
-                    for(int i=0; i<MAX_BUILDINGS; i++){
-                        Building *eb = &gs->buildings[i];
-                        if(eb->active && eb->type==BLD_TOWN_CENTER && eb->player != lp && eb->id != b->id){
-                            enemies_left = true; break;
-                        }
+                    /* Check if local player is the only one with a TC left */
+                    bool any_enemy_tc = false;
+                    for(int p=0; p<NUM_PLAYERS; p++){
+                        if(p != lp && has_tc[p]) { any_enemy_tc = true; break; }
                     }
-                    if(!enemies_left){
+                    if(!any_enemy_tc){
                         game_set_alert(gs,"VICTORY!");
                         gs->phase = PHASE_VICTORY;
                     }
