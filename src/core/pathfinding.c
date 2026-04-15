@@ -26,18 +26,20 @@ int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
     /* Static workspace – fine for single-threaded game.
      * NOTE: PriorityQueue is 64KB — MUST be static, not on the stack.
      *       Android's game thread stack is ~1MB and multiple pathfind()
-     *       calls during AI update would overflow it. */
-    static PriorityQueue open;
-    pq_init(&open);
+     *       calls during AI update would overflow it.
+     * NOTE: Named 'pq_open' not 'open' — Windows MinGW io.h declares
+     *       int open(...) which would conflict with a variable named 'open'. */
+    static PriorityQueue pq_open;
+    pq_init(&pq_open);
 
     int start = sy*MAP_W + sx;
     int end   = ey*MAP_W + ex;
 
     g[start] = 0.0f;
-    pq_push(&open, start, 0.0f);
+    pq_push(&pq_open, start, 0.0f);
 
-    while(!pq_empty(&open)){
-        PQNode cur = pq_pop(&open);
+    while(!pq_empty(&pq_open)){
+        PQNode cur = pq_pop(&pq_open);
         int c = cur.cell;
         if(closed[c]) continue;
         closed[c] = true;
@@ -68,7 +70,7 @@ int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
                 int dx = abs(ex - nx);
                 int dy = abs(ey - ny);
                 float h = (dx > dy) ? (0.414f * dy + dx) : (0.414f * dx + dy);
-                pq_push(&open, nc, ng + h);
+                pq_push(&pq_open, nc, ng + h);
             }
         }
     }
