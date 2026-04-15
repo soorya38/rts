@@ -51,8 +51,22 @@ install-deps:
 android:
 	./build_android.sh
 
+android-clean:
+	cd android && ./gradlew clean
+	./build_android.sh
+
 android-install:
 	export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools && \
-	$$ANDROID_HOME/platform-tools/adb install android/app/build/outputs/apk/debug/app-debug.apk
+	$$ANDROID_HOME/platform-tools/adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 
-.PHONY: all run clean install-deps android android-install
+# Stream logcat filtered to RTS trace messages + crash signals.
+# Press Ctrl-C to stop. Requires USB debugging enabled on the device.
+android-logs:
+	export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools && \
+	$$ANDROID_HOME/platform-tools/adb logcat -c && \
+	$$ANDROID_HOME/platform-tools/adb logcat "raylib:I" "DEBUG:F" "libc:F" "*:S"
+
+# Full cycle: clean NDK build → install → stream logs
+android-deploy: android-clean android-install android-logs
+
+.PHONY: all run clean install-deps android android-clean android-install android-logs android-deploy
