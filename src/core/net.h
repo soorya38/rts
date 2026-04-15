@@ -2,7 +2,24 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+
+/* ── Windows compatibility ──────────────────────────────────────────────────
+ * ENet includes winsock2.h → windows.h → wingdi.h + winuser.h which declare
+ * Rectangle(), CloseWindow(), ShowCursor() and DrawText() — all of which
+ * conflict with Raylib's own definitions.  Define these exclusion guards
+ * BEFORE any Windows headers are pulled in.
+ * These are no-ops on Linux/macOS.
+ */
+#ifdef _WIN32
+  #define NOGDI    /* exclude wingdi.h → no Rectangle() GDI conflict  */
+  #define NOUSER   /* exclude winuser.h → no CloseWindow/ShowCursor/DrawText */
+#endif
 #include "enet.h"
+#ifdef _WIN32
+  /* Re-expose the WinAPI symbols that Raylib itself re-declares properly */
+  #undef NOGDI
+  #undef NOUSER
+#endif
 
 /* Multiplayer states */
 extern bool g_net_active;
