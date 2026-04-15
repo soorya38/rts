@@ -56,7 +56,7 @@ bool draw_button(const char *label, int x, int y, int w, int h, bool enabled){
         int tw=MeasureText(label,fs);
         DrawText(label,x+(w-tw)/2,y+(h-fs)/2,fs,tc);
     }
-    return hover && IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    return hover && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsGestureDetected(GESTURE_TAP));
 }
 
 void draw_tooltip(const char *text, int x, int y) {

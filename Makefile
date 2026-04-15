@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -std=c99 -Wall -Wextra -O2 -g
+CFLAGS  = -std=c11 -Wall -Wextra -O2 -g
 TARGET  = rts
 
 # Detect Homebrew prefix (Apple Silicon first, then Intel)
@@ -8,11 +8,6 @@ RAYLIB_PREFIX := $(shell $(BREW_PREFIX)/bin/brew --prefix raylib 2>/dev/null)
 
 ifeq ($(RAYLIB_PREFIX),)
 $(error Raylib not found. Run: brew install raylib)
-endif
-
-ENET_PREFIX := $(shell $(BREW_PREFIX)/bin/brew --prefix enet 2>/dev/null)
-ifeq ($(ENET_PREFIX),)
-$(error ENet not found. Run: brew install enet)
 endif
 
 # Recursively find all .c files in src/
@@ -28,10 +23,9 @@ INCLUDES = -I$(RAYLIB_PREFIX)/include \
            -Isrc/ui/hud \
            -Isrc/ui/input \
            -Isrc/ai \
-           -I$(ENET_PREFIX)/include
+           -Isrc/core/enet
 
 LIBS     = -L$(RAYLIB_PREFIX)/lib -lraylib \
-           -L$(ENET_PREFIX)/lib -lenet \
            -framework OpenGL -framework Cocoa -framework IOKit \
            -framework CoreFoundation -framework CoreVideo \
            -framework CoreAudio -framework AudioToolbox
@@ -52,6 +46,13 @@ clean:
 	rm -rf build $(TARGET)
 
 install-deps:
-	brew install raylib
+	brew install raylib enet
 
-.PHONY: all run clean install-deps
+android:
+	./build_android.sh
+
+android-install:
+	export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools && \
+	$$ANDROID_HOME/platform-tools/adb install android/app/build/outputs/apk/debug/app-debug.apk
+
+.PHONY: all run clean install-deps android android-install

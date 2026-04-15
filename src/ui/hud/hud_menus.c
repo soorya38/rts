@@ -33,7 +33,11 @@ static void draw_build_menu(GameState *gs, UIState *ui){
     int mx=100, my=HUD_BOT_Y-292, bw=116, bh=48, gap=6;
     float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*4+gap*3+36);
     DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
+#if defined(PLATFORM_ANDROID)
+    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,1.0f,C_HUD_LINE);
+#else
     DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
+#endif
     DrawText("BUILD MENU  — select a structure",mx,my-22,12,CLITERAL(Color){200,180,100,255});
 
     int lp = net_get_local_player();

@@ -1,4 +1,4 @@
-/* src/core/net.c */
+#define ENET_IMPLEMENTATION
 #include "net.h"
 #include <stdio.h>
 #include <string.h>

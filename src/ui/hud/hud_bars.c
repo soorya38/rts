@@ -477,8 +477,9 @@ void draw_minimap(GameState *gs, UIState *ui){
     DrawLineEx((Vector2){mini_bl_x, mini_bl_y}, (Vector2){mini_tl_x, mini_tl_y}, 1.5f, CLITERAL(Color){220,200,150,200});
 
     /* Minimap clicking to move camera */
-    Vector2 mp=GetMousePosition();
-    if(IsMouseButtonDown(MOUSE_LEFT_BUTTON)){
+    bool minimap_pressed = IsMouseButtonDown(MOUSE_LEFT_BUTTON) || GetTouchPointCount() > 0;
+    if(minimap_pressed){
+        Vector2 mp = GetTouchPointCount() > 0 ? GetTouchPosition(0) : GetMousePosition();
         /* Check if inside the diamond bounding box */
         if(mp.x >= MINI_X && mp.x <= MINI_X+MINI_SIZE && mp.y >= MINI_Y && mp.y <= MINI_Y+MINI_SIZE){
             /* Inverse map the point */

@@ -2,11 +2,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#ifdef __APPLE__
-#include <enet/enet.h>
-#else
-#include <enet/enet.h>
-#endif
+#include "enet.h"
 
 /* Multiplayer states */
 extern bool g_net_active;
