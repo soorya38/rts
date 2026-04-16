@@ -30,7 +30,7 @@
 /* Shared button/tooltip helpers (defined in hud_overlays.c) */
 bool draw_button(const char *label, int x, int y, int w, int h, bool enabled);
 void draw_tooltip(const char *text, int x, int y);
-void draw_food_icon(int x, int y);
-void draw_wood_icon(int x, int y);
-void draw_gold_icon(int x, int y);
-void draw_stone_icon(int x, int y);
+void draw_food_icon(UIState *ui, int x, int y);
+void draw_wood_icon(UIState *ui, int x, int y);
+void draw_gold_icon(UIState *ui, int x, int y);
+void draw_stone_icon(UIState *ui, int x, int y);

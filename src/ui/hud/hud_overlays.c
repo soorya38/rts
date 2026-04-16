@@ -11,25 +11,45 @@
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
 /* ── Scaled icon helpers ─────────────────────────────────── */
-void draw_food_icon(int x,int y){
-    int s = (int)(8 * hud_scale());
-    DrawCircle(x+s,y+s,s,CLITERAL(Color){50,170,40,255});
-    DrawCircle(x+s,y+s-1,(int)(s*0.55f),CLITERAL(Color){100,210,70,255});
+void draw_food_icon(UIState *ui, int x,int y){
+    if (ui->tex_ui_food.id != 0) {
+        float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_food.width;
+        DrawTextureEx(ui->tex_ui_food, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
+    } else {
+        int s = (int)(8 * hud_scale());
+        DrawCircle(x+s,y+s,s,CLITERAL(Color){50,170,40,255});
+        DrawCircle(x+s,y+s-1,(int)(s*0.55f),CLITERAL(Color){100,210,70,255});
+    }
 }
-void draw_wood_icon(int x,int y){
-    int s = (int)(8 * hud_scale());
-    DrawRectangle(x+s/2,y+s/3,s/2,(int)(s*1.3f),CLITERAL(Color){120,75,25,255});
-    DrawRectangle(x+s/4,y+s/2,s,s/3,CLITERAL(Color){150,100,40,255});
+void draw_wood_icon(UIState *ui, int x,int y){
+    if (ui->tex_ui_wood.id != 0) {
+        float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_wood.width;
+        DrawTextureEx(ui->tex_ui_wood, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
+    } else {
+        int s = (int)(8 * hud_scale());
+        DrawRectangle(x+s/2,y+s/3,s/2,(int)(s*1.3f),CLITERAL(Color){120,75,25,255});
+        DrawRectangle(x+s/4,y+s/2,s,s/3,CLITERAL(Color){150,100,40,255});
+    }
 }
-void draw_gold_icon(int x,int y){
-    int s = (int)(8 * hud_scale());
-    DrawCircle(x+s,y+s,s,CLITERAL(Color){210,170,20,255});
-    DrawCircle(x+s,y+s-1,(int)(s*0.55f),CLITERAL(Color){240,210,60,255});
+void draw_gold_icon(UIState *ui, int x,int y){
+    if (ui->tex_ui_gold.id != 0) {
+        float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_gold.width;
+        DrawTextureEx(ui->tex_ui_gold, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
+    } else {
+        int s = (int)(8 * hud_scale());
+        DrawCircle(x+s,y+s,s,CLITERAL(Color){210,170,20,255});
+        DrawCircle(x+s,y+s-1,(int)(s*0.55f),CLITERAL(Color){240,210,60,255});
+    }
 }
-void draw_stone_icon(int x,int y){
-    int s = (int)(8 * hud_scale());
-    DrawCircle(x+s,y+s+1,s,CLITERAL(Color){155,148,138,255});
-    DrawCircle(x+s-1,y+s-1,(int)(s*0.55f),CLITERAL(Color){195,188,178,255});
+void draw_stone_icon(UIState *ui, int x,int y){
+    if (ui->tex_ui_stone.id != 0) {
+        float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_stone.width;
+        DrawTextureEx(ui->tex_ui_stone, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
+    } else {
+        int s = (int)(8 * hud_scale());
+        DrawCircle(x+s,y+s+1,s,CLITERAL(Color){155,148,138,255});
+        DrawCircle(x+s-1,y+s-1,(int)(s*0.55f),CLITERAL(Color){195,188,178,255});
+    }
 }
 
 bool draw_button(const char *label, int x, int y, int w, int h, bool enabled){

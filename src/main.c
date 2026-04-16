@@ -90,6 +90,7 @@ int main(void){
 
     CloseWindow();
     net_deinit();
+    ui_state_deinit(ui);
     free(gs);
     free(ui);
     return 0;

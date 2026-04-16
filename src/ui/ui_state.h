@@ -35,9 +35,23 @@ typedef struct {
     /* Multiplayer lobby */
     char  net_ip[64];      /* IP address the client will connect to */
     bool  net_ip_active;   /* IP text-box has keyboard focus */
+
+    /* Assets */
+    Texture2D tex_buildings[BLD_COUNT];
+    Texture2D tex_units[UNIT_COUNT];
+    Texture2D tex_env_tree;
+    Texture2D tex_env_gold;
+    Texture2D tex_env_stone;
+    Texture2D tex_env_berries;
+    Texture2D tex_ui_food;
+    Texture2D tex_ui_wood;
+    Texture2D tex_ui_gold;
+    Texture2D tex_ui_stone;
+    Texture2D tex_ui_pop;
 } UIState;
 
 void ui_state_init(UIState *ui, GameState *gs);
+void ui_state_deinit(UIState *ui);
 void ui_center_on_tc(UIState *ui, GameState *gs);
 /* Returns a scale factor relative to 720p so HUD elements are legible on any
    screen size, including high-DPI phones.  Range [1.0, 2.5]. */

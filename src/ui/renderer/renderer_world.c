@@ -28,76 +28,19 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
 
     draw_shadow(px + w * 0.5f, py + h * 0.5f, w * 0.9f, h * 0.9f);
 
-    switch(b->type) {
-        case BLD_TOWN_CENTER: {
-            draw_iso_box(px + 4, py + 4, w - 8, h - 8, 12, CLITERAL(Color){160,148,128,255}, CLITERAL(Color){140,128,108,255}, CLITERAL(Color){120,108,88,255});
-            draw_iso_box(px + w*0.25f, py + h*0.25f, w*0.5f, h*0.5f, 30, mc, dc, CLITERAL(Color){dc.r/2, dc.g/2, dc.b/2, 255});
-            int age = gs->res[b->player].age;
-            if(age >= 1) draw_iso_box(px + 2, py + 2, w - 4, h - 4, 3, CLITERAL(Color){100,100,100,255}, CLITERAL(Color){80,80,80,255}, CLITERAL(Color){60,60,60,255});
-            draw_flag(px + w*0.5f, py + h*0.5f - 35, b->player);
-            break;
-        }
-        case BLD_HOUSE: {
-            draw_iso_box(px+2, py+2, w-4, h-4, 15, CLITERAL(Color){180,158,110,255}, CLITERAL(Color){150,128,80,255}, CLITERAL(Color){120,98,50,255});
-            draw_iso_box(px+4, py+4, w-8, h-8, 22, dc, CLITERAL(Color){80,55,25,255}, CLITERAL(Color){60,35,15,255});
-            break;
-        }
-        case BLD_BARRACKS:
-        case BLD_ARCHERY_RANGE:
-        case BLD_STABLE: {
-            Color bc=CLITERAL(Color){110,95,75,255};
-            draw_iso_box(px+2, py+2, w-4, h-4, 12, bc, CLITERAL(Color){90,75,55,255}, CLITERAL(Color){70,55,35,255});
-            if (b->type == BLD_BARRACKS) {
-                draw_iso_box(px + w*0.35f, py + h*0.35f, w*0.3f, h*0.3f, 18, mc, dc, dc);
-            } else if (b->type == BLD_ARCHERY_RANGE) {
-                draw_iso_box(px + w*0.1f, py + h*0.1f, w*0.8f, 10, 16, mc, dc, dc);
-            } else {
-                draw_iso_box(px + w*0.1f, py + h*0.7f, w*0.8f, 10, 16, mc, dc, dc);
-            }
-            break;
-        }
-        case BLD_MILL:
-        case BLD_LUMBER_CAMP:
-        case BLD_MINING_CAMP: {
-            Color bc=CLITERAL(Color){150,120,75,255};
-            draw_iso_box(px+2, py+2, w-4, h-4, 10, bc, CLITERAL(Color){130,100,55,255}, CLITERAL(Color){110,80,35,255});
-            draw_iso_box(px+8, py+8, w-16, h-16, 16, mc, dc, dc);
-            break;
-        }
-        case BLD_FARM: {
-            draw_iso_quad(px, py, w, h, CLITERAL(Color){145,115,55,255});
-            for(int r=0;r<3;r++)
-                draw_iso_quad(px+2, py+3+r*8, w-4, 2, CLITERAL(Color){165,135,65,255});
-            for(int gy=0; gy<3; gy++) {
-                for(int gx=0; gx<3; gx++) {
-                    float off_x = (gx * TILE_SIZE) + (TILE_SIZE/2);
-                    float off_y = (gy * TILE_SIZE) + (TILE_SIZE/2);
-                    Vector2 dot = to_rvec2(world_to_iso(px + off_x, py + off_y));
-                    DrawCircle(dot.x, dot.y, 2, CLITERAL(Color){60, 180, 40, 255});
-                    DrawCircle(dot.x-4, dot.y+2, 1.5f, CLITERAL(Color){40, 150, 30, 255});
-                    DrawCircle(dot.x+4, dot.y-2, 1.5f, CLITERAL(Color){50, 170, 35, 255});
-                }
-            }
-            break;
-        }
-        case BLD_BLACKSMITH: {
-            /* Dark iron-grey walls with glowing forge */
-            draw_iso_box(px+2, py+2, w-4, h-4, 12, CLITERAL(Color){90,85,80,255}, CLITERAL(Color){70,65,60,255}, CLITERAL(Color){50,45,40,255});
-            /* Forge glow — orange ember dot at center */
-            Vector2 fc = to_rvec2(world_to_iso(px + w*0.5f, py + h*0.5f));
-            DrawCircle((int)fc.x, (int)fc.y - 10, 6, CLITERAL(Color){255,140,30,200});
-            DrawCircle((int)fc.x, (int)fc.y - 10, 3, CLITERAL(Color){255,220,80,255});
-            break;
-        }
-        case BLD_MARKET: {
-            /* Warm ochre building with merchant awning stripe */
-            draw_iso_box(px+2, py+2, w-4, h-4, 12, CLITERAL(Color){195,160,90,255}, CLITERAL(Color){175,140,70,255}, CLITERAL(Color){145,110,50,255});
-            draw_iso_box(px+4, py+4, w-8, 10, 16, mc, dc, dc);   /* coloured awning */
-            break;
-        }
-        default:
-            draw_iso_box(px+2, py+2, w-4, h-4, 15, CLITERAL(Color){140,120,90,255}, dc, dc);
-            break;
+    Texture2D tex = ui->tex_buildings[b->type];
+    if (tex.id != 0) {
+        /* Scale buildings biased towards footprint size, with a global boost */
+        float base_ratio = 1.25f / 4.0f; /* TC as baseline */
+        float boost = 1.25f;            /* Scale boost for 'premium' look */
+        float sc = (float)b->tw * base_ratio * boost;
+        
+        float tw = tex.width * sc;
+        float th = tex.height * sc;
+        Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
+        DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + h*0.4f}, 0.0f, sc, WHITE);
+    } else {
+        draw_iso_box(px+2, py+2, w-4, h-4, 15, CLITERAL(Color){140,120,90,255}, dc, dc);
     }
 
     if(b->hp <= b->max_hp / 2) draw_smoke(px + w*0.4f, py + h*0.4f, gs->game_time, b->id);
@@ -144,70 +87,30 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
     Color mc = player_color_alpha(u->player,(unsigned char)alpha);
     Color dc = player_color_dark(u->player); dc.a=(unsigned char)alpha;
 
-    draw_shadow(wx, wy, 10, 8);
+    float size_mult = (u->type == UNIT_SCOUT) ? 1.4f : 1.0f;
+    draw_shadow(wx, wy, 10 * size_mult, 8 * size_mult);
 
     if(u->selected) {
         float pulse = sinf(t * 8.0f) * 1.5f;
-        DrawEllipse((int)p.x,(int)p.y, 10 + pulse, 5 + pulse * 0.5f, CLITERAL(Color){80,220,100,140});
+        DrawEllipse((int)p.x,(int)p.y, (10 + pulse) * size_mult, (5 + pulse * 0.5f) * size_mult, CLITERAL(Color){80,220,100,140});
     }
 
     bool u_hovered = false;
     for (int i = 0; i < MAX_UNITS; i++) if (&gs->units[i] == u && ui->hover_unit == i) u_hovered = true;
-    if (u_hovered && !u->selected) DrawEllipseLines((int)p.x, (int)p.y, 11, 6, C_HOVER);
+    if (u_hovered && !u->selected) DrawEllipseLines((int)p.x, (int)p.y, 11 * size_mult, 6 * size_mult, C_HOVER);
 
-    float bob = sinf(t*6.0f+(float)(u->id))*1.5f;
-    float px = p.x, py = p.y - 10 + bob;
+    float px = p.x, py = p.y - 10;
 
-    switch(u->type){
-        case UNIT_VILLAGER: {
-            DrawRectangle((int)(px-4),(int)(py-3),8,8,mc);
-            DrawCircle((int)px,(int)(py-7),5,CLITERAL(Color){220,185,145,255});
-            if(u->state==US_GATHERING||u->state==US_BUILDING){
-                float angle=t*8.0f;
-                DrawLineEx((Vector2){px+2,py-2},(Vector2){px+2+cosf(angle)*8,py-2+sinf(angle)*8},2,CLITERAL(Color){140,100,40,255});
-            }
-            break;
-        }
-        case UNIT_SCOUT: {
-            DrawEllipse((int)px,(int)(py+2),9,5,CLITERAL(Color){160,120,80,255});
-            DrawRectangle((int)(px-3),(int)(py-5),6,7,mc);
-            DrawCircle((int)px,(int)(py-9),4,CLITERAL(Color){220,185,145,255});
-            break;
-        }
-        case UNIT_MILITIA: {
-            DrawRectangle((int)(px-4),(int)(py-4),8,9,mc);
-            DrawCircle((int)px,(int)(py-9),5,CLITERAL(Color){80,80,80,255});
-            DrawCircle((int)px,(int)(py-8),3,CLITERAL(Color){220,185,145,255});
-            DrawLineEx((Vector2){px,py-4},(Vector2){px+10,py-4},2,CLITERAL(Color){200,200,210,255});
-            DrawRectangle((int)(px-10),(int)(py-5),5,7,dc);
-            break;
-        }
-        case UNIT_MAN_AT_ARMS: {
-            DrawRectangle((int)(px-5),(int)(py-5),10,10,dc);
-            DrawCircle((int)px,(int)(py-10),5,CLITERAL(Color){90,90,90,255});
-            DrawRectangle((int)(px-5),(int)(py-5),10,2,mc);
-            DrawLineEx((Vector2){px,py-4},(Vector2){px+11,py-7},2,CLITERAL(Color){200,200,210,255});
-            DrawRectangle((int)(px-12),(int)(py-6),5,8,CLITERAL(Color){120,120,110,255});
-            break;
-        }
-        case UNIT_ARCHER: {
-            DrawRectangle((int)(px-3),(int)(py-4),6,8,mc);
-            DrawCircle((int)px,(int)(py-8),4,CLITERAL(Color){220,185,145,255});
-            DrawCircleLines((int)(px-7),(int)(py-2),7,CLITERAL(Color){120,80,30,255});
-            DrawLineEx((Vector2){px-7,py-9},(Vector2){px-7,py+5},1,CLITERAL(Color){180,140,60,255});
-            float angle=sinf(t*4.0f+(float)u->id)*0.3f;
-            DrawLineEx((Vector2){px,py-2},(Vector2){px-14+cosf(angle)*4,py-2+sinf(angle)*4},1,CLITERAL(Color){160,120,40,255});
-            break;
-        }
-        case UNIT_KNIGHT: {
-            DrawEllipse((int)px,(int)(py+3),11,6,CLITERAL(Color){80,60,40,255});
-            DrawRectangle((int)(px-5),(int)(py-6),10,9,dc);
-            DrawRectangle((int)(px-5),(int)(py-6),10,3,mc);
-            DrawCircle((int)px,(int)(py-11),5,CLITERAL(Color){100,100,100,255});
-            DrawLineEx((Vector2){px+5,py-8},(Vector2){px+5+cosf(u->facing)*16,py-8+sinf(u->facing)*16},2,CLITERAL(Color){180,150,60,255});
-            break;
-        }
-        default: break;
+    Texture2D utex = ui->tex_units[u->type];
+    if (utex.id != 0) {
+        float sc = 0.18f * size_mult;
+        float tw = utex.width * sc;
+        float th = utex.height * sc;
+        DrawTextureEx(utex, (Vector2){px - tw/2.0f, py - th + 12 * size_mult}, 0.0f, sc, WHITE);
+    } else {
+        /* Fallback primitive drawing */
+        DrawRectangle((int)(px-4),(int)(py-3),8,8,mc);
+        DrawCircle((int)px,(int)(py-7),5,CLITERAL(Color){220,185,145,255});
     }
 
     if(u->type==UNIT_VILLAGER && u->carry_amt>0){

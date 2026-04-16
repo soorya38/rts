@@ -22,6 +22,50 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->camera.rotation= 0.0f;
 
     ui_center_on_tc(ui, gs);
+
+    ui->tex_buildings[BLD_TOWN_CENTER]   = LoadTexture("assets/buildings/town_center.png");
+    ui->tex_buildings[BLD_HOUSE]         = LoadTexture("assets/buildings/house.png");
+    ui->tex_buildings[BLD_BARRACKS]      = LoadTexture("assets/buildings/barracks.png");
+    ui->tex_buildings[BLD_ARCHERY_RANGE] = LoadTexture("assets/buildings/archery_range.png");
+    ui->tex_buildings[BLD_STABLE]        = LoadTexture("assets/buildings/stable.png");
+    ui->tex_buildings[BLD_MILL]          = LoadTexture("assets/buildings/mill.png");
+    ui->tex_buildings[BLD_LUMBER_CAMP]   = LoadTexture("assets/buildings/lumber_camp.png");
+    ui->tex_buildings[BLD_MINING_CAMP]   = LoadTexture("assets/buildings/mining_camp.png");
+    ui->tex_buildings[BLD_BLACKSMITH]    = LoadTexture("assets/buildings/blacksmith.png");
+    ui->tex_buildings[BLD_MARKET]        = LoadTexture("assets/buildings/market.png");
+    ui->tex_buildings[BLD_FARM]          = LoadTexture("assets/buildings/farm.png");
+
+    ui->tex_units[UNIT_VILLAGER]         = LoadTexture("assets/units/villager_m.png"); /* could also use f */
+    ui->tex_units[UNIT_SCOUT]            = LoadTexture("assets/units/scout.png");
+    ui->tex_units[UNIT_MILITIA]          = LoadTexture("assets/units/militia.png");
+    ui->tex_units[UNIT_MAN_AT_ARMS]      = LoadTexture("assets/units/man_at_arms.png");
+    ui->tex_units[UNIT_ARCHER]           = LoadTexture("assets/units/archer.png");
+    ui->tex_units[UNIT_KNIGHT]           = LoadTexture("assets/units/knight.png");
+
+    ui->tex_env_tree                     = LoadTexture("assets/env/tree.png");
+    ui->tex_env_gold                     = LoadTexture("assets/env/gold_mine.png");
+    ui->tex_env_stone                    = LoadTexture("assets/env/stone_mine.png");
+    ui->tex_env_berries                  = LoadTexture("assets/env/berry_bush.png");
+
+    ui->tex_ui_food                      = LoadTexture("assets/ui/food.png");
+    ui->tex_ui_wood                      = LoadTexture("assets/ui/wood.png");
+    ui->tex_ui_gold                      = LoadTexture("assets/ui/gold.png");
+    ui->tex_ui_stone                     = LoadTexture("assets/ui/stone.png");
+    ui->tex_ui_pop                       = LoadTexture("assets/ui/population.png");
+}
+
+void ui_state_deinit(UIState *ui) {
+    for (int i = 0; i < BLD_COUNT; i++) UnloadTexture(ui->tex_buildings[i]);
+    for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
+    UnloadTexture(ui->tex_env_tree);
+    UnloadTexture(ui->tex_env_gold);
+    UnloadTexture(ui->tex_env_stone);
+    UnloadTexture(ui->tex_env_berries);
+    UnloadTexture(ui->tex_ui_food);
+    UnloadTexture(ui->tex_ui_wood);
+    UnloadTexture(ui->tex_ui_gold);
+    UnloadTexture(ui->tex_ui_stone);
+    UnloadTexture(ui->tex_ui_pop);
 }
 
 void ui_center_on_tc(UIState *ui, GameState *gs) {

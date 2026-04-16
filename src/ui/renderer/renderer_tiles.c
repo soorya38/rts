@@ -47,33 +47,41 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
             break;
         }
 
-        case TILE_FOREST:
-            draw_iso_quad(px, py, s, s, C_FOREST_G);
-            DrawCircle(cp.x, cp.y - 12, s*0.42f, C_FOREST_L);
-            DrawCircle(cp.x, cp.y - 15, s*0.30f, C_FOREST_D);
-            DrawCircle(cp.x - 3, cp.y - 20, s*0.10f, CLITERAL(Color){70,130,55,160});
+        case TILE_FOREST: {
+            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            float sc = 0.45f;
+            float tw = ui->tex_env_tree.width * sc;
+            float th = ui->tex_env_tree.height * sc;
+            DrawTextureEx(ui->tex_env_tree, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
             break;
+        }
 
-        case TILE_GOLD:
-            draw_iso_quad(px, py, s, s, C_GOLD_TILE);
-            draw_iso_box(px+4, py+6, s*0.4f, s*0.4f, 8, C_GOLD_HI, C_GOLD_ORE, C_GOLD_ORE);
-            draw_iso_box(px+13, py+13, s*0.4f, s*0.4f, 6, C_GOLD_HI, C_GOLD_ORE, C_GOLD_ORE);
+        case TILE_GOLD: {
+            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            float sc = 0.35f;
+            float tw = ui->tex_env_gold.width * sc;
+            float th = ui->tex_env_gold.height * sc;
+            DrawTextureEx(ui->tex_env_gold, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
             break;
+        }
 
-        case TILE_STONE:
-            draw_iso_quad(px, py, s, s, C_STONE_T);
-            DrawCircle(cp.x - 6, cp.y - 4, s*0.25f, C_STONE_O);
-            DrawCircle(cp.x + 6, cp.y - 2, s*0.22f, C_STONE_O);
-            DrawCircle(cp.x, cp.y + 4, s*0.18f, C_STONE_O);
+        case TILE_STONE: {
+            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            float sc = 0.35f;
+            float tw = ui->tex_env_stone.width * sc;
+            float th = ui->tex_env_stone.height * sc;
+            DrawTextureEx(ui->tex_env_stone, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
             break;
+        }
 
-        case TILE_BERRIES:
-            draw_iso_quad(px, py, s, s, C_BERRY_T);
-            DrawCircle(cp.x, cp.y - 8, s*0.35f, CLITERAL(Color){40,90,30,255});
-            DrawCircle(cp.x - 5, cp.y - 12, 3, C_BERRY_F);
-            DrawCircle(cp.x + 4, cp.y - 10, 3, C_BERRY_F);
-            DrawCircle(cp.x - 2, cp.y - 5, 3, C_BERRY_F);
+        case TILE_BERRIES: {
+            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            float sc = 0.35f;
+            float tw = ui->tex_env_berries.width * sc;
+            float th = ui->tex_env_berries.height * sc;
+            DrawTextureEx(ui->tex_env_berries, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
             break;
+        }
 
         case TILE_FARM:
             draw_iso_quad(px, py, s, s, C_FARM_T);
