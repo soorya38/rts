@@ -224,52 +224,12 @@ void building_update(GameState *gs, Building *b, float dt){
             TechType t_id = b->active_tech;
             gs->res[b->player].tech_unlocked[t_id] = true;
             b->active_tech = TECH_NONE;
-            
-            /* Apply global updates affecting existing units immediately */
-            if (t_id == TECH_IRON_WEAPONRY) {
-                for (int i=0; i<MAX_UNITS; i++) {
-                    Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player &&
-                        (u->type == UNIT_MILITIA || u->type == UNIT_MAN_AT_ARMS || u->type == UNIT_SPEARMAN)) {
-                        u->max_hp += 10;
-                        u->hp += 10;
-                        u->attack_dmg += 1;
-                    }
-                }
-            } else if (t_id == TECH_COMPOSITE_BOWS) {
-                for (int i=0; i<MAX_UNITS; i++) {
-                    Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player &&
-                        (u->type == UNIT_ARCHER || u->type == UNIT_CAVALRY_ARCHER)) {
-                        u->attack_dmg += 1;
-                        u->attack_range += 1.0f;
-                    }
-                }
-            } else if (t_id == TECH_MOUNTED_ARMOR) {
-                for (int i=0; i<MAX_UNITS; i++) {
-                    Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player &&
-                        (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT || u->type == UNIT_CAVALRY_ARCHER)) {
-                        u->max_hp += 20;
-                        u->hp += 20;
-                    }
-                }
-            } else if (t_id == TECH_SCALE_ARMOR) {
-                for (int i=0; i<MAX_UNITS; i++) {
-                    Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player &&
-                        u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT) {
-                        u->armor += 1;
-                    }
-                }
-            } else if (t_id == TECH_FORGED_ARROWS) {
-                for (int i=0; i<MAX_UNITS; i++) {
-                    Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player &&
-                        (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
-                        u->attack_dmg += 1;
-                    }
-                }
+
+            for (int i=0; i<MAX_UNITS; i++) {
+                Unit *u = &gs->units[i];
+                if (u->active && u->player == b->player) unit_refresh_upgrades(gs, u);
+            }
+            if (t_id == TECH_FORGED_ARROWS) {
                 for (int i=0; i<MAX_BUILDINGS; i++) {
                     Building *tb = &gs->buildings[i];
                     if (tb->active && tb->player == b->player && tb->attack_dmg > 0) {
@@ -316,9 +276,24 @@ Cost tech_cost(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return (Cost){75, 75, 0, 0};
         case TECH_FERTILIZER:     return (Cost){125, 125, 0, 0};
+        case TECH_LOOM:           return (Cost){50, 0, 0, 0};
+        case TECH_WHEELBARROW:    return (Cost){150, 50, 0, 0};
+        case TECH_HAND_CART:      return (Cost){300, 200, 0, 0};
         case TECH_IRON_WEAPONRY:  return (Cost){100, 0, 50, 0};
+        case TECH_CHAIN_MAIL:     return (Cost){150, 0, 100, 0};
+        case TECH_IMPERIAL_INFANTRY:return (Cost){250, 0, 150, 0};
         case TECH_COMPOSITE_BOWS: return (Cost){100, 50, 50, 0};
+        case TECH_REINFORCED_STRINGS:return (Cost){100, 100, 100, 0};
+        case TECH_IMPERIAL_ARCHERY:return (Cost){0, 250, 200, 0};
         case TECH_MOUNTED_ARMOR:  return (Cost){150, 0, 100, 0};
+        case TECH_CAVALRY_DRILL:  return (Cost){150, 0, 125, 0};
+        case TECH_IMPERIAL_CAVALRY:return (Cost){250, 0, 200, 0};
+        case TECH_SANCTITY:       return (Cost){0, 0, 100, 0};
+        case TECH_FERVOR:         return (Cost){80, 0, 120, 0};
+        case TECH_BLOCK_PRINTING: return (Cost){0, 0, 180, 0};
+        case TECH_REINFORCED_RAM: return (Cost){0, 150, 120, 0};
+        case TECH_ONAGER:         return (Cost){0, 250, 300, 0};
+        case TECH_HEAVY_SCORPION: return (Cost){0, 180, 200, 0};
         case TECH_SCALE_ARMOR:    return (Cost){100, 0, 75, 0};
         case TECH_FORGED_ARROWS:  return (Cost){75, 50, 50, 0};
         default: return (Cost){0,0,0,0};
@@ -329,12 +304,60 @@ float tech_time(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return 20.0f;
         case TECH_FERTILIZER:     return 40.0f;
+        case TECH_LOOM:           return 20.0f;
+        case TECH_WHEELBARROW:    return 35.0f;
+        case TECH_HAND_CART:      return 45.0f;
         case TECH_IRON_WEAPONRY:  return 40.0f;
+        case TECH_CHAIN_MAIL:     return 45.0f;
+        case TECH_IMPERIAL_INFANTRY:return 55.0f;
         case TECH_COMPOSITE_BOWS: return 35.0f;
+        case TECH_REINFORCED_STRINGS:return 45.0f;
+        case TECH_IMPERIAL_ARCHERY:return 55.0f;
         case TECH_MOUNTED_ARMOR:  return 50.0f;
+        case TECH_CAVALRY_DRILL:  return 45.0f;
+        case TECH_IMPERIAL_CAVALRY:return 55.0f;
+        case TECH_SANCTITY:       return 30.0f;
+        case TECH_FERVOR:         return 35.0f;
+        case TECH_BLOCK_PRINTING: return 45.0f;
+        case TECH_REINFORCED_RAM: return 35.0f;
+        case TECH_ONAGER:         return 55.0f;
+        case TECH_HEAVY_SCORPION: return 50.0f;
         case TECH_SCALE_ARMOR:    return 40.0f;
         case TECH_FORGED_ARROWS:  return 35.0f;
         default: return 10.0f;
+    }
+}
+
+int tech_age_required(TechType t) {
+    switch(t){
+        case TECH_LOOM:
+            return 0;
+        case TECH_CROP_ROTATION:
+        case TECH_IRON_WEAPONRY:
+        case TECH_COMPOSITE_BOWS:
+        case TECH_MOUNTED_ARMOR:
+        case TECH_SCALE_ARMOR:
+        case TECH_FORGED_ARROWS:
+        case TECH_WHEELBARROW:
+            return 1;
+        case TECH_FERTILIZER:
+        case TECH_CHAIN_MAIL:
+        case TECH_REINFORCED_STRINGS:
+        case TECH_CAVALRY_DRILL:
+        case TECH_SANCTITY:
+        case TECH_FERVOR:
+        case TECH_REINFORCED_RAM:
+            return 2;
+        case TECH_HAND_CART:
+        case TECH_IMPERIAL_INFANTRY:
+        case TECH_IMPERIAL_ARCHERY:
+        case TECH_IMPERIAL_CAVALRY:
+        case TECH_BLOCK_PRINTING:
+        case TECH_ONAGER:
+        case TECH_HEAVY_SCORPION:
+            return 3;
+        default:
+            return 0;
     }
 }
 
@@ -342,9 +365,24 @@ const char* tech_name(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return "Crop Rotation";
         case TECH_FERTILIZER:     return "Fertilizer";
+        case TECH_LOOM:           return "Loom";
+        case TECH_WHEELBARROW:    return "Wheelbarrow";
+        case TECH_HAND_CART:      return "Hand Cart";
         case TECH_IRON_WEAPONRY:  return "Iron Weaponry";
+        case TECH_CHAIN_MAIL:     return "Chain Mail";
+        case TECH_IMPERIAL_INFANTRY:return "Imperial Infantry";
         case TECH_COMPOSITE_BOWS: return "Composite Bows";
+        case TECH_REINFORCED_STRINGS:return "Reinforced Strings";
+        case TECH_IMPERIAL_ARCHERY:return "Imperial Archery";
         case TECH_MOUNTED_ARMOR:  return "Mounted Armor";
+        case TECH_CAVALRY_DRILL:  return "Cavalry Drill";
+        case TECH_IMPERIAL_CAVALRY:return "Imperial Cavalry";
+        case TECH_SANCTITY:       return "Sanctity";
+        case TECH_FERVOR:         return "Fervor";
+        case TECH_BLOCK_PRINTING: return "Block Printing";
+        case TECH_REINFORCED_RAM: return "Reinforced Ram";
+        case TECH_ONAGER:         return "Onager";
+        case TECH_HEAVY_SCORPION: return "Heavy Scorpion";
         case TECH_SCALE_ARMOR:    return "Scale Armor";
         case TECH_FORGED_ARROWS:  return "Forged Arrows";
         default: return "Unknown Tech";
@@ -355,9 +393,24 @@ const char* tech_desc(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return "+75 Food to new farms";
         case TECH_FERTILIZER:     return "+125 Food to new farms";
+        case TECH_LOOM:           return "+15 HP, +1 Armor (Villagers)";
+        case TECH_WHEELBARROW:    return "+2 Carry, +8 Speed (Villagers)";
+        case TECH_HAND_CART:      return "+3 Carry, +10 Speed, +10 HP (Villagers)";
         case TECH_IRON_WEAPONRY:  return "+1 Att, +10 HP (Infantry)";
+        case TECH_CHAIN_MAIL:     return "+1 Armor, +10 HP (Infantry)";
+        case TECH_IMPERIAL_INFANTRY:return "+2 Att, +15 HP (Infantry)";
         case TECH_COMPOSITE_BOWS: return "+1 Att, +1 Range (Archers)";
+        case TECH_REINFORCED_STRINGS:return "+1 Att, +1 Armor (Archers)";
+        case TECH_IMPERIAL_ARCHERY:return "+1 Att, +1 Range (Archers)";
         case TECH_MOUNTED_ARMOR:  return "+20 HP (Cavalry)";
+        case TECH_CAVALRY_DRILL:  return "+1 Att, +10 Speed (Cavalry)";
+        case TECH_IMPERIAL_CAVALRY:return "+20 HP, +1 Armor (Cavalry)";
+        case TECH_SANCTITY:       return "+15 HP (Monks)";
+        case TECH_FERVOR:         return "+12 Speed (Monks)";
+        case TECH_BLOCK_PRINTING: return "+1 Range (Monks)";
+        case TECH_REINFORCED_RAM: return "+80 HP, +4 Att (Rams)";
+        case TECH_ONAGER:         return "+12 Att, +1 Range (Mangonels)";
+        case TECH_HEAVY_SCORPION: return "+8 Att, +1 Armor/Range (Scorpions)";
         case TECH_SCALE_ARMOR:    return "+1 Armor (All Military)";
         case TECH_FORGED_ARROWS:  return "+1 Att (Archers)";
         default: return "";
@@ -368,6 +421,7 @@ void building_start_tech(GameState *gs, Building *b, TechType t) {
     if (!b->active || !b->complete || b->active_tech != TECH_NONE) return;
     if (gs->res[b->player].tech_unlocked[t]) return;
     if (b->queue_len > 0) return; /* Disallow tech when units queued */
+    if (gs->res[b->player].age < tech_age_required(t)) return;
     Cost c = tech_cost(t);
     if (!res_can_afford(&gs->res[b->player], c)) return;
     res_deduct(&gs->res[b->player], c);

@@ -404,12 +404,15 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             else if(b->active_tech == TECH_NONE &&
                     gs->res[lp].population + building_queued_population(b) >= gs->res[lp].pop_cap)
                 DrawText("Need more housing to queue more units", pad, by_start+(int)(96*sc), fs10, CLITERAL(Color){220,160,80,220});
-            TechType techs[2] = {TECH_NONE, TECH_NONE};
+            TechType techs[4] = {TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE};
             int tc = 0;
-            if(b->type == BLD_MILL){ techs[0]=TECH_CROP_ROTATION; techs[1]=TECH_FERTILIZER; tc=2; }
-            else if(b->type == BLD_BARRACKS){ techs[0]=TECH_IRON_WEAPONRY; tc=1; }
-            else if(b->type == BLD_ARCHERY_RANGE){ techs[0]=TECH_COMPOSITE_BOWS; tc=1; }
-            else if(b->type == BLD_STABLE){ techs[0]=TECH_MOUNTED_ARMOR; tc=1; }
+            if(b->type == BLD_TOWN_CENTER){ techs[0]=TECH_LOOM; techs[1]=TECH_WHEELBARROW; techs[2]=TECH_HAND_CART; tc=3; }
+            else if(b->type == BLD_MILL){ techs[0]=TECH_CROP_ROTATION; techs[1]=TECH_FERTILIZER; tc=2; }
+            else if(b->type == BLD_BARRACKS){ techs[0]=TECH_IRON_WEAPONRY; techs[1]=TECH_CHAIN_MAIL; techs[2]=TECH_IMPERIAL_INFANTRY; tc=3; }
+            else if(b->type == BLD_ARCHERY_RANGE){ techs[0]=TECH_COMPOSITE_BOWS; techs[1]=TECH_REINFORCED_STRINGS; techs[2]=TECH_IMPERIAL_ARCHERY; tc=3; }
+            else if(b->type == BLD_STABLE){ techs[0]=TECH_MOUNTED_ARMOR; techs[1]=TECH_CAVALRY_DRILL; techs[2]=TECH_IMPERIAL_CAVALRY; tc=3; }
+            else if(b->type == BLD_MONASTERY){ techs[0]=TECH_SANCTITY; techs[1]=TECH_FERVOR; techs[2]=TECH_BLOCK_PRINTING; tc=3; }
+            else if(b->type == BLD_SIEGE_WORKSHOP){ techs[0]=TECH_REINFORCED_RAM; techs[1]=TECH_ONAGER; techs[2]=TECH_HEAVY_SCORPION; tc=3; }
             else if(b->type == BLD_BLACKSMITH){ techs[0]=TECH_SCALE_ARMOR; techs[1]=TECH_FORGED_ARROWS; tc=2; }
             int tech_btn_w=(int)(107*sc), tech_btn_h=(int)(40*sc), tech_gap=(int)(5*sc);
             for(int ti=0; ti<tc; ti++){
@@ -417,7 +420,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 int tbx = bx + ti*(tech_btn_w+tech_gap);
                 if(!gs->res[lp].tech_unlocked[tt2]){
                     Cost tc2 = tech_cost(tt2);
-                    bool can = res_can_afford(&gs->res[lp], tc2) && !busy;
+                    bool age_ok = gs->res[lp].age >= tech_age_required(tt2);
+                    bool can = res_can_afford(&gs->res[lp], tc2) && !busy && age_ok;
                     char tbuf[80];
                     snprintf(tbuf,sizeof(tbuf),"%s",tech_name(tt2));
                     if(draw_button(tbuf, tbx, bby+(int)(58*sc), tech_btn_w, tech_btn_h, can)){
@@ -428,6 +432,10 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         } else building_start_tech(gs,b,tt2);
                     }
                     DrawText(tech_desc(tt2), tbx, bby+(int)(100*sc), fs10, CLITERAL(Color){160,200,255,200});
+                    if(!age_ok){
+                        static const char *AGE_NAMES[] = {"Dark Age","Feudal Age","Castle Age","Imperial Age"};
+                        DrawText(AGE_NAMES[tech_age_required(tt2)], tbx, bby+(int)(112*sc), fs9, CLITERAL(Color){220,140,60,220});
+                    }
                 } else {
                     DrawText(tech_name(tt2), tbx, bby+(int)(62*sc), fs10, CLITERAL(Color){80,220,100,220});
                     DrawText("[Researched]", tbx, bby+(int)(74*sc), fs9, CLITERAL(Color){60,180,80,200});

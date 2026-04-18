@@ -141,6 +141,126 @@ static const UnitStats STATS[UNIT_COUNT] = {
     /*SCORPION*/    {55, 16, 1, 6.0f, 8.0f,  62.0f, 3.1f,  0},
 };
 
+static bool unit_is_infantry(UnitType t){
+    return t == UNIT_MILITIA || t == UNIT_MAN_AT_ARMS || t == UNIT_SPEARMAN;
+}
+
+static bool unit_is_archery(UnitType t){
+    return t == UNIT_ARCHER || t == UNIT_SKIRMISHER || t == UNIT_CAVALRY_ARCHER;
+}
+
+static bool unit_is_cavalry(UnitType t){
+    return t == UNIT_SCOUT || t == UNIT_KNIGHT || t == UNIT_CAVALRY_ARCHER;
+}
+
+void unit_refresh_upgrades(GameState *gs, Unit *u){
+    if(!gs || !u) return;
+
+    int missing_hp = 0;
+    if(u->max_hp > 0) missing_hp = clampi(u->max_hp - u->hp, 0, u->max_hp);
+
+    const UnitStats *s = &STATS[u->type];
+    u->max_hp       = s->hp;
+    u->attack_dmg   = s->attack_dmg;
+    u->armor        = s->armor;
+    u->attack_range = s->attack_range;
+    u->vision_range = s->vision_range;
+    u->move_speed   = s->move_speed;
+    u->attack_cd    = s->attack_cd;
+    u->carry_cap    = s->carry_cap;
+
+    PlayerRes *pr = &gs->res[u->player];
+
+    if (pr->tech_unlocked[TECH_LOOM] && u->type == UNIT_VILLAGER) {
+        u->max_hp += 15;
+        u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_WHEELBARROW] && u->type == UNIT_VILLAGER) {
+        u->carry_cap += 2;
+        u->move_speed += 8.0f;
+    }
+    if (pr->tech_unlocked[TECH_HAND_CART] && u->type == UNIT_VILLAGER) {
+        u->carry_cap += 3;
+        u->move_speed += 10.0f;
+        u->max_hp += 10;
+    }
+
+    if (pr->tech_unlocked[TECH_IRON_WEAPONRY] && unit_is_infantry(u->type)) {
+        u->max_hp += 10;
+        u->attack_dmg += 1;
+    }
+    if (pr->tech_unlocked[TECH_CHAIN_MAIL] && unit_is_infantry(u->type)) {
+        u->max_hp += 10;
+        u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_IMPERIAL_INFANTRY] && unit_is_infantry(u->type)) {
+        u->max_hp += 15;
+        u->attack_dmg += 2;
+    }
+
+    if (pr->tech_unlocked[TECH_COMPOSITE_BOWS] && (u->type == UNIT_ARCHER || u->type == UNIT_CAVALRY_ARCHER)) {
+        u->attack_dmg += 1;
+        u->attack_range += 1.0f;
+    }
+    if (pr->tech_unlocked[TECH_REINFORCED_STRINGS] && unit_is_archery(u->type)) {
+        u->attack_dmg += 1;
+        u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_IMPERIAL_ARCHERY] && unit_is_archery(u->type)) {
+        u->attack_dmg += 1;
+        u->attack_range += 1.0f;
+    }
+
+    if (pr->tech_unlocked[TECH_MOUNTED_ARMOR] && unit_is_cavalry(u->type)) {
+        u->max_hp += 20;
+    }
+    if (pr->tech_unlocked[TECH_CAVALRY_DRILL] && unit_is_cavalry(u->type)) {
+        u->attack_dmg += 1;
+        u->move_speed += 10.0f;
+    }
+    if (pr->tech_unlocked[TECH_IMPERIAL_CAVALRY] && unit_is_cavalry(u->type)) {
+        u->max_hp += 20;
+        u->armor += 1;
+    }
+
+    if (pr->tech_unlocked[TECH_SANCTITY] && u->type == UNIT_MONK) {
+        u->max_hp += 15;
+    }
+    if (pr->tech_unlocked[TECH_FERVOR] && u->type == UNIT_MONK) {
+        u->move_speed += 12.0f;
+    }
+    if (pr->tech_unlocked[TECH_BLOCK_PRINTING] && u->type == UNIT_MONK) {
+        u->attack_range += 1.0f;
+    }
+
+    if (pr->tech_unlocked[TECH_REINFORCED_RAM] && u->type == UNIT_BATTERING_RAM) {
+        u->max_hp += 80;
+        u->attack_dmg += 4;
+    }
+    if (pr->tech_unlocked[TECH_ONAGER] && u->type == UNIT_MANGONEL) {
+        u->attack_dmg += 12;
+        u->attack_range += 1.0f;
+    }
+    if (pr->tech_unlocked[TECH_HEAVY_SCORPION] && u->type == UNIT_SCORPION) {
+        u->attack_dmg += 8;
+        u->armor += 1;
+        u->attack_range += 1.0f;
+    }
+
+    if (pr->tech_unlocked[TECH_SCALE_ARMOR] && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT) {
+        u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_FORGED_ARROWS] &&
+        (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
+        u->attack_dmg += 1;
+        u->attack_range += 1.0f;
+    }
+
+    if (u->hp <= 0) u->hp = u->max_hp;
+    else u->hp = clampi(u->max_hp - missing_hp, 1, u->max_hp);
+    if (u->attack_timer > u->attack_cd) u->attack_timer = u->attack_cd;
+}
+
 void unit_init_stats(GameState *gs, Unit *u){
     const UnitStats *s = &STATS[u->type];
     u->hp = u->max_hp   = s->hp;
@@ -163,28 +283,8 @@ void unit_init_stats(GameState *gs, Unit *u){
     u->path_len         = 0;
     u->path_idx         = 0;
     u->death_timer      = 0.8f;
-    
-    if (gs) {
-        if (gs->res[u->player].tech_unlocked[TECH_IRON_WEAPONRY] && (u->type == UNIT_MILITIA || u->type == UNIT_MAN_AT_ARMS)) {
-            u->max_hp += 10;
-            u->hp += 10;
-            u->attack_dmg += 1;
-        }
-        if (gs->res[u->player].tech_unlocked[TECH_COMPOSITE_BOWS] && u->type == UNIT_ARCHER) {
-            u->attack_dmg += 1;
-            u->attack_range += 1.0f;
-        }
-        if (gs->res[u->player].tech_unlocked[TECH_FORGED_ARROWS] &&
-            (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
-            u->attack_dmg += 1;
-            u->attack_range += 1.0f;
-        }
-        if (gs->res[u->player].tech_unlocked[TECH_MOUNTED_ARMOR] &&
-            (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT || u->type == UNIT_CAVALRY_ARCHER)) {
-            u->max_hp += 20;
-            u->hp += 20;
-        }
-    }
+
+    if (gs) unit_refresh_upgrades(gs, u);
 }
 
 int unit_spawn(GameState *gs, int player, UnitType type, float wx, float wy){

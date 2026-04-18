@@ -125,9 +125,24 @@ typedef enum { RES_FOOD=0, RES_WOOD, RES_GOLD, RES_STONE, RES_COUNT } ResType;
 typedef enum {
     TECH_CROP_ROTATION=0,
     TECH_FERTILIZER,
+    TECH_LOOM,
+    TECH_WHEELBARROW,
+    TECH_HAND_CART,
     TECH_IRON_WEAPONRY,
+    TECH_CHAIN_MAIL,
+    TECH_IMPERIAL_INFANTRY,
     TECH_COMPOSITE_BOWS,
+    TECH_REINFORCED_STRINGS,
+    TECH_IMPERIAL_ARCHERY,
     TECH_MOUNTED_ARMOR,
+    TECH_CAVALRY_DRILL,
+    TECH_IMPERIAL_CAVALRY,
+    TECH_SANCTITY,
+    TECH_FERVOR,
+    TECH_BLOCK_PRINTING,
+    TECH_REINFORCED_RAM,
+    TECH_ONAGER,
+    TECH_HEAVY_SCORPION,
     TECH_SCALE_ARMOR,       /* Blacksmith: +1 armor all military */
     TECH_FORGED_ARROWS,     /* Blacksmith: +1 atk archers */
     TECH_COUNT,
@@ -334,6 +349,7 @@ int pathfind(GameState *gs,int sx,int sy,int ex,int ey,PathCell *out,int max_len
 
 /* unit.c */
 void unit_init_stats(GameState *gs, Unit *u);
+void unit_refresh_upgrades(GameState *gs, Unit *u);
 int  unit_spawn(GameState *gs,int player,UnitType type,float wx,float wy);
 bool unit_tile_occupied(GameState *gs, int tx, int ty);
 bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
@@ -380,6 +396,7 @@ const char* building_name(BldType t);
 /* Technologies */
 Cost  tech_cost(TechType t);
 float tech_time(TechType t);
+int   tech_age_required(TechType t);
 const char* tech_name(TechType t);
 const char* tech_desc(TechType t);
 void  building_start_tech(GameState *gs, Building *b, TechType t);
