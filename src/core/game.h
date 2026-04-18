@@ -288,6 +288,8 @@ typedef struct {
     BldType type;
     int     ghost_tx, ghost_ty;
     bool    valid;
+    bool    dragging;
+    int     drag_start_tx, drag_start_ty;
 } BuildMode;
 
 typedef enum {
@@ -429,6 +431,26 @@ int   tech_age_required(TechType t);
 const char* tech_name(TechType t);
 const char* tech_desc(TechType t);
 void  building_start_tech(GameState *gs, Building *b, TechType t);
+
+static inline bool building_is_walllike(BldType type) {
+    return type == BLD_WALL || type == BLD_GATE;
+}
+
+static inline int get_wall_line_points(int x0, int y0, int x1, int y1, int *out_x, int *out_y, int max_pts) {
+    int dx = (int)fabs((float)x1 - x0), sx = x0 < x1 ? 1 : -1;
+    int dy = -(int)fabs((float)y1 - y0), sy = y0 < y1 ? 1 : -1;
+    int err = dx + dy, e2;
+    int count = 0;
+    while (count < max_pts) {
+        out_x[count] = x0; out_y[count] = y0;
+        count++;
+        if (x0 == x1 && y0 == y1) break;
+        e2 = 2 * err;
+        if (e2 >= dy) { err += dy; x0 += sx; }
+        if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+    return count;
+}
 
 /* resources.c */
 bool  res_can_afford(PlayerRes *pr,Cost c);

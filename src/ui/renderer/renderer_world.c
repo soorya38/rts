@@ -14,10 +14,6 @@ extern void draw_fog(GameState *gs, int x, int y);
 
 /* ─── Building rendering ─────────────────────────────────── */
 
-static bool building_is_walllike(BldType type){
-    return type == BLD_WALL || type == BLD_GATE;
-}
-
 static bool wall_connected(GameState *gs, Building *b, int dx, int dy){
     int nx = b->tx + dx;
     int ny = b->ty + dy;
@@ -316,20 +312,36 @@ static void draw_selection_box(GameState *gs, UIState *ui){
 /* ─── Build ghost ─────────────────────────────────────────── */
 static void draw_build_ghost(GameState *gs){
     if(!gs->build_mode.active) return;
-    int tx=gs->build_mode.ghost_tx, ty=gs->build_mode.ghost_ty;
     int tw=building_tw(gs->build_mode.type), th=building_th(gs->build_mode.type);
-    float px=(float)(tx*TILE_SIZE),py=(float)(ty*TILE_SIZE);
-    float w=(float)(tw*TILE_SIZE),h=(float)(th*TILE_SIZE);
-    Color gc=gs->build_mode.valid ?
-        CLITERAL(Color){80,220,100,100}:CLITERAL(Color){220,60,60,100};
-    draw_iso_quad(px, py, w, h, gc);
-    Color lc=gs->build_mode.valid ? GREEN : RED;
-    Vector2 p1 = to_rvec2(world_to_iso(px, py));
-    Vector2 p2 = to_rvec2(world_to_iso(px + w, py));
-    Vector2 p3 = to_rvec2(world_to_iso(px + w, py + h));
-    Vector2 p4 = to_rvec2(world_to_iso(px, py + h));
-    DrawLineEx(p1, p2, 2.0f, lc); DrawLineEx(p2, p3, 2.0f, lc);
-    DrawLineEx(p3, p4, 2.0f, lc); DrawLineEx(p4, p1, 2.0f, lc);
+    
+    int pts_x[200], pts_y[200];
+    int pt_count = 1;
+    pts_x[0] = gs->build_mode.ghost_tx;
+    pts_y[0] = gs->build_mode.ghost_ty;
+    
+    if (building_is_walllike(gs->build_mode.type) && gs->build_mode.dragging) {
+        pt_count = get_wall_line_points(gs->build_mode.drag_start_tx, gs->build_mode.drag_start_ty, gs->build_mode.ghost_tx, gs->build_mode.ghost_ty, pts_x, pts_y, 200);
+    }
+
+    int lp = net_get_local_player();
+    for (int p = 0; p < pt_count; p++) {
+        int tx = pts_x[p], ty = pts_y[p];
+        bool valid = map_is_buildable(gs, tx, ty, tw, th) &&
+                     res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));
+
+        float px=(float)(tx*TILE_SIZE),py=(float)(ty*TILE_SIZE);
+        float w=(float)(tw*TILE_SIZE),h=(float)(th*TILE_SIZE);
+        Color gc=valid ?
+            CLITERAL(Color){80,220,100,100}:CLITERAL(Color){220,60,60,100};
+        draw_iso_quad(px, py, w, h, gc);
+        Color lc=valid ? GREEN : RED;
+        Vector2 p1 = to_rvec2(world_to_iso(px, py));
+        Vector2 p2 = to_rvec2(world_to_iso(px + w, py));
+        Vector2 p3 = to_rvec2(world_to_iso(px + w, py + h));
+        Vector2 p4 = to_rvec2(world_to_iso(px, py + h));
+        DrawLineEx(p1, p2, 2.0f, lc); DrawLineEx(p2, p3, 2.0f, lc);
+        DrawLineEx(p3, p4, 2.0f, lc); DrawLineEx(p4, p1, 2.0f, lc);
+    }
 }
 
 /* ─── Master render ───────────────────────────────────────── */

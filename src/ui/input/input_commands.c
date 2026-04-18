@@ -37,52 +37,80 @@ static void update_build_mode(GameState *gs, UIState *ui) {
     gs->build_mode.valid = map_is_buildable(gs, tx, ty, tw, th) &&
                            res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));
 
+    bool is_wall = building_is_walllike(gs->build_mode.type);
+
 #if defined(PLATFORM_ANDROID) || defined(ANDROID)
-    bool place_trigger = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+    bool press_trigger = IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || (GetTouchPointCount() > 0 && IsGestureDetected(GESTURE_TAP));
+    bool release_trigger = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+    bool place_trigger = release_trigger && !is_wall;
 #else
-    bool place_trigger = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool press_trigger = IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+    bool release_trigger = IsMouseButtonReleased(MOUSE_LEFT_BUTTON);
+    bool place_trigger = press_trigger && !is_wall;
 #endif
 
-    if (place_trigger && gs->build_mode.valid) {
-        if (g_net_active) {
-            NetPacket pkt = {0};
-            pkt.type = PKT_PLACE_BLD;
-            pkt.player = g_local_player_id;
-            pkt.extra = gs->build_mode.type;
-            pkt.tx = tx;
-            pkt.ty = ty;
-            int uc = 0;
-            for (int i = 0; i < ui->sel_count && uc < 64; i++) {
-                Unit *u = &gs->units[ui->sel_units[i]];
-                if (u->active && u->player == g_local_player_id && u->type == UNIT_VILLAGER) {
-                    pkt.units[uc++] = ui->sel_units[i];
-                }
+    if (is_wall) {
+        if (press_trigger) {
+            gs->build_mode.dragging = true;
+            gs->build_mode.drag_start_tx = tx;
+            gs->build_mode.drag_start_ty = ty;
+        }
+    }
+
+    if (place_trigger || (is_wall && release_trigger && gs->build_mode.dragging)) {
+        int pts_x[200], pts_y[200];
+        int pt_count = 1;
+        pts_x[0] = tx; pts_y[0] = ty;
+
+        if (is_wall && gs->build_mode.dragging) {
+            pt_count = get_wall_line_points(gs->build_mode.drag_start_tx, gs->build_mode.drag_start_ty, tx, ty, pts_x, pts_y, 200);
+            gs->build_mode.dragging = false;
+        }
+
+        for (int p = 0; p < pt_count; p++) {
+            int cx = pts_x[p], cy = pts_y[p];
+            if (!map_is_buildable(gs, cx, cy, tw, th) || !res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type))) {
+                continue;
             }
-            if (uc == 0) {
-                int vid = unit_find_idle_villager(gs, g_local_player_id);
-                if (vid >= 0) pkt.units[uc++] = vid;
-            }
-            pkt.unit_count = uc;
-            net_dispatch_packet(gs, &pkt);
-            if (!IsKeyDown(KEY_LEFT_SHIFT)) gs->build_mode.active = false;
-        } else {
-            int lp = net_get_local_player();
-            int bid = building_place(gs, lp, gs->build_mode.type, tx, ty);
-            if (bid >= 0) {
-                bool any = false;
-                for (int i = 0; i < ui->sel_count; i++) {
+
+            if (g_net_active) {
+                NetPacket pkt = {0};
+                pkt.type = PKT_PLACE_BLD;
+                pkt.player = g_local_player_id;
+                pkt.extra = gs->build_mode.type;
+                pkt.tx = cx;
+                pkt.ty = cy;
+                int uc = 0;
+                for (int i = 0; i < ui->sel_count && uc < 64; i++) {
                     Unit *u = &gs->units[ui->sel_units[i]];
-                    if (u->active && u->player == lp && u->type == UNIT_VILLAGER) {
-                        unit_give_build_order(gs, u, bid); any = true;
+                    if (u->active && u->player == g_local_player_id && u->type == UNIT_VILLAGER) {
+                        pkt.units[uc++] = ui->sel_units[i];
                     }
                 }
-                if (!any) {
-                    int vid = unit_find_idle_villager(gs, lp);
-                    if (vid >= 0) unit_give_build_order(gs, &gs->units[vid], bid);
+                if (uc == 0) {
+                    int vid = unit_find_idle_villager(gs, g_local_player_id);
+                    if (vid >= 0) pkt.units[uc++] = vid;
                 }
-                if (!IsKeyDown(KEY_LEFT_SHIFT)) gs->build_mode.active = false;
+                pkt.unit_count = uc;
+                net_dispatch_packet(gs, &pkt);
+            } else {
+                int bid = building_place(gs, lp, gs->build_mode.type, cx, cy);
+                if (bid >= 0) {
+                    bool any = false;
+                    for (int i = 0; i < ui->sel_count; i++) {
+                        Unit *u = &gs->units[ui->sel_units[i]];
+                        if (u->active && u->player == lp && u->type == UNIT_VILLAGER) {
+                            unit_give_build_order(gs, u, bid); any = true;
+                        }
+                    }
+                    if (!any) {
+                        int vid = unit_find_idle_villager(gs, lp);
+                        if (vid >= 0) unit_give_build_order(gs, &gs->units[vid], bid);
+                    }
+                }
             }
         }
+        if (!IsKeyDown(KEY_LEFT_SHIFT)) gs->build_mode.active = false;
     }
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) gs->build_mode.active = false;
 }

@@ -243,8 +243,29 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
         building_on_complete(gs, b);
         int old_cap = gs->res[b->player].pop_cap;
         gs->res[b->player].pop_cap=pop_cap_from_buildings(gs,b->player);
-        printf("House completed for player %d: pop_cap %d -> %d\n", b->player, old_cap, gs->res[b->player].pop_cap);
-        u->build_id=-1; u->state=US_IDLE;
+        printf("Building completed for player %d: pop_cap %d -> %d\n", b->player, old_cap, gs->res[b->player].pop_cap);
+        
+        // Auto-find nearest uncompleted foundation to continue building
+        int next_bid = -1;
+        float best_dist = 4.0f; // search up to a short distance (e.g. 4 tiles)
+        for (int i=0; i < MAX_BUILDINGS; i++) {
+            Building *nb = &gs->buildings[i];
+            if (nb->active && nb->player == b->player && !nb->complete && i != b->id) {
+                float dx = (nb->tx + nb->tw*0.5f) - (b->tx + b->tw*0.5f);
+                float dy = (nb->ty + nb->th*0.5f) - (b->ty + b->th*0.5f);
+                float dist = sqrtf(dx*dx + dy*dy);
+                if (dist < best_dist) {
+                    best_dist = dist;
+                    next_bid = i;
+                }
+            }
+        }
+        
+        if (next_bid >= 0) {
+            unit_give_build_order(gs, u, next_bid);
+        } else {
+            u->build_id=-1; u->state=US_IDLE;
+        }
     }
 }
 
