@@ -147,7 +147,32 @@ static void clear_zone(GameState *gs,int cx,int cy,int r){
     }
 }
 
-void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
+static bool point_is_safe_from_starts(int x, int y, const int *start_x, const int *start_y,
+                                      int num_players, int safe_r){
+    for(int i=0; i<num_players; i++){
+        if(abs(x - start_x[i]) <= safe_r && abs(y - start_y[i]) <= safe_r) return false;
+    }
+    return true;
+}
+
+static void pick_quadrant_start(int quadrant, int *out_x, int *out_y){
+    const int margin = 15;
+    const int mid_x = MAP_W / 2;
+    const int mid_y = MAP_H / 2;
+
+    int min_x = (quadrant == 0 || quadrant == 2) ? margin : mid_x + 8;
+    int max_x = (quadrant == 0 || quadrant == 2) ? mid_x - 8 : MAP_W - margin - 1;
+    int min_y = (quadrant == 0 || quadrant == 1) ? margin : mid_y + 8;
+    int max_y = (quadrant == 0 || quadrant == 1) ? mid_y - 8 : MAP_H - margin - 1;
+
+    if(max_x < min_x) max_x = min_x;
+    if(max_y < min_y) max_y = min_y;
+
+    *out_x = min_x + (int)(rng_next() % (uint32_t)(max_x - min_x + 1));
+    *out_y = min_y + (int)(rng_next() % (uint32_t)(max_y - min_y + 1));
+}
+
+void map_init(GameState *gs, int *start_x, int *start_y, int num_players){
     /* Base: all grass */
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
         gs->map[y][x].type         = TILE_GRASS;
@@ -158,31 +183,47 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
         gs->map[y][x].fog[1]       = FOG_HIDDEN;
     }
 
-    /* ── Randomise start corners ──────────────────────────────────
-     * Four corners (centre tile of each corner pocket).
-     * Player 1 gets one at random; AI gets the diagonally opposite
-     * corner so the two starts are always maximally separated.
-     *
-     *   corner 0: top-left      corner 1: top-right
-     *   corner 2: bottom-left   corner 3: bottom-right
-     * opposite pairs: (0,3)  (1,2)
+    /* ── Randomise start slots ────────────────────────────────────
+     * Pick one random position per quadrant so starts are still well
+     * separated, but no longer glued to fixed corners.
+     *   0: top-left   1: top-right   2: bottom-left   3: bottom-right
      * ─────────────────────────────────────────────────────────── */
-    /* TC is 4x4; keep it well away from the edge so we don't start the game staring at the void */
-    static const int CX[4] = { 15,          MAP_W-16,   15,          MAP_W-16 };
-    static const int CY[4] = { 15,          15,         MAP_H-16,    MAP_H-16 };
+    int quad_x[4], quad_y[4];
+    for(int i=0; i<4; i++) pick_quadrant_start(i, &quad_x[i], &quad_y[i]);
 
-    /* Return chosen positions to caller (keeping p1/p2 for compatibility) */
-    *p1_x = CX[0]; *p1_y = CY[0];
-    *p2_x = CX[3]; *p2_y = CY[3];
+    int chosen_quads[4] = {0, 3, 1, 2};
+    if(num_players <= 1){
+        chosen_quads[0] = (int)(rng_next() % 4);
+    } else if(num_players == 2){
+        if((rng_next() & 1u) == 0u){
+            chosen_quads[0] = 0; chosen_quads[1] = 3;
+        } else {
+            chosen_quads[0] = 1; chosen_quads[1] = 2;
+        }
+    } else if(num_players == 3){
+        int quads[4] = {0, 1, 2, 3};
+        for(int i=3; i>0; i--){
+            int j = (int)(rng_next() % (uint32_t)(i + 1));
+            int tmp = quads[i]; quads[i] = quads[j]; quads[j] = tmp;
+        }
+        chosen_quads[0] = quads[0];
+        chosen_quads[1] = quads[1];
+        chosen_quads[2] = quads[2];
+    } else {
+        int quads[4] = {0, 1, 2, 3};
+        for(int i=3; i>0; i--){
+            int j = (int)(rng_next() % (uint32_t)(i + 1));
+            int tmp = quads[i]; quads[i] = quads[j]; quads[j] = tmp;
+        }
+        for(int i=0; i<4; i++) chosen_quads[i] = quads[i];
+    }
+
+    for(int i=0; i<num_players; i++){
+        start_x[i] = quad_x[chosen_quads[i]];
+        start_y[i] = quad_y[chosen_quads[i]];
+    }
 
     const int SAFE_R = 10;     /* tiles to keep clear of random features */
-
-    /* Helper: is a point safely away from all 4 start zones? */
-    #define safe_from_starts(cx,cy) \
-        (abs((cx)-CX[0])>SAFE_R || abs((cy)-CY[0])>SAFE_R) && \
-        (abs((cx)-CX[1])>SAFE_R || abs((cy)-CY[1])>SAFE_R) && \
-        (abs((cx)-CX[2])>SAFE_R || abs((cy)-CY[2])>SAFE_R) && \
-        (abs((cx)-CX[3])>SAFE_R || abs((cy)-CY[3])>SAFE_R)
 
     /* Random int in [lo, hi] */
     #define rrand(lo,hi) ((int)(rng_next()%((hi)-(lo)+1))+(lo))
@@ -195,7 +236,7 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
             cx = rrand(12, MAP_W-13);
             cy = rrand(12, MAP_H-13);
             tries++;
-        } while(!safe_from_starts(cx,cy) && tries<20);
+        } while(!point_is_safe_from_starts(cx, cy, start_x, start_y, num_players, SAFE_R) && tries<20);
         int rw = rrand(3, 7), rh = rrand(2, 5);
         place_water_body(gs, cx, cy, rw, rh);
     }
@@ -208,7 +249,7 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
             cx = rrand(4, MAP_W-5);
             cy = rrand(4, MAP_H-5);
             tries++;
-        } while(!safe_from_starts(cx,cy) && tries<20);
+        } while(!point_is_safe_from_starts(cx, cy, start_x, start_y, num_players, SAFE_R) && tries<20);
         int r = rrand(2, 4);
         place_forest_cluster(gs, cx, cy, r);
     }
@@ -221,7 +262,7 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
             cx = rrand(4, MAP_W-5);
             cy = rrand(4, MAP_H-5);
             tries++;
-        } while(!safe_from_starts(cx,cy) && tries<20);
+        } while(!point_is_safe_from_starts(cx, cy, start_x, start_y, num_players, SAFE_R) && tries<20);
         place_resource_patch(gs, cx, cy, TILE_GOLD, rrand(1,2), rrand(600,900));
     }
 
@@ -233,7 +274,7 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
             cx = rrand(4, MAP_W-5);
             cy = rrand(4, MAP_H-5);
             tries++;
-        } while(!safe_from_starts(cx,cy) && tries<20);
+        } while(!point_is_safe_from_starts(cx, cy, start_x, start_y, num_players, SAFE_R) && tries<20);
         place_resource_patch(gs, cx, cy, TILE_STONE, rrand(1,2), rrand(500,800));
     }
 
@@ -245,17 +286,16 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
             cx = rrand(4, MAP_W-5);
             cy = rrand(4, MAP_H-5);
             tries++;
-        } while(!safe_from_starts(cx,cy) && tries<20);
+        } while(!point_is_safe_from_starts(cx, cy, start_x, start_y, num_players, SAFE_R) && tries<20);
         place_resource_patch(gs, cx, cy, TILE_BERRIES, 1, rrand(400,600));
     }
 
-    #undef safe_from_starts
     #undef rrand
 
-    /* ── Clear starter zones and place starting resources for ALL 4 corners ── */
-    for(int i=0; i<4; i++) {
-        clear_zone(gs, CX[i], CY[i], 5);
-        place_start_resources(gs, CX[i], CY[i]);
+    /* ── Clear starter zones and place starting resources for each player ── */
+    for(int i=0; i<num_players; i++) {
+        clear_zone(gs, start_x[i], start_y[i], 5);
+        place_start_resources(gs, start_x[i], start_y[i]);
     }
 }
 

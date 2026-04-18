@@ -277,18 +277,12 @@ void game_set_alert(GameState *gs, const char *msg){
 void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
     game_init_match(gs, seed, num_players, GAME_MODE_STANDARD);
 
-    int dmx, dmy;
-    map_init(gs, &dmx, &dmy, &dmx, &dmy);
-
-    static const int CX[4] = { 15,          MAP_W-16,   15,          MAP_W-16 };
-    static const int CY[4] = { 15,          15,         MAP_H-16,    MAP_H-16 };
+    int start_x[NUM_PLAYERS] = {0};
+    int start_y[NUM_PLAYERS] = {0};
+    map_init(gs, start_x, start_y, gs->num_players);
 
     for (int p=0; p < gs->num_players; p++) {
-        int corner = p;
-        if (gs->num_players == 2) corner = (p == 0) ? 0 : 3;
-        else if (gs->num_players == 3 && p == 2) corner = 3;
-
-        int tx = CX[corner], ty = CY[corner];
+        int tx = start_x[p], ty = start_y[p];
         buildings_init_player(gs, p, tx - 2, ty - 2);
         gs->res[p].pop_cap = pop_cap_from_buildings(gs, p);
 
