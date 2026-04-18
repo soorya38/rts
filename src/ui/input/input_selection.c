@@ -81,6 +81,32 @@ static bool building_hit_info(Building *b, UIState *ui, Vector2 wp,
     return true;
 }
 
+static int wall_building_at_point(GameState *gs, Vector2 wp, int player_mode, bool require_complete){
+    Vec2 c = iso_to_world(wp.x, wp.y);
+    int tx = (int)(c.x / TILE_SIZE);
+    int ty = (int)(c.y / TILE_SIZE);
+    if(!map_in_bounds(tx, ty)) return -1;
+
+    int bid = gs->map[ty][tx].building_id;
+    if(bid < 0 || bid >= MAX_BUILDINGS) return -1;
+
+    int lp = net_get_local_player();
+    Building *b = &gs->buildings[bid];
+    if(!b->active || !building_is_walllike(b->type)) return -1;
+    if(require_complete && !b->complete) return -1;
+
+    if(player_mode == 0 && b->player != lp) return -1;
+    if(player_mode == 1){
+        if(b->player == lp) return -1;
+        if(gs->map[ty][tx].fog[lp] == FOG_HIDDEN) return -1;
+    }
+    if(player_mode == 2){
+        if(b->player != lp || b->complete) return -1;
+    }
+
+    return bid;
+}
+
 int find_friendly_unit_at(GameState *gs, Vector2 wp) {
     int lp = net_get_local_player();
     for (int i = 0; i < MAX_UNITS; i++) {
@@ -92,6 +118,8 @@ int find_friendly_unit_at(GameState *gs, Vector2 wp) {
 }
 int find_friendly_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     int lp = net_get_local_player();
+    int wall_id = wall_building_at_point(gs, wp, 0, false);
+    if(wall_id >= 0) return wall_id;
     int best_id = -1;
     int best_rank = -1;
     float best_dist2 = 0.0f;
@@ -128,6 +156,8 @@ int find_enemy_unit_at(GameState *gs, Vector2 wp) {
 }
 int find_enemy_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     int lp = net_get_local_player();
+    int wall_id = wall_building_at_point(gs, wp, 1, false);
+    if(wall_id >= 0) return wall_id;
     int best_id = -1;
     int best_rank = -1;
     float best_dist2 = 0.0f;
@@ -154,6 +184,8 @@ int find_enemy_building_at(GameState *gs, UIState *ui, Vector2 wp) {
 }
 int find_unfinished_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     int lp = net_get_local_player();
+    int wall_id = wall_building_at_point(gs, wp, 2, false);
+    if(wall_id >= 0) return wall_id;
     int best_id = -1;
     int best_rank = -1;
     float best_dist2 = 0.0f;
@@ -373,6 +405,11 @@ void handle_left_up(GameState *gs, UIState *ui) {
                 ui->sel_tile_x = -1; ui->sel_tile_y = -1;
             }
         }
+    } else if (fb >= 0 && (!gs->buildings[fb].complete || !has_villagers)) {
+        clear_selection(gs, ui);
+        ui->sel_building = fb;
+        gs->buildings[fb].selected = true;
+        ui->sel_tile_x = -1; ui->sel_tile_y = -1;
     } else if (ui->sel_count > 0) {
         /* Units selected, clicked on world → context command (move/attack/gather/build/dropoff) */
         issue_command_at(gs, ui, we);
@@ -443,6 +480,11 @@ void handle_tap(GameState *gs, UIState *ui) {
                 ui->sel_tile_x = -1; ui->sel_tile_y = -1;
             }
         }
+    } else if (fb >= 0 && (!gs->buildings[fb].complete || !has_villagers)) {
+        clear_selection(gs, ui);
+        ui->sel_building = fb;
+        gs->buildings[fb].selected = true;
+        ui->sel_tile_x = -1; ui->sel_tile_y = -1;
     } else if (ui->sel_count > 0) {
         issue_command_at(gs, ui, we);
         Vector2 cart = to_rvec2(iso_to_world(we.x, we.y));

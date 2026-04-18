@@ -223,6 +223,21 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             DrawText(buf,pad,by_start+(int)(56*sc),fs12,CLITERAL(Color){200,180,100,255});
             if(builders==0) DrawText("No builders!  Select a villager and click this building",pad,by_start+(int)(72*sc),fs11,CLITERAL(Color){220,100,60,230});
             else { snprintf(buf,sizeof(buf),"%d builder%s  (%dx speed)",builders,builders>1?"s":"",builders); DrawText(buf,pad,by_start+(int)(72*sc),fs11,CLITERAL(Color){120,200,100,220}); }
+            if(b->player == net_get_local_player() && b->type != BLD_TOWN_CENTER){
+                Cost refund = building_cost(b->type);
+                snprintf(buf, sizeof(buf), "Demolish\n+%dW +%dF", (int)(refund.wood*0.95f), (int)(refund.food*0.95f));
+                if(draw_button(buf, pad, by_start+(int)(80*sc), (int)(115*sc), (int)(36*sc), true)){
+                    int sell_id = ui->sel_building;
+                    ui->sel_building = -1;
+                    if(g_net_active){
+                        NetPacket pkt={0}; pkt.type=PKT_DELETE_BLD;
+                        pkt.player=net_get_local_player(); pkt.target_id=sell_id;
+                        net_dispatch_packet(gs,&pkt);
+                    } else {
+                        building_sell(gs, sell_id);
+                    }
+                }
+            }
             return;
         }
         if(b->active_tech != TECH_NONE){

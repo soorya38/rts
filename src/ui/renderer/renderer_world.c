@@ -163,15 +163,33 @@ static void draw_selected_rally_point(GameState *gs, UIState *ui){
     DrawCircleV(preview, 5.0f, CLITERAL(Color){240, 240, 180, 120});
 }
 
+static void draw_building_outline(float px, float py, float w, float h, float pad, float line_w, Color color){
+    Vector2 p1 = to_rvec2(world_to_iso(px - pad,     py - pad));
+    Vector2 p2 = to_rvec2(world_to_iso(px + w + pad, py - pad));
+    Vector2 p3 = to_rvec2(world_to_iso(px + w + pad, py + h + pad));
+    Vector2 p4 = to_rvec2(world_to_iso(px - pad,     py + h + pad));
+    DrawLineEx(p1, p2, line_w, color);
+    DrawLineEx(p2, p3, line_w, color);
+    DrawLineEx(p3, p4, line_w, color);
+    DrawLineEx(p4, p1, line_w, color);
+}
+
 static void draw_building(GameState *gs, UIState *ui, Building *b){
     float px=(float)(b->tx*TILE_SIZE), py=(float)(b->ty*TILE_SIZE);
     float w=(float)(b->tw*TILE_SIZE), h=(float)(b->th*TILE_SIZE);
     Color mc=player_color(b->player);
     Color dc=player_color_dark(b->player);
+    int lp = net_get_local_player();
+    bool hovered = false;
+    for (int i = 0; i < MAX_BUILDINGS; i++) if (&gs->buildings[i] == b && ui->hover_building == i) hovered = true;
 
     if(!b->complete){
         draw_shadow(px + w * 0.5f, py + h * 0.5f, w * 0.8f, h * 0.8f);
         draw_construction(px,py,w,h,b->construction,mc);
+        if(b->selected && b->player==lp)
+            draw_building_outline(px, py, w, h, 2.0f, 2.0f, C_SEL);
+        else if(hovered)
+            draw_building_outline(px, py, w, h, 0.0f, 1.5f, C_HOVER);
         draw_hp_bar(px+w*0.5f,py+h*0.5f,w*0.8f,(int)(b->construction*100),100,25);
         return;
     }
@@ -198,25 +216,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     if(b->hp <= b->max_hp / 2) draw_smoke(px + w*0.4f, py + h*0.4f, gs->game_time, b->id);
     if(b->hp <= b->max_hp / 4) draw_smoke(px + w*0.6f, py + h*0.6f, gs->game_time, b->id + 100);
 
-    int lp = net_get_local_player();
     if(b->selected && b->player==lp){
-        Vector2 p1 = to_rvec2(world_to_iso(px - 2, py - 2));
-        Vector2 p2 = to_rvec2(world_to_iso(px + w + 2, py - 2));
-        Vector2 p3 = to_rvec2(world_to_iso(px + w + 2, py + h + 2));
-        Vector2 p4 = to_rvec2(world_to_iso(px - 2, py + h + 2));
-        DrawLineEx(p1, p2, 2, C_SEL); DrawLineEx(p2, p3, 2, C_SEL);
-        DrawLineEx(p3, p4, 2, C_SEL); DrawLineEx(p4, p1, 2, C_SEL);
+        draw_building_outline(px, py, w, h, 2.0f, 2.0f, C_SEL);
     }
 
-    bool hovered = false;
-    for (int i = 0; i < MAX_BUILDINGS; i++) if (&gs->buildings[i] == b && ui->hover_building == i) hovered = true;
     if (hovered) {
-        Vector2 p1 = to_rvec2(world_to_iso(px, py));
-        Vector2 p2 = to_rvec2(world_to_iso(px + w, py));
-        Vector2 p3 = to_rvec2(world_to_iso(px + w, py + h));
-        Vector2 p4 = to_rvec2(world_to_iso(px, py + h));
-        DrawLineEx(p1, p2, 1.5f, C_HOVER); DrawLineEx(p2, p3, 1.5f, C_HOVER);
-        DrawLineEx(p3, p4, 1.5f, C_HOVER); DrawLineEx(p4, p1, 1.5f, C_HOVER);
+        draw_building_outline(px, py, w, h, 0.0f, 1.5f, C_HOVER);
     }
 
     draw_hp_bar(px+w*0.5f,py+h*0.5f,w*0.8f,b->hp,b->max_hp,35);
@@ -309,10 +314,86 @@ static void draw_selection_box(GameState *gs, UIState *ui){
     DrawRectangleLinesEx((Rectangle){x,y,w,h},1.5f,C_SEL);
 }
 
+static bool build_hover_tile(UIState *ui, int *out_tx, int *out_ty){
+    Vector2 mp = GetMousePosition();
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    if(GetTouchPointCount() > 0) mp = GetTouchPosition(0);
+#endif
+    Vector2 wp = GetScreenToWorld2D(mp, ui->camera);
+    Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
+    int tx = (int)(cart.x / TILE_SIZE);
+    int ty = (int)(cart.y / TILE_SIZE);
+    if(!map_in_bounds(tx, ty)) return false;
+    *out_tx = tx;
+    *out_ty = ty;
+    return true;
+}
+
+static void draw_build_grid(GameState *gs, UIState *ui){
+    if(!gs->build_mode.active) return;
+
+    int lp = net_get_local_player();
+    int hover_tx = gs->build_mode.ghost_tx;
+    int hover_ty = gs->build_mode.ghost_ty;
+    int tw = building_tw(gs->build_mode.type);
+    int th = building_th(gs->build_mode.type);
+    float s = (float)TILE_SIZE;
+
+    if(build_hover_tile(ui, &hover_tx, &hover_ty) == false){
+        hover_tx += tw / 2;
+        hover_ty += th / 2;
+    }
+
+    int radius = 10;
+    int x0 = clampi(hover_tx - radius, 0, MAP_W - 1);
+    int x1 = clampi(hover_tx + radius, 0, MAP_W - 1);
+    int y0 = clampi(hover_ty - radius, 0, MAP_H - 1);
+    int y1 = clampi(hover_ty + radius, 0, MAP_H - 1);
+
+    for(int y=y0; y<=y1; y++){
+        for(int x=x0; x<=x1; x++){
+            if(gs->map[y][x].fog[lp] == FOG_HIDDEN) continue;
+            float px = (float)(x * TILE_SIZE);
+            float py = (float)(y * TILE_SIZE);
+            Vector2 top   = to_rvec2(world_to_iso(px + s * 0.5f, py));
+            Vector2 right = to_rvec2(world_to_iso(px + s,        py + s * 0.5f));
+            Vector2 bot   = to_rvec2(world_to_iso(px + s * 0.5f, py + s));
+            Vector2 left  = to_rvec2(world_to_iso(px,            py + s * 0.5f));
+
+            Color base = CLITERAL(Color){210, 200, 165, 28};
+            DrawLineEx(top, right, 0.9f, base);
+            DrawLineEx(right, bot, 0.9f, base);
+            DrawLineEx(bot, left, 0.9f, base);
+            DrawLineEx(left, top, 0.9f, base);
+        }
+    }
+
+    if(map_in_bounds(hover_tx, hover_ty) && gs->map[hover_ty][hover_tx].fog[lp] != FOG_HIDDEN){
+        float px = (float)(hover_tx * TILE_SIZE);
+        float py = (float)(hover_ty * TILE_SIZE);
+        Vector2 top   = to_rvec2(world_to_iso(px + s * 0.5f, py));
+        Vector2 right = to_rvec2(world_to_iso(px + s,        py + s * 0.5f));
+        Vector2 bot   = to_rvec2(world_to_iso(px + s * 0.5f, py + s));
+        Vector2 left  = to_rvec2(world_to_iso(px,            py + s * 0.5f));
+        Color fill = gs->build_mode.valid
+            ? CLITERAL(Color){60, 220, 100, 60}
+            : CLITERAL(Color){220, 70, 70, 60};
+        Color border = gs->build_mode.valid
+            ? CLITERAL(Color){150, 255, 190, 230}
+            : CLITERAL(Color){255, 150, 150, 230};
+        draw_iso_quad(px, py, s, s, fill);
+        DrawLineEx(top, right, 2.6f, border);
+        DrawLineEx(right, bot, 2.6f, border);
+        DrawLineEx(bot, left, 2.6f, border);
+        DrawLineEx(left, top, 2.6f, border);
+    }
+}
+
 /* ─── Build ghost ─────────────────────────────────────────── */
-static void draw_build_ghost(GameState *gs){
+static void draw_build_ghost(GameState *gs, UIState *ui){
     if(!gs->build_mode.active) return;
     int tw=building_tw(gs->build_mode.type), th=building_th(gs->build_mode.type);
+    float s = (float)TILE_SIZE;
     
     int pts_x[200], pts_y[200];
     int pt_count = 1;
@@ -331,16 +412,48 @@ static void draw_build_ghost(GameState *gs){
 
         float px=(float)(tx*TILE_SIZE),py=(float)(ty*TILE_SIZE);
         float w=(float)(tw*TILE_SIZE),h=(float)(th*TILE_SIZE);
-        Color gc=valid ?
-            CLITERAL(Color){80,220,100,100}:CLITERAL(Color){220,60,60,100};
-        draw_iso_quad(px, py, w, h, gc);
-        Color lc=valid ? GREEN : RED;
+        for(int dy=0; dy<th; dy++){
+            for(int dx=0; dx<tw; dx++){
+                int tx2 = tx + dx, ty2 = ty + dy;
+                bool tile_ok = map_in_bounds(tx2, ty2) &&
+                               gs->map[ty2][tx2].type != TILE_WATER &&
+                               gs->map[ty2][tx2].type != TILE_FOREST &&
+                               gs->map[ty2][tx2].type != TILE_GOLD &&
+                               gs->map[ty2][tx2].type != TILE_STONE &&
+                               gs->map[ty2][tx2].type != TILE_BERRIES &&
+                               gs->map[ty2][tx2].building_id < 0;
+                float tpx = (float)(tx2 * TILE_SIZE);
+                float tpy = (float)(ty2 * TILE_SIZE);
+                Color fill = tile_ok
+                    ? CLITERAL(Color){70, 230, 110, 85}
+                    : CLITERAL(Color){230, 70, 70, 85};
+                draw_iso_quad(tpx, tpy, s, s, fill);
+            }
+        }
+
+        if(!building_is_walllike(gs->build_mode.type)){
+            Texture2D tex = ui->tex_buildings[gs->build_mode.type];
+            if(tex.id != 0){
+                float base_ratio = 1.25f / 4.0f;
+                float boost = 1.25f;
+                float sc = (float)tw * base_ratio * boost;
+                float tex_w = tex.width * sc;
+                float tex_h = tex.height * sc;
+                Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
+                Color tint = valid
+                    ? CLITERAL(Color){180, 255, 200, 165}
+                    : CLITERAL(Color){255, 170, 170, 165};
+                DrawTextureEx(tex, (Vector2){bc.x - tex_w/2.0f, bc.y - tex_h + h*0.4f}, 0.0f, sc, tint);
+            }
+        }
+
+        Color lc=valid ? CLITERAL(Color){120,255,150,255} : CLITERAL(Color){255,110,110,255};
         Vector2 p1 = to_rvec2(world_to_iso(px, py));
         Vector2 p2 = to_rvec2(world_to_iso(px + w, py));
         Vector2 p3 = to_rvec2(world_to_iso(px + w, py + h));
         Vector2 p4 = to_rvec2(world_to_iso(px, py + h));
-        DrawLineEx(p1, p2, 2.0f, lc); DrawLineEx(p2, p3, 2.0f, lc);
-        DrawLineEx(p3, p4, 2.0f, lc); DrawLineEx(p4, p1, 2.0f, lc);
+        DrawLineEx(p1, p2, 3.0f, lc); DrawLineEx(p2, p3, 3.0f, lc);
+        DrawLineEx(p3, p4, 3.0f, lc); DrawLineEx(p4, p1, 3.0f, lc);
     }
 }
 
@@ -374,6 +487,7 @@ void renderer_draw_world(GameState *gs, UIState *ui){
     
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++) draw_fog(gs,x,y);
 
-    draw_build_ghost(gs);
+    draw_build_grid(gs, ui);
+    draw_build_ghost(gs, ui);
     draw_selection_box(gs, ui);
 }
