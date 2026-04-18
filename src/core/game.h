@@ -20,6 +20,7 @@ typedef struct { float x, y; } Vec2;
 #define TILE_SIZE       32          /* pixels per tile at zoom=1 */
 #define MAX_UNITS       256
 #define MAX_BUILDINGS   128
+#define MAX_PROJECTILES 128
 #define ASTAR_PATH_CAP  300         /* max A* path nodes (avoids conflict with Windows MAX_PATH) */
 #define NUM_PLAYERS     4
 #define POP_CAP_MAX     200
@@ -243,6 +244,25 @@ typedef struct {
     bool    valid;
 } BuildMode;
 
+typedef enum {
+    PROJ_ARROW = 0,
+    PROJ_BOLT
+} ProjectileType;
+
+typedef struct {
+    bool           active;
+    int            owner_player;
+    ProjectileType type;
+    int            target_unit;
+    int            target_bld;
+    int            damage;
+    float          sx, sy;
+    float          ex, ey;
+    float          elapsed;
+    float          duration;
+    float          arc_height;
+} Projectile;
+
 /* ─── Match mode ─────────────────────────────────────────────── */
 typedef enum {
     GAME_MODE_STANDARD = 0,
@@ -271,6 +291,7 @@ typedef struct {
 
 
     BuildMode  build_mode;
+    Projectile projectiles[MAX_PROJECTILES];
 
     /* AI */
     int        ai_phase;
@@ -375,3 +396,12 @@ void game_sandbox_next_age(GameState *gs, int player);
 void game_sandbox_spawn_wave(GameState *gs, int player);
 void game_sandbox_heal_selection(GameState *gs, int player, int building_id,
                                  const int *unit_ids, int unit_count);
+bool game_damage_unit(GameState *gs, int target_unit, int dmg);
+bool game_damage_building(GameState *gs, int target_bld, int dmg);
+bool unit_uses_projectiles(UnitType type);
+bool building_uses_projectiles(BldType type);
+void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,
+                           float sx, float sy, float ex, float ey,
+                           int target_unit, int target_bld, int dmg,
+                           float duration, float arc_height);
+void game_update_projectiles(GameState *gs, float dt);

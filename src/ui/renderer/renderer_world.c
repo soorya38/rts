@@ -13,6 +13,31 @@ extern void draw_fog(GameState *gs, int x, int y);
 
 /* ─── Building rendering ─────────────────────────────────── */
 
+static void draw_projectiles(GameState *gs){
+    for(int i=0;i<MAX_PROJECTILES;i++){
+        Projectile *p = &gs->projectiles[i];
+        if(!p->active || p->duration <= 0.0f) continue;
+
+        float t = clampf(p->elapsed / p->duration, 0.0f, 1.0f);
+        float wx = lerpf(p->sx, p->ex, t);
+        float wy = lerpf(p->sy, p->ey, t);
+        float arc = 4.0f * t * (1.0f - t) * p->arc_height;
+
+        Vector2 cur = to_rvec2(world_to_iso(wx, wy));
+        Vector2 prev = to_rvec2(world_to_iso(lerpf(p->sx, p->ex, t > 0.03f ? t - 0.03f : 0.0f),
+                                             lerpf(p->sy, p->ey, t > 0.03f ? t - 0.03f : 0.0f)));
+        cur.y -= arc;
+        prev.y -= 4.0f * (t > 0.03f ? t - 0.03f : 0.0f) * (1.0f - (t > 0.03f ? t - 0.03f : 0.0f)) * p->arc_height;
+
+        Color pc = (p->type == PROJ_BOLT)
+            ? CLITERAL(Color){160, 210, 255, 255}
+            : CLITERAL(Color){240, 220, 140, 255};
+        Color tc = player_color(p->owner_player);
+        DrawLineEx(prev, cur, p->type == PROJ_BOLT ? 3.0f : 2.0f, pc);
+        DrawCircleV(cur, p->type == PROJ_BOLT ? 3.4f : 2.4f, tc);
+    }
+}
+
 static void draw_building(GameState *gs, UIState *ui, Building *b){
     float px=(float)(b->tx*TILE_SIZE), py=(float)(b->ty*TILE_SIZE);
     float w=(float)(b->tw*TILE_SIZE), h=(float)(b->th*TILE_SIZE);
@@ -185,6 +210,8 @@ void renderer_draw_world(GameState *gs, UIState *ui){
         if(u->player!=lp && fs!=FOG_VISIBLE) continue;
         draw_unit(gs, ui, u, gs->game_time);
     }
+
+    draw_projectiles(gs);
     
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++) draw_fog(gs,x,y);
 

@@ -18,6 +18,10 @@ static void building_apply_combat_stats(Building *b){
     }
 }
 
+static float building_projectile_duration(float dist_tiles){
+    return clampf(0.10f + dist_tiles * 0.05f, 0.16f, 0.50f);
+}
+
 int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     int w=building_tw(type), h=building_th(type);
     if(!map_is_buildable(gs,tx,ty,w,h)) { printf("building_place failed: map_is_buildable\n"); return -1; }
@@ -182,10 +186,13 @@ void building_update(GameState *gs, Building *b, float dt){
                 Unit *u = &gs->units[target];
                 int dmg = b->attack_dmg - u->armor;
                 if(dmg < 1) dmg = 1;
-                u->hp -= dmg;
-                if(u->hp <= 0){
-                    u->state = US_DYING;
-                    u->death_timer = 0.8f;
+                if(building_uses_projectiles(b->type)){
+                    game_spawn_projectile(gs, b->player, PROJ_BOLT,
+                                          cx, cy, u->wx, u->wy,
+                                          target, -1, dmg,
+                                          building_projectile_duration(best), 34.0f);
+                } else {
+                    game_damage_unit(gs, target, dmg);
                 }
                 b->attack_timer = b->attack_cd;
             }

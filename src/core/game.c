@@ -12,6 +12,105 @@ uint32_t _rng = 12345;
 /* Forward declare the building init helper from building.c */
 void buildings_init_player(GameState *gs,int player,int tc_tx,int tc_ty);
 
+static void game_handle_tc_destroyed(GameState *gs, int defeated_player){
+    int lp = net_get_local_player();
+    bool has_tc[NUM_PLAYERS] = {false};
+    for(int i=0; i<MAX_BUILDINGS; i++){
+        Building *eb = &gs->buildings[i];
+        if(eb->active && eb->type == BLD_TOWN_CENTER) has_tc[eb->player] = true;
+    }
+    if(defeated_player == lp){
+        game_set_alert(gs, "DEFEATED...");
+        gs->phase = PHASE_DEFEAT;
+        return;
+    }
+    bool any_enemy_tc = false;
+    for(int p=0; p<NUM_PLAYERS; p++){
+        if(p != lp && has_tc[p]) { any_enemy_tc = true; break; }
+    }
+    if(!any_enemy_tc){
+        game_set_alert(gs, "VICTORY!");
+        gs->phase = PHASE_VICTORY;
+    }
+}
+
+bool game_damage_unit(GameState *gs, int target_unit, int dmg){
+    if(target_unit < 0 || target_unit >= MAX_UNITS) return false;
+    Unit *t = &gs->units[target_unit];
+    if(!t->active || t->state == US_DEAD || t->state == US_DYING) return false;
+    t->hp -= dmg;
+    if(t->hp <= 0){
+        t->state = US_DYING;
+        t->death_timer = 0.8f;
+        return false;
+    }
+    return true;
+}
+
+bool game_damage_building(GameState *gs, int target_bld, int dmg){
+    if(target_bld < 0 || target_bld >= MAX_BUILDINGS) return false;
+    Building *b = &gs->buildings[target_bld];
+    if(!b->active) return false;
+    b->hp -= dmg;
+    if(b->hp <= 0){
+        int defeated_player = b->player;
+        bool was_tc = (b->type == BLD_TOWN_CENTER);
+        building_destroy(gs, target_bld);
+        if(was_tc && gs->mode != GAME_MODE_SANDBOX){
+            game_handle_tc_destroyed(gs, defeated_player);
+        }
+        return false;
+    }
+    return true;
+}
+
+bool unit_uses_projectiles(UnitType type){
+    return type == UNIT_ARCHER || type == UNIT_SKIRMISHER || type == UNIT_CAVALRY_ARCHER;
+}
+
+bool building_uses_projectiles(BldType type){
+    return type == BLD_WATCH_TOWER;
+}
+
+void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,
+                           float sx, float sy, float ex, float ey,
+                           int target_unit, int target_bld, int dmg,
+                           float duration, float arc_height){
+    for(int i=0;i<MAX_PROJECTILES;i++){
+        Projectile *p = &gs->projectiles[i];
+        if(p->active) continue;
+        p->active = true;
+        p->owner_player = owner_player;
+        p->type = type;
+        p->target_unit = target_unit;
+        p->target_bld = target_bld;
+        p->damage = dmg;
+        p->sx = sx;
+        p->sy = sy;
+        p->ex = ex;
+        p->ey = ey;
+        p->elapsed = 0.0f;
+        p->duration = duration;
+        p->arc_height = arc_height;
+        return;
+    }
+}
+
+void game_update_projectiles(GameState *gs, float dt){
+    for(int i=0;i<MAX_PROJECTILES;i++){
+        Projectile *p = &gs->projectiles[i];
+        if(!p->active) continue;
+        p->elapsed += dt;
+        if(p->elapsed < p->duration) continue;
+        if(p->target_unit >= 0){
+            game_damage_unit(gs, p->target_unit, p->damage);
+        } else if(p->target_bld >= 0){
+            game_damage_building(gs, p->target_bld, p->damage);
+        }
+        p->active = false;
+    }
+}
+
 static void game_init_match(GameState *gs, uint32_t seed, int num_players, GameMode mode){
     memset(gs, 0, sizeof(GameState));
     gs->mode = mode;
@@ -310,6 +409,9 @@ void game_update(GameState *gs, float dt){
 
     /* Buildings */
     buildings_update_all(gs,dt);
+
+    /* Projectiles */
+    game_update_projectiles(gs, dt);
 
     /* AI - only in singleplayer */
     if (!g_net_active && gs->mode != GAME_MODE_SANDBOX) {

@@ -211,6 +211,10 @@ static int bonus_damage_vs_building(Unit *u){
     }
 }
 
+static float projectile_duration_for_distance(float dist_tiles){
+    return clampf(0.08f + dist_tiles * 0.045f, 0.12f, 0.42f);
+}
+
 static void unit_do_monk_support(GameState *gs, Unit *u, float dt){
     u->attack_timer -= dt;
     if(u->attack_timer > 0.0f) return;
@@ -308,8 +312,14 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
         } else {
             int dmg=u->attack_dmg + bonus_damage_vs_unit(u, t) - t->armor;
             if(dmg<1)dmg=1;
-            t->hp-=dmg;
-            if(t->hp<=0){t->state=US_DYING;t->death_timer=0.8f;u->target_unit=-1;}
+            if(unit_uses_projectiles(u->type)){
+                game_spawn_projectile(gs, u->player, PROJ_ARROW,
+                                      u->wx, u->wy, t->wx, t->wy,
+                                      u->target_unit, -1, dmg,
+                                      projectile_duration_for_distance(dist), 26.0f);
+            } else if(!game_damage_unit(gs, u->target_unit, dmg)){
+                u->target_unit=-1;
+            }
         }
     } else {
         Building *b=&gs->buildings[u->target_bld];
@@ -318,37 +328,15 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
             u->state = US_IDLE;
             return;
         }
-        b->hp-=u->attack_dmg + bonus_damage_vs_building(u);
-        if(b->hp<=0){
-            if(b->type==BLD_TOWN_CENTER && gs->mode != GAME_MODE_SANDBOX){
-                int lp = net_get_local_player();
-                int defeated_player = b->player;
-                
-                /* How many unique players still have a living TC (excluding this one)? */
-                bool has_tc[NUM_PLAYERS] = {false};
-                for(int i=0; i<MAX_BUILDINGS; i++){
-                    Building *eb = &gs->buildings[i];
-                    if(eb->active && eb->type==BLD_TOWN_CENTER && eb->id!=b->id)
-                        has_tc[eb->player] = true;
-                }
-                /* Local player lost their TC */
-                if(defeated_player == lp){
-                    game_set_alert(gs,"DEFEATED...");
-                    gs->phase = PHASE_DEFEAT;
-                } else {
-                    /* Check if local player is the only one with a TC left */
-                    bool any_enemy_tc = false;
-                    for(int p=0; p<NUM_PLAYERS; p++){
-                        if(p != lp && has_tc[p]) { any_enemy_tc = true; break; }
-                    }
-                    if(!any_enemy_tc){
-                        game_set_alert(gs,"VICTORY!");
-                        gs->phase = PHASE_VICTORY;
-                    }
-                }
-            }
-            map_clear_building(gs,b->tx,b->ty,b->tw,b->th);
-            b->active=false;
+        int dmg = u->attack_dmg + bonus_damage_vs_building(u);
+        if(unit_uses_projectiles(u->type)){
+            float bx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
+            float by = (b->ty + b->th * 0.5f) * TILE_SIZE;
+            game_spawn_projectile(gs, u->player, PROJ_ARROW,
+                                  u->wx, u->wy, bx, by,
+                                  -1, u->target_bld, dmg,
+                                  projectile_duration_for_distance(dist), 24.0f);
+        } else if(!game_damage_building(gs, u->target_bld, dmg)){
             u->target_bld=-1;
         }
     }
