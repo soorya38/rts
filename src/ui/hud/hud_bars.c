@@ -375,6 +375,12 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             case BLD_LUMBER_CAMP:
                 DrawText("Economic upgrades for woodcutting and hauling",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
                 break;
+            case BLD_WALL:
+                DrawText("Cheap defensive segment that blocks movement",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
+                break;
+            case BLD_GATE:
+                DrawText("Passable fortified opening for your wall line",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
+                break;
             case BLD_BLACKSMITH:
                 DrawText("No units  —  research upgrades below",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
                 break;

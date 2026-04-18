@@ -14,6 +14,68 @@ extern void draw_fog(GameState *gs, int x, int y);
 
 /* ─── Building rendering ─────────────────────────────────── */
 
+static bool building_is_walllike(BldType type){
+    return type == BLD_WALL || type == BLD_GATE;
+}
+
+static bool wall_connected(GameState *gs, Building *b, int dx, int dy){
+    int nx = b->tx + dx;
+    int ny = b->ty + dy;
+    if(!map_in_bounds(nx, ny)) return false;
+    int nid = gs->map[ny][nx].building_id;
+    if(nid < 0) return false;
+
+    Building *nb = &gs->buildings[nid];
+    return nb->active && nb->complete && nb->player == b->player && building_is_walllike(nb->type);
+}
+
+static void draw_wall_piece(GameState *gs, Building *b, Color mc, Color dc){
+    float cx = (b->tx + 0.5f) * TILE_SIZE;
+    float cy = (b->ty + 0.5f) * TILE_SIZE;
+    Vector2 center = to_rvec2(world_to_iso(cx, cy));
+    bool n = wall_connected(gs, b, 0, -1);
+    bool s = wall_connected(gs, b, 0, 1);
+    bool w = wall_connected(gs, b, -1, 0);
+    bool e = wall_connected(gs, b, 1, 0);
+
+    draw_shadow(cx, cy, 16.0f, 9.0f);
+
+    int dirs[4][2] = {{0,-1},{0,1},{-1,0},{1,0}};
+    for(int i=0;i<4;i++){
+        int dx = dirs[i][0], dy = dirs[i][1];
+        if((dx == 0 && dy == -1 && !n) || (dx == 0 && dy == 1 && !s) ||
+           (dx == -1 && dy == 0 && !w) || (dx == 1 && dy == 0 && !e)) continue;
+
+        float tx = (b->tx + dx + 0.5f) * TILE_SIZE;
+        float ty = (b->ty + dy + 0.5f) * TILE_SIZE;
+        Vector2 next = to_rvec2(world_to_iso(tx, ty));
+        DrawLineEx(center, next, b->type == BLD_GATE ? 9.0f : 7.5f, dc);
+        DrawLineEx(center, next, b->type == BLD_GATE ? 5.0f : 4.0f, mc);
+    }
+
+    if(b->type == BLD_GATE){
+        bool horizontal = (w || e) && !(n || s);
+        if(!horizontal && !(n || s) && (w || e)) horizontal = true;
+
+        if(horizontal){
+            DrawRectangle((int)(center.x - 11), (int)(center.y - 14), 6, 18, dc);
+            DrawRectangle((int)(center.x + 5), (int)(center.y - 14), 6, 18, dc);
+            DrawRectangle((int)(center.x - 8), (int)(center.y - 11), 22, 4, mc);
+            DrawRectangle((int)(center.x - 8), (int)(center.y - 13), 22, 2, CLITERAL(Color){210, 190, 145, 255});
+        } else {
+            DrawRectangle((int)(center.x - 7), (int)(center.y - 16), 14, 5, dc);
+            DrawRectangle((int)(center.x - 7), (int)(center.y + 5), 14, 5, dc);
+            DrawRectangle((int)(center.x - 4), (int)(center.y - 13), 8, 24, mc);
+            DrawRectangle((int)(center.x - 6), (int)(center.y - 10), 12, 4, CLITERAL(Color){210, 190, 145, 255});
+        }
+        DrawCircleV(center, 5.0f, CLITERAL(Color){70, 55, 35, 255});
+    } else {
+        DrawCircleV(center, 6.0f, dc);
+        DrawCircleV(center, 4.0f, mc);
+        DrawCircleV((Vector2){center.x, center.y - 6.0f}, 4.0f, CLITERAL(Color){200, 185, 150, 255});
+    }
+}
+
 static void draw_projectiles(GameState *gs){
     for(int i=0;i<MAX_PROJECTILES;i++){
         Projectile *p = &gs->projectiles[i];
@@ -30,14 +92,33 @@ static void draw_projectiles(GameState *gs){
         cur.y -= arc;
         prev.y -= 4.0f * (t > 0.03f ? t - 0.03f : 0.0f) * (1.0f - (t > 0.03f ? t - 0.03f : 0.0f)) * p->arc_height;
 
-        Color pc = (p->type == PROJ_BOLT)
-            ? CLITERAL(Color){160, 210, 255, 255}
-            : (p->type == PROJ_STONE)
-                ? CLITERAL(Color){180, 170, 155, 255}
-                : CLITERAL(Color){240, 220, 140, 255};
         Color tc = player_color(p->owner_player);
-        DrawLineEx(prev, cur, p->type == PROJ_BOLT ? 3.0f : 2.0f, pc);
-        DrawCircleV(cur, p->type == PROJ_BOLT ? 3.4f : 2.4f, tc);
+        if(p->type == PROJ_ARROW){
+            Vector2 dir = (Vector2){cur.x - prev.x, cur.y - prev.y};
+            float len = sqrtf(dir.x * dir.x + dir.y * dir.y);
+            if(len < 0.001f) len = 1.0f;
+            dir.x /= len;
+            dir.y /= len;
+            Vector2 shaft_end = (Vector2){cur.x - dir.x * 5.0f, cur.y - dir.y * 5.0f};
+            Vector2 perp = (Vector2){-dir.y, dir.x};
+            Color shaft = CLITERAL(Color){170, 120, 60, 255};
+            Color fletch = CLITERAL(Color){245, 235, 190, 255};
+            DrawLineEx(prev, shaft_end, 2.6f, shaft);
+            DrawTriangle(cur,
+                         (Vector2){shaft_end.x + perp.x * 2.6f, shaft_end.y + perp.y * 2.6f},
+                         (Vector2){shaft_end.x - perp.x * 2.6f, shaft_end.y - perp.y * 2.6f},
+                         tc);
+            DrawLineEx((Vector2){prev.x + perp.x * 1.6f, prev.y + perp.y * 1.6f},
+                       (Vector2){prev.x - dir.x * 3.0f, prev.y - dir.y * 3.0f}, 1.2f, fletch);
+            DrawLineEx((Vector2){prev.x - perp.x * 1.6f, prev.y - perp.y * 1.6f},
+                       (Vector2){prev.x - dir.x * 3.0f, prev.y - dir.y * 3.0f}, 1.2f, fletch);
+        } else {
+            Color pc = (p->type == PROJ_BOLT)
+                ? CLITERAL(Color){160, 210, 255, 255}
+                : CLITERAL(Color){180, 170, 155, 255};
+            DrawLineEx(prev, cur, p->type == PROJ_BOLT ? 3.0f : 2.4f, pc);
+            DrawCircleV(cur, p->type == PROJ_BOLT ? 3.4f : 3.0f, tc);
+        }
     }
 }
 
@@ -102,7 +183,9 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     draw_shadow(px + w * 0.5f, py + h * 0.5f, w * 0.9f, h * 0.9f);
 
     Texture2D tex = ui->tex_buildings[b->type];
-    if (tex.id != 0) {
+    if (building_is_walllike(b->type)) {
+        draw_wall_piece(gs, b, mc, dc);
+    } else if (tex.id != 0) {
         /* Scale buildings biased towards footprint size, with a global boost */
         float base_ratio = 1.25f / 4.0f; /* TC as baseline */
         float boost = 1.25f;            /* Scale boost for 'premium' look */

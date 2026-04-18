@@ -89,6 +89,8 @@ Cost building_cost(BldType t){
         case BLD_WATCH_TOWER:  return (Cost){0,125,0,125};
         case BLD_MONASTERY:    return (Cost){0,175,0,0};
         case BLD_SIEGE_WORKSHOP:return (Cost){0,200,0,0};
+        case BLD_WALL:         return (Cost){0,20,0,0};
+        case BLD_GATE:         return (Cost){0,35,0,15};
         default:               return (Cost){0,0,0,0};
     }
 }
@@ -109,6 +111,8 @@ int building_tw(BldType t){
         case BLD_WATCH_TOWER: return 2;
         case BLD_MONASTERY:   return 3;
         case BLD_SIEGE_WORKSHOP:return 3;
+        case BLD_WALL:        return 1;
+        case BLD_GATE:        return 1;
         default:              return 2;
     }
 }
@@ -131,6 +135,8 @@ int building_max_hp(BldType t){
         case BLD_WATCH_TOWER:  return 1020;
         case BLD_MONASTERY:    return 900;
         case BLD_SIEGE_WORKSHOP:return 1500;
+        case BLD_WALL:         return 900;
+        case BLD_GATE:         return 1100;
         default:               return 500;
     }
 }
@@ -263,6 +269,8 @@ const char* building_name(BldType t){
         case BLD_WATCH_TOWER: return "Watch Tower";
         case BLD_MONASTERY: return "Monastery";
         case BLD_SIEGE_WORKSHOP: return "Siege Workshop";
+        case BLD_WALL: return "Wall";
+        case BLD_GATE: return "Gate";
         default: return "Building";
     }
 }

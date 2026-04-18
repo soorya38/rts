@@ -352,7 +352,7 @@ void game_sandbox_spawn_wave(GameState *gs, int player){
     if(!gs || gs->mode != GAME_MODE_SANDBOX || player < 0 || player >= gs->num_players) return;
     int lane = (unit_count_military(gs, player) / 5) % 3;
     int anchor_ty = 26 + lane * 4;
-    int anchor_tx = (player == 0) ? 28 : 34;
+    int anchor_tx = (player == 0) ? 22 : 42;
     sandbox_spawn_block(gs, player, anchor_tx, anchor_ty, WAVE, (int)(sizeof(WAVE)/sizeof(WAVE[0])));
     game_set_alert(gs, (player == 0) ? "Sandbox: allied test squad spawned." :
                                       "Sandbox: enemy test squad spawned.");

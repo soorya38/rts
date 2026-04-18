@@ -64,6 +64,8 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         {BLD_WATCH_TOWER,  "Tower (T)\n125W 125S",       {0,125,0,125}},
         {BLD_MONASTERY,    "Monastery (O)\n175W",        {0,175,0,0}},
         {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",           {0,200,0,0}},
+        {BLD_WALL,         "Wall (U)\n20 Wood",          {0,20, 0,0}},
+        {BLD_GATE,         "Gate (J)\n35W 15S",          {0,35, 0,15}},
     };
     int n=(int)(sizeof(items)/sizeof(items[0]));
     for(int i=0;i<n;i++){
@@ -96,7 +98,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             game_set_alert(gs,msg);
         }
     }
-    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I",
+    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I U J",
              mx,my+bh*5+gap*4+4,9,CLITERAL(Color){100,90,60,200});
 }
 

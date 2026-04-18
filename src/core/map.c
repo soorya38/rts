@@ -19,7 +19,7 @@ bool map_is_passable(GameState *gs,int x,int y){
     /* Buildings – farms are passable so villagers can gather; others block */
     if(t->building_id >= 0){
         Building *b = &gs->buildings[t->building_id];
-        if(b->active && b->complete && b->type != BLD_FARM) return false;
+        if(b->active && b->complete && b->type != BLD_FARM && b->type != BLD_GATE) return false;
     }
     return true;
 }
