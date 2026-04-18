@@ -48,6 +48,10 @@ static bool can_queue_unit_now(GameState *gs, Building *b, int player, UnitType 
     return true;
 }
 
+static bool can_set_rally_now(Building *b, int player){
+    return b && b->active && b->complete && b->player == player && building_supports_rally(b->type);
+}
+
 static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_start){
     if(gs->mode != GAME_MODE_SANDBOX) return;
 
@@ -223,6 +227,28 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         int btn_w=(int)(80*sc), btn_h=(int)(50*sc), btn_gap=(int)(8*sc);
         int bx=(int)(220*sc), bby=by_start+(int)(10*sc);
         int lp = net_get_local_player();
+        int rally_btn_w = (int)(112*sc);
+        int rally_btn_h = (int)(32*sc);
+        int rally_btn_x = panel_w - pad - rally_btn_w;
+        int rally_btn_y = by_start + (int)(10*sc);
+        bool can_set_rally = can_set_rally_now(b, lp);
+
+        if(can_set_rally){
+            const char *rally_label = ui->rally_mode ? "[G] Cancel" : "[G] Rally";
+            if(draw_button(rally_label, rally_btn_x, rally_btn_y, rally_btn_w, rally_btn_h, true)){
+                ui->rally_mode = !ui->rally_mode;
+                if(ui->rally_mode) game_set_alert(gs, "Click the map to place the rally point.");
+                else game_set_alert(gs, "Rally point canceled.");
+            }
+            snprintf(buf, sizeof(buf), "Point: %d,%d", b->rally_tx, b->rally_ty);
+            DrawText(buf, rally_btn_x, rally_btn_y + rally_btn_h + (int)(4*sc), fs10,
+                     CLITERAL(Color){180,165,130,220});
+            if(ui->rally_mode){
+                DrawText("New units spawn here, then move there", rally_btn_x - (int)(44*sc),
+                         rally_btn_y + rally_btn_h + (int)(18*sc), fs9,
+                         CLITERAL(Color){120,200,255,220});
+            }
+        }
         switch(b->type){
             case BLD_TOWN_CENTER:
                 if(draw_button("Villager\n50F",bx,bby,btn_w,btn_h,can_queue_unit_now(gs,b,lp,UNIT_VILLAGER))) {

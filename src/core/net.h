@@ -55,7 +55,8 @@ typedef enum {
     PKT_ID_ASSIGN,
     PKT_STANCE,
     PKT_LOBBY_SYNC,
-    PKT_RESEARCH
+    PKT_RESEARCH,
+    PKT_SET_RALLY
 } PacketType;
 
 #pragma pack(push, 1)

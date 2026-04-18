@@ -87,10 +87,89 @@ static void update_build_mode(GameState *gs, UIState *ui) {
     if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) gs->build_mode.active = false;
 }
 
+static bool get_selected_rally_building(GameState *gs, UIState *ui, Building **out_b) {
+    int lp = net_get_local_player();
+    if (ui->sel_building < 0) return false;
+    Building *b = &gs->buildings[ui->sel_building];
+    if (!b->active || !b->complete || b->player != lp || !building_supports_rally(b->type)) return false;
+    if (out_b) *out_b = b;
+    return true;
+}
+
+static bool set_selected_rally_from_screen(GameState *gs, UIState *ui, Vector2 mp) {
+    bool over_hud = mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - HUD_BOT_H - 8);
+    if (over_hud) return false;
+
+    Building *b = NULL;
+    if (!get_selected_rally_building(gs, ui, &b)) {
+        ui->rally_mode = false;
+        return false;
+    }
+
+    Vector2 wp = GetScreenToWorld2D(mp, ui->camera);
+    Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
+    int tx = (int)(cart.x / TILE_SIZE);
+    int ty = (int)(cart.y / TILE_SIZE);
+    if (!map_in_bounds(tx, ty)) return false;
+
+    int rally_tx = tx;
+    int rally_ty = ty;
+    if (!map_find_passable_near(gs, tx, ty, &rally_tx, &rally_ty)) {
+        game_set_alert(gs, "No room for a rally point there.");
+        return true;
+    }
+
+    if (g_net_active) {
+        NetPacket pkt = {0};
+        pkt.type = PKT_SET_RALLY;
+        pkt.player = net_get_local_player();
+        pkt.target_id = ui->sel_building;
+        pkt.tx = rally_tx;
+        pkt.ty = rally_ty;
+        net_dispatch_packet(gs, &pkt);
+    } else {
+        b->rally_tx = rally_tx;
+        b->rally_ty = rally_ty;
+    }
+
+    ui->rally_mode = false;
+    game_set_alert(gs, "Rally point set.");
+    return true;
+}
+
+static void update_rally_mode(GameState *gs, UIState *ui) {
+    if (!ui->rally_mode) return;
+
+    Building *b = NULL;
+    if (!get_selected_rally_building(gs, ui, &b)) {
+        ui->rally_mode = false;
+        return;
+    }
+    (void)b;
+
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    if (IsGestureDetected(GESTURE_TAP)) {
+        Vector2 mp = GetTouchPointCount() > 0 ? GetTouchPosition(0) : GetMousePosition();
+        set_selected_rally_from_screen(gs, ui, mp);
+    }
+#else
+    if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON)) {
+        ui->rally_mode = false;
+        game_set_alert(gs, "Rally point canceled.");
+        return;
+    }
+    if (IsMouseButtonReleased(MOUSE_LEFT_BUTTON)) {
+        set_selected_rally_from_screen(gs, ui, GetMousePosition());
+    }
+#endif
+}
+
 /* ─── Hotkeys ─────────────────────────────────────────────── */
 static void update_hotkeys(GameState *gs, UIState *ui) {
     if (IsKeyPressed(KEY_ESCAPE)) {
         if (gs->build_mode.active) { gs->build_mode.active = false; return; }
+        if (ui->rally_mode) { ui->rally_mode = false; game_set_alert(gs, "Rally point canceled."); return; }
         if (ui->build_panel_open) { ui->build_panel_open = false; return; }
         clear_selection(gs, ui);
     }
@@ -114,6 +193,21 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
             bool any = ui->build_panel_open || gs->build_mode.active;
             ui->build_panel_open = any ? false : true;
             gs->build_mode.active = false;
+        }
+    }
+    if (IsKeyPressed(KEY_G)) {
+        if (ui->rally_mode) {
+            ui->rally_mode = false;
+            game_set_alert(gs, "Rally point canceled.");
+            return;
+        }
+        Building *b = NULL;
+        if (get_selected_rally_building(gs, ui, &b)) {
+            ui->rally_mode = true;
+            ui->build_panel_open = false;
+            gs->build_mode.active = false;
+            game_set_alert(gs, "Click the map to place the rally point.");
+            return;
         }
     }
     bool vil = false;
@@ -185,6 +279,16 @@ void input_update(GameState *gs, UIState *ui) {
     }
 
     update_hotkeys(gs, ui);
+    if (ui->rally_mode) {
+        update_rally_mode(gs, ui);
+        return;
+    }
+
+#if !defined(PLATFORM_ANDROID) && !defined(ANDROID)
+    if (IsMouseButtonPressed(MOUSE_RIGHT_BUTTON) && set_selected_rally_from_screen(gs, ui, GetMousePosition())) {
+        return;
+    }
+#endif
 
 #if defined(PLATFORM_ANDROID) || defined(ANDROID)
     /* On Android: GESTURE_TAP drives selection/commands; GESTURE_DRAG is panning (camera). */

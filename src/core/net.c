@@ -167,6 +167,15 @@ static void apply_packet(GameState *gs, NetPacket *pkt) {
         if (pkt->target_id >= 0 && pkt->target_id < MAX_BUILDINGS)
             building_start_tech(gs, &gs->buildings[pkt->target_id], (TechType)pkt->extra);
     }
+    else if (pkt->type == PKT_SET_RALLY) {
+        if (pkt->target_id >= 0 && pkt->target_id < MAX_BUILDINGS) {
+            Building *b = &gs->buildings[pkt->target_id];
+            if (b->active) {
+                b->rally_tx = pkt->tx;
+                b->rally_ty = pkt->ty;
+            }
+        }
+    }
 }
 
 void net_update(GameState *gs) {

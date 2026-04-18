@@ -12,6 +12,7 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->hover_building = -1;
     ui->hover_tile_x   = -1;
     ui->hover_tile_y   = -1;
+    ui->rally_mode     = false;
 
     /* Default placeholder IP — user overwrites this to join */
     strncpy(ui->net_ip, "192.168.1.1", sizeof(ui->net_ip)-1);

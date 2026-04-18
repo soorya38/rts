@@ -359,6 +359,7 @@ Cost building_cost(BldType t);
 int  building_tw(BldType t);
 int  building_th(BldType t);
 int  building_max_hp(BldType t);
+bool building_supports_rally(BldType type);
 float building_train_time(UnitType ut);
 Cost  unit_cost(UnitType ut);
 int   unit_age_required(UnitType t);

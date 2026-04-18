@@ -22,6 +22,19 @@ static float building_projectile_duration(float dist_tiles){
     return clampf(0.10f + dist_tiles * 0.05f, 0.16f, 0.50f);
 }
 
+bool building_supports_rally(BldType type){
+    switch(type){
+        case BLD_TOWN_CENTER:
+        case BLD_BARRACKS:
+        case BLD_ARCHERY_RANGE:
+        case BLD_STABLE:
+        case BLD_MONASTERY:
+            return true;
+        default:
+            return false;
+    }
+}
+
 int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     int w=building_tw(type), h=building_th(type);
     if(!map_is_buildable(gs,tx,ty,w,h)) { printf("building_place failed: map_is_buildable\n"); return -1; }
@@ -271,13 +284,22 @@ void building_update(GameState *gs, Building *b, float dt){
     if(b->queue_len<=0) return;
     b->train_timer-=dt;
     if(b->train_timer>0) return;
-    /* Spawn unit at rally point */
     UnitType ut=b->queue[0];
-    float wx=(b->rally_tx+0.5f)*TILE_SIZE;
-    float wy=(b->rally_ty+0.5f)*TILE_SIZE;
-    if(unit_spawn(gs,b->player,ut,wx,wy) < 0){
+    int spawn_tx = b->tx + b->tw / 2;
+    int spawn_ty = b->ty + b->th + 1;
+    if(!map_find_passable_near(gs, spawn_tx, spawn_ty, &spawn_tx, &spawn_ty)){
+        spawn_tx = b->rally_tx;
+        spawn_ty = b->rally_ty;
+    }
+    float wx=(spawn_tx+0.5f)*TILE_SIZE;
+    float wy=(spawn_ty+0.5f)*TILE_SIZE;
+    int uid = unit_spawn(gs,b->player,ut,wx,wy);
+    if(uid < 0){
         b->train_timer = 0.5f;
         return;
+    }
+    if(b->rally_tx != spawn_tx || b->rally_ty != spawn_ty){
+        unit_give_move_order(gs, &gs->units[uid], b->rally_tx, b->rally_ty);
     }
     /* Shift queue */
     for(int i=0;i<b->queue_len-1;i++) b->queue[i]=b->queue[i+1];

@@ -31,6 +31,7 @@ typedef struct {
     /* UI State overlays */
     bool       build_panel_open;
     bool       menu_start_hover;
+    bool       rally_mode;
 
     /* Multiplayer lobby */
     char  net_ip[64];      /* IP address the client will connect to */

@@ -5,6 +5,7 @@
 #include "ui_state.h"
 #include "renderer.h"
 #include "net.h"
+#include "hud_common.h"
 #include <stdio.h>
 
 /* Forward declarations of functions in other renderer files */
@@ -36,6 +37,51 @@ static void draw_projectiles(GameState *gs){
         DrawLineEx(prev, cur, p->type == PROJ_BOLT ? 3.0f : 2.0f, pc);
         DrawCircleV(cur, p->type == PROJ_BOLT ? 3.4f : 2.4f, tc);
     }
+}
+
+static void draw_selected_rally_point(GameState *gs, UIState *ui){
+    int lp = net_get_local_player();
+    if(ui->sel_building < 0) return;
+
+    Building *b = &gs->buildings[ui->sel_building];
+    if(!b->active || !b->complete || b->player != lp || !building_supports_rally(b->type)) return;
+
+    float bx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
+    float by = (b->ty + b->th * 0.5f) * TILE_SIZE;
+    float rx = (b->rally_tx + 0.5f) * TILE_SIZE;
+    float ry = (b->rally_ty + 0.5f) * TILE_SIZE;
+    Vector2 from = to_rvec2(world_to_iso(bx, by));
+    Vector2 to = to_rvec2(world_to_iso(rx, ry));
+
+    DrawLineEx(from, to, 2.0f, CLITERAL(Color){120, 220, 255, 150});
+    draw_flag(rx, ry, b->player);
+
+    if(!ui->rally_mode) return;
+
+    Vector2 mp = GetMousePosition();
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+    if(GetTouchPointCount() > 0) mp = GetTouchPosition(0);
+#endif
+    bool over_hud = mp.y < HUD_TOP_H || mp.y > GetScreenHeight() - HUD_BOT_H ||
+                    (mp.x > GetScreenWidth() - MINI_SIZE - 16 && mp.y > GetScreenHeight() - HUD_BOT_H - 8);
+    if(over_hud) return;
+
+    Vector2 wp = GetScreenToWorld2D(mp, ui->camera);
+    Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));
+    int tx = (int)(cart.x / TILE_SIZE);
+    int ty = (int)(cart.y / TILE_SIZE);
+    if(!map_in_bounds(tx, ty)) return;
+
+    int ptx = tx;
+    int pty = ty;
+    if(!map_find_passable_near(gs, tx, ty, &ptx, &pty)) return;
+
+    float prx = (ptx + 0.5f) * TILE_SIZE;
+    float pry = (pty + 0.5f) * TILE_SIZE;
+    Vector2 preview = to_rvec2(world_to_iso(prx, pry));
+    DrawLineEx(from, preview, 2.0f, CLITERAL(Color){240, 240, 180, 150});
+    draw_flag(prx, pry, b->player);
+    DrawCircleV(preview, 5.0f, CLITERAL(Color){240, 240, 180, 120});
 }
 
 static void draw_building(GameState *gs, UIState *ui, Building *b){
@@ -212,6 +258,7 @@ void renderer_draw_world(GameState *gs, UIState *ui){
     }
 
     draw_projectiles(gs);
+    draw_selected_rally_point(gs, ui);
     
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++) draw_fog(gs,x,y);
 
