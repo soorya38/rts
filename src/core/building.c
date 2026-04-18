@@ -18,6 +18,18 @@ static void building_apply_combat_stats(Building *b){
     }
 }
 
+static void building_apply_arrow_upgrades(GameState *gs, Building *b){
+    if(!gs || !b || b->attack_dmg <= 0) return;
+    int atk_bonus = 0;
+    int range_bonus = 0;
+    PlayerRes *pr = &gs->res[b->player];
+    if(pr->tech_unlocked[TECH_FORGED_ARROWS]){ atk_bonus += 1; range_bonus += 1; }
+    if(pr->tech_unlocked[TECH_BODKIN_ARROW]) { atk_bonus += 1; range_bonus += 1; }
+    if(pr->tech_unlocked[TECH_BRACER])       { atk_bonus += 1; range_bonus += 1; }
+    b->attack_dmg += atk_bonus;
+    b->attack_range += (float)range_bonus;
+}
+
 static float building_projectile_duration(float dist_tiles){
     return clampf(0.10f + dist_tiles * 0.05f, 0.16f, 0.50f);
 }
@@ -73,10 +85,7 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     b->active_tech  = TECH_NONE;
     b->tech_timer   = 0.0f;
     building_apply_combat_stats(b);
-    if(gs->res[player].tech_unlocked[TECH_FORGED_ARROWS] && b->attack_dmg > 0){
-        b->attack_dmg += 1;
-        b->attack_range += 1.0f;
-    }
+    building_apply_arrow_upgrades(gs, b);
     map_place_building(gs,tx,ty,w,h,slot);
     if(slot >= gs->bld_count) gs->bld_count=slot+1;
     printf("building_place success: bid=%d\n", slot);
@@ -153,10 +162,7 @@ int building_place_ready(GameState *gs,int player,BldType type,int tx,int ty){
         b->construction=1.0f; b->complete=true;
         b->rally_tx=tx+w/2; b->rally_ty=ty+h+1;
         building_apply_combat_stats(b);
-        if(gs->res[player].tech_unlocked[TECH_FORGED_ARROWS] && b->attack_dmg > 0){
-            b->attack_dmg += 1;
-            b->attack_range += 1.0f;
-        }
+        building_apply_arrow_upgrades(gs, b);
         map_place_building(gs,tx,ty,w,h,i);
         if(i>=gs->bld_count) gs->bld_count=i+1;
         building_on_complete(gs,b);  /* handles farm tile conversion */
@@ -229,12 +235,12 @@ void building_update(GameState *gs, Building *b, float dt){
                 Unit *u = &gs->units[i];
                 if (u->active && u->player == b->player) unit_refresh_upgrades(gs, u);
             }
-            if (t_id == TECH_FORGED_ARROWS) {
+            if (t_id == TECH_FORGED_ARROWS || t_id == TECH_BODKIN_ARROW || t_id == TECH_BRACER) {
                 for (int i=0; i<MAX_BUILDINGS; i++) {
                     Building *tb = &gs->buildings[i];
                     if (tb->active && tb->player == b->player && tb->attack_dmg > 0) {
-                        tb->attack_dmg += 1;
-                        tb->attack_range += 1.0f;
+                        building_apply_combat_stats(tb);
+                        building_apply_arrow_upgrades(gs, tb);
                     }
                 }
             }
@@ -276,26 +282,55 @@ Cost tech_cost(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return (Cost){75, 75, 0, 0};
         case TECH_FERTILIZER:     return (Cost){125, 125, 0, 0};
+        case TECH_HAND_MILL:      return (Cost){75, 75, 0, 0};
+        case TECH_GRANARY_BASKETS:return (Cost){125, 75, 0, 0};
+        case TECH_IRRIGATION:     return (Cost){200, 100, 0, 0};
+        case TECH_REAPING:        return (Cost){175, 125, 0, 0};
+        case TECH_DOUBLE_BIT_AXE: return (Cost){50, 100, 0, 0};
+        case TECH_LOG_STRAPS:     return (Cost){75, 100, 0, 0};
+        case TECH_BOW_SAW:        return (Cost){100, 150, 0, 0};
+        case TECH_TIMBER_ROUTE:   return (Cost){125, 125, 0, 0};
+        case TECH_TWO_MAN_SAW:    return (Cost){150, 225, 0, 0};
+        case TECH_HARDWOOD_CARTS: return (Cost){175, 175, 0, 0};
         case TECH_LOOM:           return (Cost){50, 0, 0, 0};
         case TECH_WHEELBARROW:    return (Cost){150, 50, 0, 0};
         case TECH_HAND_CART:      return (Cost){300, 200, 0, 0};
         case TECH_IRON_WEAPONRY:  return (Cost){100, 0, 50, 0};
+        case TECH_SQUIRES:        return (Cost){100, 0, 50, 0};
         case TECH_CHAIN_MAIL:     return (Cost){150, 0, 100, 0};
+        case TECH_HARDENED_BLADES:return (Cost){125, 0, 100, 0};
         case TECH_IMPERIAL_INFANTRY:return (Cost){250, 0, 150, 0};
+        case TECH_VETERAN_LEGION: return (Cost){200, 0, 175, 0};
         case TECH_COMPOSITE_BOWS: return (Cost){100, 50, 50, 0};
+        case TECH_THUMB_RING:     return (Cost){100, 50, 75, 0};
         case TECH_REINFORCED_STRINGS:return (Cost){100, 100, 100, 0};
+        case TECH_EAGLE_EYE:      return (Cost){0, 125, 100, 0};
         case TECH_IMPERIAL_ARCHERY:return (Cost){0, 250, 200, 0};
+        case TECH_FIELD_CRAFT:    return (Cost){75, 100, 125, 0};
         case TECH_MOUNTED_ARMOR:  return (Cost){150, 0, 100, 0};
+        case TECH_HUSBANDRY:      return (Cost){100, 0, 75, 0};
         case TECH_CAVALRY_DRILL:  return (Cost){150, 0, 125, 0};
+        case TECH_BLOODLINES:     return (Cost){150, 0, 125, 0};
         case TECH_IMPERIAL_CAVALRY:return (Cost){250, 0, 200, 0};
+        case TECH_STEEL_SPURS:    return (Cost){150, 0, 150, 0};
         case TECH_SANCTITY:       return (Cost){0, 0, 100, 0};
+        case TECH_DEVOTION:       return (Cost){0, 0, 120, 0};
         case TECH_FERVOR:         return (Cost){80, 0, 120, 0};
+        case TECH_ILLUMINATION:   return (Cost){75, 0, 125, 0};
         case TECH_BLOCK_PRINTING: return (Cost){0, 0, 180, 0};
+        case TECH_HOLY_VISION:    return (Cost){0, 0, 150, 0};
         case TECH_REINFORCED_RAM: return (Cost){0, 150, 120, 0};
+        case TECH_SIEGE_ENGINEERS:return (Cost){0, 150, 150, 0};
         case TECH_ONAGER:         return (Cost){0, 250, 300, 0};
+        case TECH_DRILL_CREW:     return (Cost){100, 100, 100, 0};
         case TECH_HEAVY_SCORPION: return (Cost){0, 180, 200, 0};
+        case TECH_TORSION_ENGINES:return (Cost){0, 200, 225, 0};
         case TECH_SCALE_ARMOR:    return (Cost){100, 0, 75, 0};
+        case TECH_BLAST_FURNACE:  return (Cost){150, 0, 150, 0};
+        case TECH_PLATE_ARMOR:    return (Cost){0, 150, 175, 0};
         case TECH_FORGED_ARROWS:  return (Cost){75, 50, 50, 0};
+        case TECH_BODKIN_ARROW:   return (Cost){0, 150, 100, 0};
+        case TECH_BRACER:         return (Cost){0, 200, 200, 0};
         default: return (Cost){0,0,0,0};
     }
 }
@@ -304,26 +339,55 @@ float tech_time(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return 20.0f;
         case TECH_FERTILIZER:     return 40.0f;
+        case TECH_HAND_MILL:      return 30.0f;
+        case TECH_GRANARY_BASKETS:return 35.0f;
+        case TECH_IRRIGATION:     return 45.0f;
+        case TECH_REAPING:        return 50.0f;
+        case TECH_DOUBLE_BIT_AXE: return 30.0f;
+        case TECH_LOG_STRAPS:     return 30.0f;
+        case TECH_BOW_SAW:        return 40.0f;
+        case TECH_TIMBER_ROUTE:   return 40.0f;
+        case TECH_TWO_MAN_SAW:    return 50.0f;
+        case TECH_HARDWOOD_CARTS: return 45.0f;
         case TECH_LOOM:           return 20.0f;
         case TECH_WHEELBARROW:    return 35.0f;
         case TECH_HAND_CART:      return 45.0f;
         case TECH_IRON_WEAPONRY:  return 40.0f;
+        case TECH_SQUIRES:        return 30.0f;
         case TECH_CHAIN_MAIL:     return 45.0f;
+        case TECH_HARDENED_BLADES:return 40.0f;
         case TECH_IMPERIAL_INFANTRY:return 55.0f;
+        case TECH_VETERAN_LEGION: return 55.0f;
         case TECH_COMPOSITE_BOWS: return 35.0f;
+        case TECH_THUMB_RING:     return 35.0f;
         case TECH_REINFORCED_STRINGS:return 45.0f;
+        case TECH_EAGLE_EYE:      return 40.0f;
         case TECH_IMPERIAL_ARCHERY:return 55.0f;
+        case TECH_FIELD_CRAFT:    return 50.0f;
         case TECH_MOUNTED_ARMOR:  return 50.0f;
+        case TECH_HUSBANDRY:      return 35.0f;
         case TECH_CAVALRY_DRILL:  return 45.0f;
+        case TECH_BLOODLINES:     return 45.0f;
         case TECH_IMPERIAL_CAVALRY:return 55.0f;
+        case TECH_STEEL_SPURS:    return 50.0f;
         case TECH_SANCTITY:       return 30.0f;
+        case TECH_DEVOTION:       return 35.0f;
         case TECH_FERVOR:         return 35.0f;
+        case TECH_ILLUMINATION:   return 45.0f;
         case TECH_BLOCK_PRINTING: return 45.0f;
+        case TECH_HOLY_VISION:    return 45.0f;
         case TECH_REINFORCED_RAM: return 35.0f;
+        case TECH_SIEGE_ENGINEERS:return 40.0f;
         case TECH_ONAGER:         return 55.0f;
+        case TECH_DRILL_CREW:     return 35.0f;
         case TECH_HEAVY_SCORPION: return 50.0f;
+        case TECH_TORSION_ENGINES:return 55.0f;
         case TECH_SCALE_ARMOR:    return 40.0f;
+        case TECH_BLAST_FURNACE:  return 45.0f;
+        case TECH_PLATE_ARMOR:    return 50.0f;
         case TECH_FORGED_ARROWS:  return 35.0f;
+        case TECH_BODKIN_ARROW:   return 40.0f;
+        case TECH_BRACER:         return 55.0f;
         default: return 10.0f;
     }
 }
@@ -332,30 +396,60 @@ int tech_age_required(TechType t) {
     switch(t){
         case TECH_LOOM:
             return 0;
+        case TECH_HAND_MILL:
         case TECH_CROP_ROTATION:
+        case TECH_DOUBLE_BIT_AXE:
+        case TECH_LOG_STRAPS:
         case TECH_IRON_WEAPONRY:
+        case TECH_SQUIRES:
         case TECH_COMPOSITE_BOWS:
+        case TECH_THUMB_RING:
         case TECH_MOUNTED_ARMOR:
+        case TECH_HUSBANDRY:
         case TECH_SCALE_ARMOR:
         case TECH_FORGED_ARROWS:
         case TECH_WHEELBARROW:
             return 1;
+        case TECH_GRANARY_BASKETS:
         case TECH_FERTILIZER:
+        case TECH_BOW_SAW:
+        case TECH_TIMBER_ROUTE:
         case TECH_CHAIN_MAIL:
+        case TECH_HARDENED_BLADES:
         case TECH_REINFORCED_STRINGS:
+        case TECH_EAGLE_EYE:
         case TECH_CAVALRY_DRILL:
+        case TECH_BLOODLINES:
         case TECH_SANCTITY:
+        case TECH_DEVOTION:
         case TECH_FERVOR:
+        case TECH_ILLUMINATION:
         case TECH_REINFORCED_RAM:
+        case TECH_SIEGE_ENGINEERS:
             return 2;
+        case TECH_IRRIGATION:
+        case TECH_REAPING:
+        case TECH_TWO_MAN_SAW:
+        case TECH_HARDWOOD_CARTS:
         case TECH_HAND_CART:
         case TECH_IMPERIAL_INFANTRY:
+        case TECH_VETERAN_LEGION:
         case TECH_IMPERIAL_ARCHERY:
+        case TECH_FIELD_CRAFT:
         case TECH_IMPERIAL_CAVALRY:
+        case TECH_STEEL_SPURS:
         case TECH_BLOCK_PRINTING:
+        case TECH_HOLY_VISION:
         case TECH_ONAGER:
+        case TECH_DRILL_CREW:
         case TECH_HEAVY_SCORPION:
+        case TECH_TORSION_ENGINES:
+        case TECH_PLATE_ARMOR:
+        case TECH_BRACER:
             return 3;
+        case TECH_BLAST_FURNACE:
+        case TECH_BODKIN_ARROW:
+            return 2;
         default:
             return 0;
     }
@@ -365,26 +459,55 @@ const char* tech_name(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return "Crop Rotation";
         case TECH_FERTILIZER:     return "Fertilizer";
+        case TECH_HAND_MILL:      return "Hand Mill";
+        case TECH_GRANARY_BASKETS:return "Granary Baskets";
+        case TECH_IRRIGATION:     return "Irrigation";
+        case TECH_REAPING:        return "Reaping";
+        case TECH_DOUBLE_BIT_AXE: return "Double-Bit Axe";
+        case TECH_LOG_STRAPS:     return "Log Straps";
+        case TECH_BOW_SAW:        return "Bow Saw";
+        case TECH_TIMBER_ROUTE:   return "Timber Route";
+        case TECH_TWO_MAN_SAW:    return "Two-Man Saw";
+        case TECH_HARDWOOD_CARTS: return "Hardwood Carts";
         case TECH_LOOM:           return "Loom";
         case TECH_WHEELBARROW:    return "Wheelbarrow";
         case TECH_HAND_CART:      return "Hand Cart";
         case TECH_IRON_WEAPONRY:  return "Iron Weaponry";
+        case TECH_SQUIRES:        return "Squires";
         case TECH_CHAIN_MAIL:     return "Chain Mail";
+        case TECH_HARDENED_BLADES:return "Hardened Blades";
         case TECH_IMPERIAL_INFANTRY:return "Imperial Infantry";
+        case TECH_VETERAN_LEGION: return "Veteran Legion";
         case TECH_COMPOSITE_BOWS: return "Composite Bows";
+        case TECH_THUMB_RING:     return "Thumb Ring";
         case TECH_REINFORCED_STRINGS:return "Reinforced Strings";
+        case TECH_EAGLE_EYE:      return "Eagle Eye";
         case TECH_IMPERIAL_ARCHERY:return "Imperial Archery";
+        case TECH_FIELD_CRAFT:    return "Field Craft";
         case TECH_MOUNTED_ARMOR:  return "Mounted Armor";
+        case TECH_HUSBANDRY:      return "Husbandry";
         case TECH_CAVALRY_DRILL:  return "Cavalry Drill";
+        case TECH_BLOODLINES:     return "Bloodlines";
         case TECH_IMPERIAL_CAVALRY:return "Imperial Cavalry";
+        case TECH_STEEL_SPURS:    return "Steel Spurs";
         case TECH_SANCTITY:       return "Sanctity";
+        case TECH_DEVOTION:       return "Devotion";
         case TECH_FERVOR:         return "Fervor";
+        case TECH_ILLUMINATION:   return "Illumination";
         case TECH_BLOCK_PRINTING: return "Block Printing";
+        case TECH_HOLY_VISION:    return "Holy Vision";
         case TECH_REINFORCED_RAM: return "Reinforced Ram";
+        case TECH_SIEGE_ENGINEERS:return "Siege Engineers";
         case TECH_ONAGER:         return "Onager";
+        case TECH_DRILL_CREW:     return "Drill Crew";
         case TECH_HEAVY_SCORPION: return "Heavy Scorpion";
+        case TECH_TORSION_ENGINES:return "Torsion Engines";
         case TECH_SCALE_ARMOR:    return "Scale Armor";
+        case TECH_BLAST_FURNACE:  return "Blast Furnace";
+        case TECH_PLATE_ARMOR:    return "Plate Armor";
         case TECH_FORGED_ARROWS:  return "Forged Arrows";
+        case TECH_BODKIN_ARROW:   return "Bodkin Arrow";
+        case TECH_BRACER:         return "Bracer";
         default: return "Unknown Tech";
     }
 }
@@ -393,26 +516,55 @@ const char* tech_desc(TechType t) {
     switch(t){
         case TECH_CROP_ROTATION:  return "+75 Food to new farms";
         case TECH_FERTILIZER:     return "+125 Food to new farms";
+        case TECH_HAND_MILL:      return "+15% Food gather rate";
+        case TECH_GRANARY_BASKETS:return "+1 Food carry (Villagers)";
+        case TECH_IRRIGATION:     return "+15% Food gather rate";
+        case TECH_REAPING:        return "+2 Food carry (Villagers)";
+        case TECH_DOUBLE_BIT_AXE: return "+15% Wood gather rate";
+        case TECH_LOG_STRAPS:     return "+1 Wood carry (Villagers)";
+        case TECH_BOW_SAW:        return "+15% Wood gather rate";
+        case TECH_TIMBER_ROUTE:   return "+6 Speed (Villagers)";
+        case TECH_TWO_MAN_SAW:    return "+20% Wood gather rate";
+        case TECH_HARDWOOD_CARTS: return "+2 Wood carry, +6 Speed (Villagers)";
         case TECH_LOOM:           return "+15 HP, +1 Armor (Villagers)";
         case TECH_WHEELBARROW:    return "+2 Carry, +8 Speed (Villagers)";
         case TECH_HAND_CART:      return "+3 Carry, +10 Speed, +10 HP (Villagers)";
         case TECH_IRON_WEAPONRY:  return "+1 Att, +10 HP (Infantry)";
+        case TECH_SQUIRES:        return "+8 Speed (Infantry)";
         case TECH_CHAIN_MAIL:     return "+1 Armor, +10 HP (Infantry)";
+        case TECH_HARDENED_BLADES:return "+1 Att (Infantry)";
         case TECH_IMPERIAL_INFANTRY:return "+2 Att, +15 HP (Infantry)";
+        case TECH_VETERAN_LEGION: return "+15 HP (Infantry)";
         case TECH_COMPOSITE_BOWS: return "+1 Att, +1 Range (Archers)";
+        case TECH_THUMB_RING:     return "+8 Speed, faster fire (Archers)";
         case TECH_REINFORCED_STRINGS:return "+1 Att, +1 Armor (Archers)";
+        case TECH_EAGLE_EYE:      return "+1 Range, +1 Vision (Archers)";
         case TECH_IMPERIAL_ARCHERY:return "+1 Att, +1 Range (Archers)";
+        case TECH_FIELD_CRAFT:    return "+10 HP (Archers)";
         case TECH_MOUNTED_ARMOR:  return "+20 HP (Cavalry)";
+        case TECH_HUSBANDRY:      return "+12 Speed (Cavalry)";
         case TECH_CAVALRY_DRILL:  return "+1 Att, +10 Speed (Cavalry)";
+        case TECH_BLOODLINES:     return "+20 HP (Cavalry)";
         case TECH_IMPERIAL_CAVALRY:return "+20 HP, +1 Armor (Cavalry)";
+        case TECH_STEEL_SPURS:    return "+1 Att (Cavalry)";
         case TECH_SANCTITY:       return "+15 HP (Monks)";
+        case TECH_DEVOTION:       return "+15 HP (Monks)";
         case TECH_FERVOR:         return "+12 Speed (Monks)";
+        case TECH_ILLUMINATION:   return "Faster healing/conversion (Monks)";
         case TECH_BLOCK_PRINTING: return "+1 Range (Monks)";
+        case TECH_HOLY_VISION:    return "+2 Vision (Monks)";
         case TECH_REINFORCED_RAM: return "+80 HP, +4 Att (Rams)";
+        case TECH_SIEGE_ENGINEERS:return "+1 Range (Siege)";
         case TECH_ONAGER:         return "+12 Att, +1 Range (Mangonels)";
+        case TECH_DRILL_CREW:     return "+8 Speed (Siege)";
         case TECH_HEAVY_SCORPION: return "+8 Att, +1 Armor/Range (Scorpions)";
+        case TECH_TORSION_ENGINES:return "+8 Att (Siege)";
         case TECH_SCALE_ARMOR:    return "+1 Armor (All Military)";
+        case TECH_BLAST_FURNACE:  return "+1 Att (Melee Military)";
+        case TECH_PLATE_ARMOR:    return "+1 Armor (Military)";
         case TECH_FORGED_ARROWS:  return "+1 Att (Archers)";
+        case TECH_BODKIN_ARROW:   return "+1 Att, +1 Range (Archers/Towers)";
+        case TECH_BRACER:         return "+1 Att, +1 Range (Archers/Towers)";
         default: return "";
     }
 }

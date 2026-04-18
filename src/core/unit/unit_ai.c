@@ -100,6 +100,39 @@ static void unit_apply_separation(GameState *gs){
 /* ─── Gather ───────────────────────────────────────────────── */
 static const float GATHER_RATE[RES_COUNT]={0.4f,0.5f,0.33f,0.28f};
 
+static float villager_gather_multiplier(GameState *gs, Unit *u, ResType rt){
+    if(!gs || !u || u->type != UNIT_VILLAGER) return 1.0f;
+
+    PlayerRes *pr = &gs->res[u->player];
+    float mult = 1.0f;
+    if(rt == RES_FOOD){
+        if(pr->tech_unlocked[TECH_HAND_MILL]) mult += 0.15f;
+        if(pr->tech_unlocked[TECH_IRRIGATION]) mult += 0.15f;
+    } else if(rt == RES_WOOD){
+        if(pr->tech_unlocked[TECH_DOUBLE_BIT_AXE]) mult += 0.15f;
+        if(pr->tech_unlocked[TECH_BOW_SAW]) mult += 0.15f;
+        if(pr->tech_unlocked[TECH_TWO_MAN_SAW]) mult += 0.20f;
+    }
+    return mult;
+}
+
+static int villager_effective_carry_cap(GameState *gs, Unit *u, ResType rt){
+    if(!gs || !u) return 0;
+
+    int cap = u->carry_cap;
+    if(u->type != UNIT_VILLAGER) return cap;
+
+    PlayerRes *pr = &gs->res[u->player];
+    if(rt == RES_FOOD){
+        if(pr->tech_unlocked[TECH_GRANARY_BASKETS]) cap += 1;
+        if(pr->tech_unlocked[TECH_REAPING]) cap += 2;
+    } else if(rt == RES_WOOD){
+        if(pr->tech_unlocked[TECH_LOG_STRAPS]) cap += 1;
+        if(pr->tech_unlocked[TECH_HARDWOOD_CARTS]) cap += 2;
+    }
+    return cap;
+}
+
 static void unit_do_gather(GameState *gs, Unit *u, float dt){
     if(!map_in_bounds(u->gather_tx,u->gather_ty)){u->state=US_IDLE;return;}
     Tile *t=&gs->map[u->gather_ty][u->gather_tx];
@@ -131,7 +164,7 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
     ResType rt=tile_to_res_ai(t->type);
     if(u->carry_amt>0 && u->carry_type!=rt) u->carry_amt=0;
     u->carry_type=rt;
-    u->anim_timer += GATHER_RATE[rt]*dt;
+    u->anim_timer += GATHER_RATE[rt] * villager_gather_multiplier(gs, u, rt) * dt;
     int gained=(int)u->anim_timer;
     if(gained>0){
         u->anim_timer-=gained;
@@ -155,7 +188,7 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
             if(t->type!=TILE_FARM) t->type=TILE_GRASS;
         }
     }
-    if(u->carry_amt>=u->carry_cap){
+    if(u->carry_amt>=villager_effective_carry_cap(gs, u, rt)){
         int dtx,dty;
         if(map_find_dropoff(gs,u->player,rt,u->wx,u->wy,&dtx,&dty)){
             /* Find the building at dropoff to get its actual size */

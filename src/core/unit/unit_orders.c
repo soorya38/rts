@@ -153,6 +153,14 @@ static bool unit_is_cavalry(UnitType t){
     return t == UNIT_SCOUT || t == UNIT_KNIGHT || t == UNIT_CAVALRY_ARCHER;
 }
 
+static bool unit_is_melee_military(UnitType t){
+    return unit_is_infantry(t) || t == UNIT_SCOUT || t == UNIT_KNIGHT || t == UNIT_BATTERING_RAM;
+}
+
+static bool unit_is_siege(UnitType t){
+    return t == UNIT_BATTERING_RAM || t == UNIT_MANGONEL || t == UNIT_SCORPION;
+}
+
 void unit_refresh_upgrades(GameState *gs, Unit *u){
     if(!gs || !u) return;
 
@@ -184,73 +192,142 @@ void unit_refresh_upgrades(GameState *gs, Unit *u){
         u->move_speed += 10.0f;
         u->max_hp += 10;
     }
+    if (pr->tech_unlocked[TECH_TIMBER_ROUTE] && u->type == UNIT_VILLAGER) {
+        u->move_speed += 6.0f;
+    }
+    if (pr->tech_unlocked[TECH_HARDWOOD_CARTS] && u->type == UNIT_VILLAGER) {
+        u->move_speed += 6.0f;
+    }
 
     if (pr->tech_unlocked[TECH_IRON_WEAPONRY] && unit_is_infantry(u->type)) {
         u->max_hp += 10;
         u->attack_dmg += 1;
     }
+    if (pr->tech_unlocked[TECH_SQUIRES] && unit_is_infantry(u->type)) {
+        u->move_speed += 8.0f;
+    }
     if (pr->tech_unlocked[TECH_CHAIN_MAIL] && unit_is_infantry(u->type)) {
         u->max_hp += 10;
         u->armor += 1;
     }
+    if (pr->tech_unlocked[TECH_HARDENED_BLADES] && unit_is_infantry(u->type)) {
+        u->attack_dmg += 1;
+    }
     if (pr->tech_unlocked[TECH_IMPERIAL_INFANTRY] && unit_is_infantry(u->type)) {
         u->max_hp += 15;
         u->attack_dmg += 2;
+    }
+    if (pr->tech_unlocked[TECH_VETERAN_LEGION] && unit_is_infantry(u->type)) {
+        u->max_hp += 15;
     }
 
     if (pr->tech_unlocked[TECH_COMPOSITE_BOWS] && (u->type == UNIT_ARCHER || u->type == UNIT_CAVALRY_ARCHER)) {
         u->attack_dmg += 1;
         u->attack_range += 1.0f;
     }
+    if (pr->tech_unlocked[TECH_THUMB_RING] && unit_is_archery(u->type)) {
+        u->move_speed += 8.0f;
+        u->attack_cd = clampf(u->attack_cd - 0.2f, 0.6f, 10.0f);
+    }
     if (pr->tech_unlocked[TECH_REINFORCED_STRINGS] && unit_is_archery(u->type)) {
         u->attack_dmg += 1;
         u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_EAGLE_EYE] && unit_is_archery(u->type)) {
+        u->attack_range += 1.0f;
+        u->vision_range += 1.0f;
     }
     if (pr->tech_unlocked[TECH_IMPERIAL_ARCHERY] && unit_is_archery(u->type)) {
         u->attack_dmg += 1;
         u->attack_range += 1.0f;
     }
+    if (pr->tech_unlocked[TECH_FIELD_CRAFT] && unit_is_archery(u->type)) {
+        u->max_hp += 10;
+    }
 
     if (pr->tech_unlocked[TECH_MOUNTED_ARMOR] && unit_is_cavalry(u->type)) {
         u->max_hp += 20;
+    }
+    if (pr->tech_unlocked[TECH_HUSBANDRY] && unit_is_cavalry(u->type)) {
+        u->move_speed += 12.0f;
     }
     if (pr->tech_unlocked[TECH_CAVALRY_DRILL] && unit_is_cavalry(u->type)) {
         u->attack_dmg += 1;
         u->move_speed += 10.0f;
     }
+    if (pr->tech_unlocked[TECH_BLOODLINES] && unit_is_cavalry(u->type)) {
+        u->max_hp += 20;
+    }
     if (pr->tech_unlocked[TECH_IMPERIAL_CAVALRY] && unit_is_cavalry(u->type)) {
         u->max_hp += 20;
         u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_STEEL_SPURS] && unit_is_cavalry(u->type)) {
+        u->attack_dmg += 1;
     }
 
     if (pr->tech_unlocked[TECH_SANCTITY] && u->type == UNIT_MONK) {
         u->max_hp += 15;
     }
+    if (pr->tech_unlocked[TECH_DEVOTION] && u->type == UNIT_MONK) {
+        u->max_hp += 15;
+    }
     if (pr->tech_unlocked[TECH_FERVOR] && u->type == UNIT_MONK) {
         u->move_speed += 12.0f;
     }
+    if (pr->tech_unlocked[TECH_ILLUMINATION] && u->type == UNIT_MONK) {
+        u->attack_cd = clampf(u->attack_cd - 1.0f, 1.5f, 10.0f);
+    }
     if (pr->tech_unlocked[TECH_BLOCK_PRINTING] && u->type == UNIT_MONK) {
         u->attack_range += 1.0f;
+    }
+    if (pr->tech_unlocked[TECH_HOLY_VISION] && u->type == UNIT_MONK) {
+        u->vision_range += 2.0f;
     }
 
     if (pr->tech_unlocked[TECH_REINFORCED_RAM] && u->type == UNIT_BATTERING_RAM) {
         u->max_hp += 80;
         u->attack_dmg += 4;
     }
+    if (pr->tech_unlocked[TECH_SIEGE_ENGINEERS] && unit_is_siege(u->type)) {
+        u->attack_range += 1.0f;
+    }
     if (pr->tech_unlocked[TECH_ONAGER] && u->type == UNIT_MANGONEL) {
         u->attack_dmg += 12;
         u->attack_range += 1.0f;
+    }
+    if (pr->tech_unlocked[TECH_DRILL_CREW] && unit_is_siege(u->type)) {
+        u->move_speed += 8.0f;
     }
     if (pr->tech_unlocked[TECH_HEAVY_SCORPION] && u->type == UNIT_SCORPION) {
         u->attack_dmg += 8;
         u->armor += 1;
         u->attack_range += 1.0f;
     }
+    if (pr->tech_unlocked[TECH_TORSION_ENGINES] && unit_is_siege(u->type)) {
+        u->attack_dmg += 8;
+    }
 
     if (pr->tech_unlocked[TECH_SCALE_ARMOR] && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT) {
         u->armor += 1;
     }
+    if (pr->tech_unlocked[TECH_PLATE_ARMOR] && u->type != UNIT_VILLAGER && u->type != UNIT_MONK) {
+        u->armor += 1;
+    }
+    if (pr->tech_unlocked[TECH_BLAST_FURNACE] && unit_is_melee_military(u->type)) {
+        u->attack_dmg += 1;
+    }
     if (pr->tech_unlocked[TECH_FORGED_ARROWS] &&
+        (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
+        u->attack_dmg += 1;
+        u->attack_range += 1.0f;
+    }
+    if (pr->tech_unlocked[TECH_BODKIN_ARROW] &&
+        (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
+        u->attack_dmg += 1;
+        u->attack_range += 1.0f;
+    }
+    if (pr->tech_unlocked[TECH_BRACER] &&
         (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
         u->attack_dmg += 1;
         u->attack_range += 1.0f;
