@@ -12,13 +12,9 @@ uint32_t _rng = 12345;
 /* Forward declare the building init helper from building.c */
 void buildings_init_player(GameState *gs,int player,int tc_tx,int tc_ty);
 
-void game_set_alert(GameState *gs, const char *msg){
-    snprintf(gs->alert,sizeof(gs->alert),"%s",msg);
-    gs->alert_timer=3.5f;
-}
-
-void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
+static void game_init_match(GameState *gs, uint32_t seed, int num_players, GameMode mode){
     memset(gs, 0, sizeof(GameState));
+    gs->mode = mode;
     gs->num_players = (num_players < 1) ? 1 : (num_players > 4 ? 4 : num_players);
     _rng = seed;
 
@@ -28,15 +24,131 @@ void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
     gs->ai_timer     = 0.0f;
     gs->ai_attack_cd = 90.0f;
 
-    /* Setup player resources */
     for (int i = 0; i < gs->num_players; i++) {
         gs->res[i].amount[RES_FOOD]  = 200;
         gs->res[i].amount[RES_WOOD]  = 200;
         gs->res[i].amount[RES_GOLD]  = 100;
         gs->res[i].amount[RES_STONE] = 0;
-        gs->res[i].age    = 0;
-        gs->res[i].pop_cap = 5;
+        gs->res[i].age               = 0;
+        gs->res[i].pop_cap           = 5;
     }
+}
+
+static void sandbox_clear_map(GameState *gs){
+    for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
+        gs->map[y][x].type         = TILE_GRASS;
+        gs->map[y][x].resource_amt = 0;
+        gs->map[y][x].building_id  = -1;
+        gs->map[y][x].variant      = (uint8_t)(rng_next()%4);
+        for(int p=0;p<NUM_PLAYERS;p++) gs->map[y][x].fog[p] = FOG_VISIBLE;
+    }
+}
+
+static void sandbox_paint_patch(GameState *gs, int cx, int cy, int radius, TileType type, int amount){
+    for(int dy=-radius;dy<=radius;dy++) for(int dx=-radius;dx<=radius;dx++){
+        if(dx*dx + dy*dy > radius*radius) continue;
+        int x = cx + dx, y = cy + dy;
+        if(!map_in_bounds(x, y)) continue;
+        if(gs->map[y][x].building_id >= 0) continue;
+        gs->map[y][x].type = type;
+        gs->map[y][x].resource_amt = amount + rng_range(0, amount/5);
+    }
+}
+
+static void sandbox_spawn_block(GameState *gs, int player, int anchor_tx, int anchor_ty,
+                                const UnitType *types, int count){
+    int cols = (count > 3) ? 3 : count;
+    if(cols < 1) cols = 1;
+    for(int i=0;i<count;i++){
+        int col = i % cols;
+        int row = i / cols;
+        float wx = (anchor_tx + col + 0.5f) * TILE_SIZE;
+        float wy = (anchor_ty + row + 0.5f) * TILE_SIZE;
+        unit_spawn(gs, player, types[i], wx, wy);
+    }
+}
+
+static void sandbox_setup_bases(GameState *gs){
+    static const UnitType preview_units[] = {
+        UNIT_SCOUT, UNIT_MILITIA, UNIT_MAN_AT_ARMS,
+        UNIT_SPEARMAN, UNIT_ARCHER, UNIT_SKIRMISHER,
+        UNIT_CAVALRY_ARCHER, UNIT_KNIGHT, UNIT_MONK
+    };
+
+    sandbox_clear_map(gs);
+
+    sandbox_paint_patch(gs, 9, 15, 2, TILE_FOREST, 180);
+    sandbox_paint_patch(gs, 17, 15, 1, TILE_BERRIES, 500);
+    sandbox_paint_patch(gs, 8, 43, 1, TILE_GOLD, 900);
+    sandbox_paint_patch(gs, 18, 44, 1, TILE_STONE, 800);
+    sandbox_paint_patch(gs, 11, 50, 2, TILE_FOREST, 180);
+
+    sandbox_paint_patch(gs, 55, 15, 2, TILE_FOREST, 180);
+    sandbox_paint_patch(gs, 47, 15, 1, TILE_BERRIES, 500);
+    sandbox_paint_patch(gs, 56, 43, 1, TILE_GOLD, 900);
+    sandbox_paint_patch(gs, 46, 44, 1, TILE_STONE, 800);
+
+    building_place_ready(gs, 0, BLD_TOWN_CENTER,   8, 28);
+    building_place_ready(gs, 0, BLD_HOUSE,         6, 22);
+    building_place_ready(gs, 0, BLD_HOUSE,         6, 36);
+    building_place_ready(gs, 0, BLD_MILL,         14, 18);
+    building_place_ready(gs, 0, BLD_LUMBER_CAMP,  14, 24);
+    building_place_ready(gs, 0, BLD_MINING_CAMP,  14, 38);
+    building_place_ready(gs, 0, BLD_FARM,         12, 32);
+    building_place_ready(gs, 0, BLD_BARRACKS,     20, 18);
+    building_place_ready(gs, 0, BLD_ARCHERY_RANGE,24, 18);
+    building_place_ready(gs, 0, BLD_STABLE,       28, 18);
+    building_place_ready(gs, 0, BLD_BLACKSMITH,   20, 37);
+    building_place_ready(gs, 0, BLD_MARKET,       24, 37);
+    building_place_ready(gs, 0, BLD_MONASTERY,    28, 37);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER,  18, 30);
+
+    building_place_ready(gs, 1, BLD_TOWN_CENTER,   48, 28);
+    building_place_ready(gs, 1, BLD_HOUSE,         54, 22);
+    building_place_ready(gs, 1, BLD_HOUSE,         54, 36);
+    building_place_ready(gs, 1, BLD_MILL,          50, 18);
+    building_place_ready(gs, 1, BLD_FARM,          50, 34);
+    building_place_ready(gs, 1, BLD_BARRACKS,      40, 18);
+    building_place_ready(gs, 1, BLD_ARCHERY_RANGE, 44, 18);
+    building_place_ready(gs, 1, BLD_STABLE,        40, 37);
+    building_place_ready(gs, 1, BLD_MARKET,        44, 37);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER,   46, 30);
+
+    gs->res[0].amount[RES_FOOD]  = 5000;
+    gs->res[0].amount[RES_WOOD]  = 5000;
+    gs->res[0].amount[RES_GOLD]  = 5000;
+    gs->res[0].amount[RES_STONE] = 5000;
+    gs->res[1].amount[RES_FOOD]  = 3000;
+    gs->res[1].amount[RES_WOOD]  = 3000;
+    gs->res[1].amount[RES_GOLD]  = 3000;
+    gs->res[1].amount[RES_STONE] = 3000;
+
+    for(int p=0;p<gs->num_players;p++){
+        gs->res[p].pop_cap = POP_CAP_MAX;
+    }
+
+    unit_spawn(gs, 0, UNIT_VILLAGER, (12.5f)*TILE_SIZE, (27.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (12.5f)*TILE_SIZE, (29.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (12.5f)*TILE_SIZE, (31.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (11.5f)*TILE_SIZE, (24.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (11.5f)*TILE_SIZE, (35.5f)*TILE_SIZE);
+    sandbox_spawn_block(gs, 0, 22, 28, preview_units, (int)(sizeof(preview_units)/sizeof(preview_units[0])));
+
+    unit_spawn(gs, 1, UNIT_VILLAGER, (51.5f)*TILE_SIZE, (27.5f)*TILE_SIZE);
+    unit_spawn(gs, 1, UNIT_VILLAGER, (51.5f)*TILE_SIZE, (29.5f)*TILE_SIZE);
+    unit_spawn(gs, 1, UNIT_VILLAGER, (51.5f)*TILE_SIZE, (31.5f)*TILE_SIZE);
+    sandbox_spawn_block(gs, 1, 42, 28, preview_units, (int)(sizeof(preview_units)/sizeof(preview_units[0])));
+
+    map_update_fog(gs);
+}
+
+void game_set_alert(GameState *gs, const char *msg){
+    snprintf(gs->alert,sizeof(gs->alert),"%s",msg);
+    gs->alert_timer=3.5f;
+}
+
+void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
+    game_init_match(gs, seed, num_players, GAME_MODE_STANDARD);
 
     int dmx, dmy;
     map_init(gs, &dmx, &dmy, &dmx, &dmy);
@@ -70,12 +182,105 @@ void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
     map_update_fog(gs);
 }
 
+void game_init_sandbox(GameState *gs, uint32_t seed){
+    game_init_match(gs, seed, 2, GAME_MODE_SANDBOX);
+    sandbox_setup_bases(gs);
+    game_set_alert(gs, "Sandbox ready: economy, combat, tech, and building tests are all live.");
+}
+
 /* ─── Game init (defaults to menu) ─────────────────────────── */
 void game_init(GameState *gs){
     memset(gs, 0, sizeof(GameState));
+    gs->mode = GAME_MODE_STANDARD;
     gs->phase = PHASE_MENU;
     /* We don't setup the game here anymore. Setup happens when "Start" is clicked. */
     /* For Solo Campaign, we'll call game_init_started_game(gs, time(NULL)) */
+}
+
+void game_sandbox_add_resources(GameState *gs, int player, int amount){
+    if(!gs || gs->mode != GAME_MODE_SANDBOX || player < 0 || player >= gs->num_players) return;
+    res_add(&gs->res[player], RES_FOOD, amount);
+    res_add(&gs->res[player], RES_WOOD, amount);
+    res_add(&gs->res[player], RES_GOLD, amount);
+    res_add(&gs->res[player], RES_STONE, amount);
+    game_set_alert(gs, "Sandbox: +resources added.");
+}
+
+void game_sandbox_next_age(GameState *gs, int player){
+    static const char *AGE_NAMES[] = {"Dark Age", "Feudal Age", "Castle Age", "Imperial Age"};
+    if(!gs || gs->mode != GAME_MODE_SANDBOX || player < 0 || player >= gs->num_players) return;
+    PlayerRes *pr = &gs->res[player];
+    if(pr->age >= 3){
+        game_set_alert(gs, "Sandbox: already at Imperial Age.");
+        return;
+    }
+    pr->age++;
+    pr->advancing = false;
+    pr->advance_timer = 0.0f;
+    game_set_alert(gs, AGE_NAMES[pr->age]);
+}
+
+void game_sandbox_spawn_wave(GameState *gs, int player){
+    static const UnitType WAVE[] = {
+        UNIT_MAN_AT_ARMS, UNIT_SPEARMAN, UNIT_ARCHER, UNIT_KNIGHT, UNIT_MONK
+    };
+    if(!gs || gs->mode != GAME_MODE_SANDBOX || player < 0 || player >= gs->num_players) return;
+    int lane = (unit_count_military(gs, player) / 5) % 3;
+    int anchor_ty = 26 + lane * 4;
+    int anchor_tx = (player == 0) ? 28 : 34;
+    sandbox_spawn_block(gs, player, anchor_tx, anchor_ty, WAVE, (int)(sizeof(WAVE)/sizeof(WAVE[0])));
+    game_set_alert(gs, (player == 0) ? "Sandbox: allied test squad spawned." :
+                                      "Sandbox: enemy test squad spawned.");
+}
+
+void game_sandbox_heal_selection(GameState *gs, int player, int building_id,
+                                 const int *unit_ids, int unit_count){
+    if(!gs || gs->mode != GAME_MODE_SANDBOX || player < 0 || player >= gs->num_players) return;
+
+    bool touched = false;
+    if(building_id >= 0 && building_id < MAX_BUILDINGS){
+        Building *b = &gs->buildings[building_id];
+        if(b->active && b->player == player){
+            if(!b->complete) building_on_complete(gs, b);
+            b->hp = b->max_hp;
+            touched = true;
+        }
+    }
+
+    for(int i=0;i<unit_count;i++){
+        int uid = unit_ids[i];
+        if(uid < 0 || uid >= MAX_UNITS) continue;
+        Unit *u = &gs->units[uid];
+        if(!u->active || u->player != player) continue;
+        u->hp = u->max_hp;
+        if(u->state == US_DYING){
+            u->state = US_IDLE;
+            u->death_timer = 0.8f;
+        }
+        touched = true;
+    }
+
+    if(!touched){
+        for(int i=0;i<MAX_UNITS;i++){
+            Unit *u = &gs->units[i];
+            if(!u->active || u->player != player) continue;
+            u->hp = u->max_hp;
+            if(u->state == US_DYING){
+                u->state = US_IDLE;
+                u->death_timer = 0.8f;
+            }
+        }
+        for(int i=0;i<MAX_BUILDINGS;i++){
+            Building *b = &gs->buildings[i];
+            if(!b->active || b->player != player) continue;
+            if(!b->complete) building_on_complete(gs, b);
+            b->hp = b->max_hp;
+        }
+        game_set_alert(gs, "Sandbox: restored all friendly units and buildings.");
+        return;
+    }
+
+    game_set_alert(gs, "Sandbox: restored the current selection.");
 }
 
 /* ─── Master update ────────────────────────────────────────── */
@@ -89,8 +294,12 @@ void game_update(GameState *gs, float dt){
 
     /* Update pop caps */
     for (int i = 0; i < gs->num_players; i++) {
-        gs->res[i].pop_cap = pop_cap_from_buildings(gs, i);
-        if (gs->res[i].pop_cap < 5) gs->res[i].pop_cap = 5;
+        if (gs->mode == GAME_MODE_SANDBOX) {
+            gs->res[i].pop_cap = POP_CAP_MAX;
+        } else {
+            gs->res[i].pop_cap = pop_cap_from_buildings(gs, i);
+            if (gs->res[i].pop_cap < 5) gs->res[i].pop_cap = 5;
+        }
     }
 
     /* Age advancement timers */
@@ -103,7 +312,7 @@ void game_update(GameState *gs, float dt){
     buildings_update_all(gs,dt);
 
     /* AI - only in singleplayer */
-    if (!g_net_active) {
+    if (!g_net_active && gs->mode != GAME_MODE_SANDBOX) {
         ai_update(gs,dt);
     }
 

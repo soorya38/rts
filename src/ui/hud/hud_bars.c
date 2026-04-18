@@ -11,6 +11,46 @@
 
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
+static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_start){
+    if(gs->mode != GAME_MODE_SANDBOX) return;
+
+    float sc = hud_scale();
+    int lp = net_get_local_player();
+    int enemy = (gs->num_players > 1 && lp == 0) ? 1 : 0;
+    int pad = (int)(12 * sc);
+    int bw = (int)(92 * sc);
+    int bh = (int)(26 * sc);
+    int gap = (int)(6 * sc);
+    int fs11 = (int)(11 * sc);
+    int fs10 = (int)(10 * sc);
+
+    int row1_w = bw * 3 + gap * 2;
+    int row2_w = bw * 2 + gap;
+    int row1_x = panel_w - pad - row1_w;
+    int row2_x = panel_w - pad - row2_w;
+    int top_y = by_start + (int)(10 * sc);
+    int row1_y = top_y + (int)(16 * sc);
+    int row2_y = row1_y + bh + gap;
+    int hint_y = row2_y + bh + (int)(6 * sc);
+
+    DrawText("SANDBOX QUICK ACTIONS", row1_x, top_y, fs11, CLITERAL(Color){210,190,130,255});
+
+    if(draw_button("+1000 All", row1_x, row1_y, bw, bh, true))
+        game_sandbox_add_resources(gs, lp, 1000);
+    if(draw_button("Age +1", row1_x + bw + gap, row1_y, bw, bh, true))
+        game_sandbox_next_age(gs, lp);
+    if(draw_button("Ally Wave", row1_x + 2 * (bw + gap), row1_y, bw, bh, true))
+        game_sandbox_spawn_wave(gs, lp);
+
+    if(draw_button("Enemy Wave", row2_x, row2_y, bw, bh, true))
+        game_sandbox_spawn_wave(gs, enemy);
+    if(draw_button("Restore", row2_x + bw + gap, row2_y, bw, bh, true))
+        game_sandbox_heal_selection(gs, lp, ui->sel_building, ui->sel_units, ui->sel_count);
+
+    DrawText("Hotkeys: F1 resources  F2 age  F3 ally  F4 enemy  F5 restore",
+             row1_x, hint_y, fs10, CLITERAL(Color){130,120,90,210});
+}
+
 void draw_top_bar(GameState *gs, UIState *ui){
     (void)ui;
     float sc = hud_scale();
@@ -111,12 +151,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
     if(ui->sel_building>=0){
         Building *b=&gs->buildings[ui->sel_building];
         if(!b->active){ui->sel_building=-1;return;}
-        static const char *BLD_NAMES[BLD_COUNT]={
-            "Town Center","House","Barracks","Archery Range","Stable",
-            "Blacksmith","Market",
-            "Mill","Lumber Camp","Mining Camp","Farm"
-        };
-        DrawText(BLD_NAMES[b->type],pad,by_start+(int)(8*sc),fs16,C_HUD_TXT);
+        DrawText(building_name(b->type),pad,by_start+(int)(8*sc),fs16,C_HUD_TXT);
         snprintf(buf,sizeof(buf),"HP: %d / %d",b->hp,b->max_hp);
         DrawText(buf,pad,by_start+(int)(28*sc),fs12,CLITERAL(Color){180,165,130,255});
         if(!b->complete){
@@ -140,8 +175,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             DrawRectangle(pad,by_start+(int)(60*sc),bar_w,bar_h,CLITERAL(Color){20,30,50,255});
             DrawRectangle(pad,by_start+(int)(60*sc),(int)(bar_w*prog),bar_h,CLITERAL(Color){60,140,255,255});
         } else if(b->queue_len>0){
-            static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
-            snprintf(buf,sizeof(buf),"Training: %s (%.0fs)",UN[b->queue[0]],b->train_timer);
+            snprintf(buf,sizeof(buf),"Training: %s (%.0fs)",unit_name(b->queue[0]),b->train_timer);
             DrawText(buf,pad,by_start+(int)(44*sc),fs12,C_GOLD);
             float prog=1.0f-(b->train_timer/building_train_time(b->queue[0]));
             int bar_w=(int)(160*sc), bar_h=(int)(6*sc);
@@ -184,6 +218,14 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_MAN_AT_ARMS);
                 }
+                if(gs->res[lp].age>=1&&draw_button("Spearman\n35F 25W",bx+2*(bw2+btn_gap),bby,bw2,btn_h,
+                    gs->res[lp].amount[RES_FOOD]>=35&&gs->res[lp].amount[RES_WOOD]>=25)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_SPEARMAN;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_SPEARMAN);
+                }
                 break;
             }
             case BLD_ARCHERY_RANGE: {
@@ -195,17 +237,45 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_ARCHER);
                 }
+                if(gs->res[lp].age>=1&&draw_button("Skirm\n25F 35W",bx+bw2+btn_gap,bby,bw2,btn_h,
+                    gs->res[lp].amount[RES_FOOD]>=25&&gs->res[lp].amount[RES_WOOD]>=35)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_SKIRMISHER;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_SKIRMISHER);
+                }
+                if(gs->res[lp].age>=2&&draw_button("Cav Archer\n40F 70G",bx+2*(bw2+btn_gap),bby,bw2,btn_h,
+                    gs->res[lp].amount[RES_FOOD]>=40&&gs->res[lp].amount[RES_GOLD]>=70)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_CAVALRY_ARCHER;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_CAVALRY_ARCHER);
+                }
                 break;
             }
             case BLD_STABLE: {
                 int bw2=(int)(90*sc);
-                if(draw_button("Knight\n60F 75G",bx,bby,bw2,btn_h,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=75)) {
+                if(draw_button("Knight\n60F 75G",bx,bby,bw2,btn_h,gs->res[lp].age>=2&&gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=75)) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_KNIGHT;
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_KNIGHT);
                 }
+                break;
+            }
+            case BLD_MONASTERY: {
+                int bw2=(int)(96*sc);
+                if(draw_button("Monk\n100G",bx,bby,bw2,btn_h,gs->res[lp].age>=2&&gs->res[lp].amount[RES_GOLD]>=100)) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_MONK;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_MONK);
+                }
+                DrawText("Monks heal nearby allies and convert enemy units",bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
             }
             case BLD_BLACKSMITH:
@@ -315,20 +385,21 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 DrawRectangle(pad,by_start+(int)(46*sc),bar_val,bar_h,col);
                 DrawRectangleLinesEx((Rectangle){(float)pad,(float)(by_start+(int)(46*sc)),(float)bar_w,(float)bar_h},1,CLITERAL(Color){80,70,50,200});
                 DrawText("Tap to inspect  |  Select villager + tap to gather",pad,by_start+(int)(62*sc),fs10,CLITERAL(Color){90,80,55,180});
+                draw_sandbox_tools(gs, ui, panel_w, by_start);
                 return;
             }
         }
         DrawText("No units selected",pad,by_start+(int)(8*sc),fs13,CLITERAL(Color){100,90,65,200});
         DrawText("Tap unit/building to select  |  Drag to box-select",pad,by_start+(int)(28*sc),fs11,CLITERAL(Color){90,80,55,180});
         DrawText("B: build menu  |  WASD: scroll  |  Pinch: zoom",pad,by_start+(int)(44*sc),fs11,CLITERAL(Color){90,80,55,180});
+        draw_sandbox_tools(gs, ui, panel_w, by_start);
         return;
     }
 
     if(ui->sel_count==1){
         Unit *u=&gs->units[ui->sel_units[0]];
-        static const char *UN[UNIT_COUNT]={"Villager","Scout","Militia","Man-at-Arms","Archer","Knight"};
         static const char *ST[]={"Idle","Moving","Gathering","Returning","Building","Attacking","Dying","Dead"};
-        DrawText(UN[u->type],pad,by_start+(int)(8*sc),fs16,CLITERAL(Color){220,200,155,255});
+        DrawText(unit_name(u->type),pad,by_start+(int)(8*sc),fs16,CLITERAL(Color){220,200,155,255});
         snprintf(buf,sizeof(buf),"HP: %d/%d  Atk: %d  Armor: %d",u->hp,u->max_hp,u->attack_dmg,u->armor);
         DrawText(buf,pad,by_start+(int)(28*sc),fs12,CLITERAL(Color){180,165,130,255});
         if(u->player == net_get_local_player() && u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT){

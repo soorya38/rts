@@ -172,6 +172,63 @@ static int auto_find_enemy_unit(GameState *gs,Unit *u){
     }
     return found;
 }
+
+static int bonus_damage_vs_unit(Unit *u, Unit *t){
+    switch(u->type){
+        case UNIT_SPEARMAN:
+            if(t->type == UNIT_SCOUT || t->type == UNIT_KNIGHT || t->type == UNIT_CAVALRY_ARCHER) return 8;
+            break;
+        case UNIT_SKIRMISHER:
+            if(t->type == UNIT_ARCHER || t->type == UNIT_CAVALRY_ARCHER) return 7;
+            break;
+        case UNIT_SCOUT:
+            if(t->type == UNIT_MONK) return 10;
+            break;
+        case UNIT_ARCHER:
+            if(t->type == UNIT_SPEARMAN) return 2;
+            break;
+        case UNIT_KNIGHT:
+            if(t->type == UNIT_ARCHER || t->type == UNIT_SKIRMISHER || t->type == UNIT_MONK) return 2;
+            break;
+        case UNIT_CAVALRY_ARCHER:
+            if(t->type == UNIT_SPEARMAN) return 3;
+            break;
+        default:
+            break;
+    }
+    return 0;
+}
+
+static int bonus_damage_vs_building(Unit *u){
+    switch(u->type){
+        case UNIT_MILITIA:
+        case UNIT_MAN_AT_ARMS:
+            return 2;
+        case UNIT_KNIGHT:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static void unit_do_monk_support(GameState *gs, Unit *u, float dt){
+    u->attack_timer -= dt;
+    if(u->attack_timer > 0.0f) return;
+    int best = -1;
+    float best_d = u->attack_range;
+    for(int i=0;i<MAX_UNITS;i++){
+        Unit *t = &gs->units[i];
+        if(!t->active || t->player != u->player || t->id == u->id || t->hp >= t->max_hp) continue;
+        float d = dist_to_unit(u, t);
+        if(d < best_d){ best_d = d; best = i; }
+    }
+    if(best >= 0){
+        Unit *t = &gs->units[best];
+        t->hp += 3;
+        if(t->hp > t->max_hp) t->hp = t->max_hp;
+        u->attack_timer = 0.75f;
+    }
+}
 static int auto_find_enemy_bld(GameState *gs,Unit *u){
     float best=u->vision_range; int found=-1;
     for(int i=0;i<MAX_BUILDINGS;i++){
@@ -237,14 +294,33 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
     u->attack_timer=u->attack_cd;
     if(u->target_unit>=0){
         Unit *t=&gs->units[u->target_unit];
-        int dmg=u->attack_dmg-t->armor; if(dmg<1)dmg=1;
-        t->hp-=dmg;
-        if(t->hp<=0){t->state=US_DYING;t->death_timer=0.8f;u->target_unit=-1;}
+        if(u->type == UNIT_MONK){
+            if(t->type != UNIT_MONK){
+                gs->res[t->player].population--;
+                gs->res[u->player].population++;
+                t->player = u->player;
+                t->target_unit = -1;
+                t->target_bld = -1;
+                t->state = US_IDLE;
+                t->selected = false;
+                u->target_unit = -1;
+            }
+        } else {
+            int dmg=u->attack_dmg + bonus_damage_vs_unit(u, t) - t->armor;
+            if(dmg<1)dmg=1;
+            t->hp-=dmg;
+            if(t->hp<=0){t->state=US_DYING;t->death_timer=0.8f;u->target_unit=-1;}
+        }
     } else {
         Building *b=&gs->buildings[u->target_bld];
-        b->hp-=u->attack_dmg;
+        if(u->type == UNIT_MONK){
+            u->target_bld = -1;
+            u->state = US_IDLE;
+            return;
+        }
+        b->hp-=u->attack_dmg + bonus_damage_vs_building(u);
         if(b->hp<=0){
-            if(b->type==BLD_TOWN_CENTER){
+            if(b->type==BLD_TOWN_CENTER && gs->mode != GAME_MODE_SANDBOX){
                 int lp = net_get_local_player();
                 int defeated_player = b->player;
                 
@@ -294,6 +370,10 @@ void unit_update(GameState *gs, Unit *u, float dt){
 
     switch(u->state){
         case US_IDLE:
+            if(u->type == UNIT_MONK){
+                unit_do_monk_support(gs, u, dt);
+                break;
+            }
             if(!u->stance_manual && u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
                 int e=auto_find_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
@@ -336,7 +416,7 @@ int unit_count_military(GameState *gs, int player){
     for(int i=0;i<MAX_UNITS;i++){
         Unit *u=&gs->units[i];
         if(!u->active||u->player!=player) continue;
-        if(u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT) c++;
+        if(u->type!=UNIT_VILLAGER) c++;
     }
     return c;
 }

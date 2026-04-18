@@ -4,12 +4,24 @@
 #include "game.h"
 #include <stdio.h>
 
+static void building_apply_combat_stats(Building *b){
+    b->attack_dmg = 0;
+    b->attack_range = 0.0f;
+    b->attack_cd = 1.5f;
+    b->attack_timer = 0.0f;
+    if(b->type == BLD_TOWN_CENTER){
+        b->attack_dmg = 5;
+        b->attack_range = 6.0f;
+    } else if(b->type == BLD_WATCH_TOWER){
+        b->attack_dmg = 6;
+        b->attack_range = 8.0f;
+    }
+}
+
 int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     int w=building_tw(type), h=building_th(type);
     if(!map_is_buildable(gs,tx,ty,w,h)) { printf("building_place failed: map_is_buildable\n"); return -1; }
-    /* Age gate: Feudal Age (age >= 1) required for military/economic buildings */
-    if((type==BLD_ARCHERY_RANGE||type==BLD_STABLE||
-        type==BLD_BLACKSMITH  ||type==BLD_MARKET) && gs->res[player].age<1) {
+    if(gs->res[player].age < building_age_required(type)) {
         printf("building_place failed: requires Feudal Age\n"); return -1;
     }
     Cost c=building_cost(type);
@@ -42,6 +54,11 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     b->rally_ty     = ty+h+1;
     b->active_tech  = TECH_NONE;
     b->tech_timer   = 0.0f;
+    building_apply_combat_stats(b);
+    if(gs->res[player].tech_unlocked[TECH_FORGED_ARROWS] && b->attack_dmg > 0){
+        b->attack_dmg += 1;
+        b->attack_range += 1.0f;
+    }
     map_place_building(gs,tx,ty,w,h,slot);
     if(slot >= gs->bld_count) gs->bld_count=slot+1;
     printf("building_place success: bid=%d\n", slot);
@@ -103,8 +120,8 @@ void building_sell(GameState *gs, int bid){
     building_destroy(gs, bid);
 }
 
-/* Place a pre-built building (for game init) */
-static int building_place_complete(GameState *gs,int player,BldType type,int tx,int ty){
+/* Place a pre-built building without checking costs or age requirements */
+int building_place_ready(GameState *gs,int player,BldType type,int tx,int ty){
     int w=building_tw(type),h=building_th(type);
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
@@ -117,6 +134,11 @@ static int building_place_complete(GameState *gs,int player,BldType type,int tx,
         b->active_tech = TECH_NONE;
         b->construction=1.0f; b->complete=true;
         b->rally_tx=tx+w/2; b->rally_ty=ty+h+1;
+        building_apply_combat_stats(b);
+        if(gs->res[player].tech_unlocked[TECH_FORGED_ARROWS] && b->attack_dmg > 0){
+            b->attack_dmg += 1;
+            b->attack_range += 1.0f;
+        }
         map_place_building(gs,tx,ty,w,h,i);
         if(i>=gs->bld_count) gs->bld_count=i+1;
         building_on_complete(gs,b);  /* handles farm tile conversion */
@@ -128,6 +150,8 @@ static int building_place_complete(GameState *gs,int player,BldType type,int tx,
 void building_enqueue_unit(GameState *gs, Building *b, UnitType ut){
     if(b->queue_len>=BQUEUE_CAP) return;
     if(!b->complete) return;
+    if(!building_can_train_unit(b->type, ut)) return;
+    if(gs->res[b->player].age < unit_age_required(ut)) return;
     Cost c=unit_cost(ut);
     if(!res_can_afford(&gs->res[b->player],c)) return;
     if(gs->res[b->player].population>=gs->res[b->player].pop_cap) return;
@@ -140,6 +164,33 @@ void building_enqueue_unit(GameState *gs, Building *b, UnitType ut){
 
 void building_update(GameState *gs, Building *b, float dt){
     if(!b->active||!b->complete) return;
+
+    if(b->attack_dmg > 0 && b->attack_range > 0.0f){
+        b->attack_timer -= dt;
+        if(b->attack_timer <= 0.0f){
+            int target = -1;
+            float best = b->attack_range;
+            float cx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
+            float cy = (b->ty + b->th * 0.5f) * TILE_SIZE;
+            for(int i=0;i<MAX_UNITS;i++){
+                Unit *u=&gs->units[i];
+                if(!u->active || u->player==b->player || u->state==US_DEAD || u->state==US_DYING) continue;
+                float d = dist2f(cx, cy, u->wx, u->wy) / TILE_SIZE;
+                if(d < best){ best = d; target = i; }
+            }
+            if(target >= 0){
+                Unit *u = &gs->units[target];
+                int dmg = b->attack_dmg - u->armor;
+                if(dmg < 1) dmg = 1;
+                u->hp -= dmg;
+                if(u->hp <= 0){
+                    u->state = US_DYING;
+                    u->death_timer = 0.8f;
+                }
+                b->attack_timer = b->attack_cd;
+            }
+        }
+    }
     
     if (b->active_tech != TECH_NONE) {
         b->tech_timer -= dt;
@@ -152,7 +203,8 @@ void building_update(GameState *gs, Building *b, float dt){
             if (t_id == TECH_IRON_WEAPONRY) {
                 for (int i=0; i<MAX_UNITS; i++) {
                     Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player && (u->type == UNIT_MILITIA || u->type == UNIT_MAN_AT_ARMS)) {
+                    if (u->active && u->player == b->player &&
+                        (u->type == UNIT_MILITIA || u->type == UNIT_MAN_AT_ARMS || u->type == UNIT_SPEARMAN)) {
                         u->max_hp += 10;
                         u->hp += 10;
                         u->attack_dmg += 1;
@@ -161,7 +213,8 @@ void building_update(GameState *gs, Building *b, float dt){
             } else if (t_id == TECH_COMPOSITE_BOWS) {
                 for (int i=0; i<MAX_UNITS; i++) {
                     Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player && u->type == UNIT_ARCHER) {
+                    if (u->active && u->player == b->player &&
+                        (u->type == UNIT_ARCHER || u->type == UNIT_CAVALRY_ARCHER)) {
                         u->attack_dmg += 1;
                         u->attack_range += 1.0f;
                     }
@@ -169,7 +222,8 @@ void building_update(GameState *gs, Building *b, float dt){
             } else if (t_id == TECH_MOUNTED_ARMOR) {
                 for (int i=0; i<MAX_UNITS; i++) {
                     Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player && (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT)) {
+                    if (u->active && u->player == b->player &&
+                        (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT || u->type == UNIT_CAVALRY_ARCHER)) {
                         u->max_hp += 20;
                         u->hp += 20;
                     }
@@ -185,8 +239,16 @@ void building_update(GameState *gs, Building *b, float dt){
             } else if (t_id == TECH_FORGED_ARROWS) {
                 for (int i=0; i<MAX_UNITS; i++) {
                     Unit *u = &gs->units[i];
-                    if (u->active && u->player == b->player && u->type == UNIT_ARCHER) {
+                    if (u->active && u->player == b->player &&
+                        (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
                         u->attack_dmg += 1;
+                    }
+                }
+                for (int i=0; i<MAX_BUILDINGS; i++) {
+                    Building *tb = &gs->buildings[i];
+                    if (tb->active && tb->player == b->player && tb->attack_dmg > 0) {
+                        tb->attack_dmg += 1;
+                        tb->attack_range += 1.0f;
                     }
                 }
             }
@@ -288,6 +350,6 @@ int building_find(GameState *gs, int player, BldType type, bool complete_only){
 
 /* ── Public init helper (called from game_init) ─────────────── */
 void buildings_init_player(GameState *gs, int player, int tc_tx, int tc_ty){
-    building_place_complete(gs,player,BLD_TOWN_CENTER,tc_tx,tc_ty);
+    building_place_ready(gs,player,BLD_TOWN_CENTER,tc_tx,tc_ty);
     gs->res[player].pop_cap=pop_cap_from_buildings(gs,player);
 }

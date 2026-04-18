@@ -27,8 +27,8 @@ static void ai_send_villager_gather(GameState *gs, int uid, ResType rt){
 }
 
 static void ai_auto_assign_villagers(GameState *gs){
-    /* Assign idle villagers to gather: 2 food, 2 wood, 1 gold */
-    int food_workers=0,wood_workers=0,gold_workers=0;
+    /* Assign idle villagers to gather: food-heavy opening with wood/gold support */
+    int food_workers=0,wood_workers=0,gold_workers=0,stone_workers=0;
     for(int i=0;i<MAX_UNITS;i++){
         Unit *u=&gs->units[i];
         if(!u->active||u->player!=AI||u->type!=UNIT_VILLAGER) continue;
@@ -37,6 +37,7 @@ static void ai_auto_assign_villagers(GameState *gs){
                 case RES_FOOD: food_workers++; break;
                 case RES_WOOD: wood_workers++; break;
                 case RES_GOLD: gold_workers++; break;
+                case RES_STONE: stone_workers++; break;
                 default: break;
             }
         }
@@ -47,15 +48,18 @@ static void ai_auto_assign_villagers(GameState *gs){
         if(u->state!=US_IDLE&&u->state!=US_BUILDING) continue;
         if(u->state==US_BUILDING) continue;
         /* Assign to most needed resource */
-        if(food_workers<2){
+        if(food_workers<4){
             ai_send_villager_gather(gs,i,RES_FOOD);
             food_workers++;
-        } else if(wood_workers<3){
+        } else if(wood_workers<4){
             ai_send_villager_gather(gs,i,RES_WOOD);
             wood_workers++;
         } else if(gold_workers<2){
             ai_send_villager_gather(gs,i,RES_GOLD);
             gold_workers++;
+        } else if(gs->res[AI].age >= 1 && stone_workers < 2){
+            ai_send_villager_gather(gs,i,RES_STONE);
+            stone_workers++;
         } else {
             ai_send_villager_gather(gs,i,RES_WOOD);
         }
@@ -94,6 +98,7 @@ static void ai_train_unit(GameState *gs, BldType bld_type, UnitType ut){
         Building *b=&gs->buildings[i];
         if(!b->active||b->player!=AI||b->type!=bld_type||!b->complete) continue;
         if(b->queue_len>=BQUEUE_CAP) continue;
+        if(gs->res[AI].age < unit_age_required(ut)) continue;
         building_enqueue_unit(gs,b,ut);
         return;
     }
@@ -112,7 +117,7 @@ static void ai_launch_attack(GameState *gs){
         if(u->type==UNIT_VILLAGER||u->type==UNIT_SCOUT) continue;
         if(u->state==US_IDLE||u->state==US_MOVING){
             /* Find nearest player unit/building */
-            int eu=-1,eb=-1;
+            int eu=-1;
             float best=1e30f;
             for(int j=0;j<MAX_UNITS;j++){
                 Unit *t=&gs->units[j];
@@ -168,10 +173,13 @@ void ai_update(GameState *gs, float dt){
         case AI_BUILD: {
             bool has_barracks = building_find(gs,AI,BLD_BARRACKS,false)>=0;
             bool has_mill     = building_find(gs,AI,BLD_MILL,false)>=0;
+            bool has_blacksmith = building_find(gs,AI,BLD_BLACKSMITH,false)>=0;
             if(!has_mill && pr->amount[RES_WOOD]>=100)
                 ai_try_build(gs,BLD_MILL);
             if(!has_barracks && pr->amount[RES_WOOD]>=175)
                 ai_try_build(gs,BLD_BARRACKS);
+            if(pr->age >= 1 && !has_blacksmith && pr->amount[RES_WOOD] >= 150)
+                ai_try_build(gs,BLD_BLACKSMITH);
             if(has_barracks && building_find(gs,AI,BLD_BARRACKS,true)>=0)
                 gs->ai_phase=AI_MILITARY;
             break;
@@ -179,7 +187,11 @@ void ai_update(GameState *gs, float dt){
 
         case AI_MILITARY:
             /* Keep training */
-            if(pr->amount[RES_GOLD]>=60&&pr->amount[RES_FOOD]>=60){
+            if(pr->age >= 2 && pr->amount[RES_GOLD]>=75&&pr->amount[RES_FOOD]>=60){
+                ai_train_unit(gs,BLD_STABLE,UNIT_KNIGHT);
+            } else if(pr->age >= 1 && pr->amount[RES_FOOD]>=35&&pr->amount[RES_WOOD]>=25){
+                ai_train_unit(gs,BLD_BARRACKS,UNIT_SPEARMAN);
+            } else if(pr->amount[RES_GOLD]>=60&&pr->amount[RES_FOOD]>=60){
                 ai_train_unit(gs,BLD_BARRACKS,UNIT_MAN_AT_ARMS);
             } else if(pr->amount[RES_FOOD]>=60&&pr->amount[RES_GOLD]>=20){
                 ai_train_unit(gs,BLD_BARRACKS,UNIT_MILITIA);
@@ -189,6 +201,18 @@ void ai_update(GameState *gs, float dt){
                 ai_try_build(gs,BLD_ARCHERY_RANGE);
             if(building_find(gs,AI,BLD_ARCHERY_RANGE,true)>=0 && pr->amount[RES_WOOD]>=25 && pr->amount[RES_GOLD]>=45)
                 ai_train_unit(gs,BLD_ARCHERY_RANGE,UNIT_ARCHER);
+            if(pr->age >= 1 && building_find(gs,AI,BLD_ARCHERY_RANGE,true)>=0 &&
+               pr->amount[RES_FOOD]>=25 && pr->amount[RES_WOOD]>=35)
+                ai_train_unit(gs,BLD_ARCHERY_RANGE,UNIT_SKIRMISHER);
+            if(pr->age >= 1 && building_find(gs,AI,BLD_STABLE,false)<0 && pr->amount[RES_WOOD] >= 175)
+                ai_try_build(gs,BLD_STABLE);
+            if(pr->age >= 1 && building_find(gs,AI,BLD_WATCH_TOWER,false)<0 &&
+               pr->amount[RES_WOOD] >= 125 && pr->amount[RES_STONE] >= 125)
+                ai_try_build(gs,BLD_WATCH_TOWER);
+            if(pr->age >= 2 && building_find(gs,AI,BLD_MONASTERY,false)<0 && pr->amount[RES_WOOD] >= 175)
+                ai_try_build(gs,BLD_MONASTERY);
+            if(pr->age >= 2 && building_find(gs,AI,BLD_MONASTERY,true)>=0 && pr->amount[RES_GOLD] >= 100)
+                ai_train_unit(gs,BLD_MONASTERY,UNIT_MONK);
 
             if(unit_count_military(gs,AI)>=5)
                 gs->ai_phase=AI_ATTACK;
@@ -206,10 +230,16 @@ void ai_update(GameState *gs, float dt){
                 ai_train_unit(gs,BLD_BARRACKS,UNIT_MILITIA);
             if(building_find(gs,AI,BLD_ARCHERY_RANGE,true)>=0 && pr->amount[RES_WOOD]>=25 && pr->amount[RES_GOLD]>=45)
                 ai_train_unit(gs,BLD_ARCHERY_RANGE,UNIT_ARCHER);
+            if(building_find(gs,AI,BLD_STABLE,true)>=0 && pr->age >= 2 && pr->amount[RES_FOOD]>=60 && pr->amount[RES_GOLD]>=75)
+                ai_train_unit(gs,BLD_STABLE,UNIT_KNIGHT);
             break;
     }
 
     /* ── Age advance if resources allow ──────────────────── */
-    if(pr->age<2 && !pr->advancing && pr->amount[RES_FOOD]>=500)
+    if(pr->age==0 && !pr->advancing && pr->amount[RES_FOOD]>=500)
+        res_try_advance_age(gs,AI);
+    else if(pr->age==1 && !pr->advancing && pr->amount[RES_FOOD]>=800 && pr->amount[RES_WOOD]>=200)
+        res_try_advance_age(gs,AI);
+    else if(pr->age==2 && !pr->advancing && pr->amount[RES_FOOD]>=1000 && pr->amount[RES_GOLD]>=800)
         res_try_advance_age(gs,AI);
 }

@@ -263,6 +263,13 @@ void map_init(GameState *gs, int *p1_x, int *p1_y, int *p2_x, int *p2_y){
 /* ---------- Fog of war ---------- */
 
 void map_update_fog(GameState *gs){
+    if(gs->mode == GAME_MODE_SANDBOX){
+        for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++)
+            for(int p=0;p<NUM_PLAYERS;p++)
+                gs->map[y][x].fog[p] = FOG_VISIBLE;
+        return;
+    }
+
     /* Reset visible → explored */
     for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++)
         for(int p=0;p<NUM_PLAYERS;p++)

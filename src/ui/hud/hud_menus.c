@@ -24,12 +24,6 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
     if(!vil){ui->build_panel_open=false;return;}
 
-    static const char *BLD_NAMES[BLD_COUNT]={
-        "Town Center","House","Barracks","Archery Range","Stable",
-        "Blacksmith","Market",
-        "Mill","Lumber Camp","Mining Camp","Farm"
-    };
-
     int mx=100, my=HUD_BOT_Y-292, bw=116, bh=48, gap=6;
     float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*4+gap*3+36);
     DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
@@ -54,18 +48,21 @@ static void draw_build_menu(GameState *gs, UIState *ui){
     int lp = net_get_local_player();
     int cur_age = gs->res[lp].age;
     bool has_mill=(building_find(gs,lp,BLD_MILL,true)>=0);
-    bool is_feudal = (cur_age >= 1); /* Feudal Age or higher */
+    bool is_feudal = (cur_age >= 1);
+    bool is_castle = (cur_age >= 2);
     struct { BldType t; const char *n; Cost c; } items[]={
         {BLD_HOUSE,        "House (H)\n25 Wood",         {0,25, 0,0}},
         {BLD_MILL,         "Mill (M)\n100 Wood",         {0,100,0,0}},
-        {BLD_LUMBER_CAMP,  "Lumber Camp\n100 Wood",      {0,100,0,0}},
-        {BLD_MINING_CAMP,  "Mining Camp\n100 Wood",      {0,100,0,0}},
+        {BLD_LUMBER_CAMP,  "Lumber (L)\n100 Wood",       {0,100,0,0}},
+        {BLD_MINING_CAMP,  "Mining (N)\n100 Wood",       {0,100,0,0}},
         {BLD_BARRACKS,     "Barracks (R)\n175 Wood",     {0,175,0,0}},
         {BLD_ARCHERY_RANGE,"Arch.Range (A)\n175 Wood",   {0,175,0,0}},
-        {BLD_STABLE,       "Stable\n175 Wood",           {0,175,0,0}},
-        {BLD_BLACKSMITH,   "Blacksmith\n150 Wood",       {0,150,0,0}},
-        {BLD_MARKET,       "Market\n175 Wood",           {0,175,0,0}},
+        {BLD_STABLE,       "Stable (V)\n175 Wood",       {0,175,0,0}},
+        {BLD_BLACKSMITH,   "Smith (K)\n150 Wood",        {0,150,0,0}},
+        {BLD_MARKET,       "Market (Y)\n175 Wood",       {0,175,0,0}},
         {BLD_FARM,         "Farm (F)\n60 Wood",          {0,60, 0,0}},
+        {BLD_WATCH_TOWER,  "Tower (T)\n125W 125S",       {0,125,0,125}},
+        {BLD_MONASTERY,    "Monastery (O)\n175W",        {0,175,0,0}},
     };
     int n=(int)(sizeof(items)/sizeof(items[0]));
     for(int i=0;i<n;i++){
@@ -76,24 +73,29 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         if(items[i].t==BLD_FARM && !has_mill) prereq_ok=false;
         /* Archery Range, Stable, Blacksmith, Market require Feudal Age */
         if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
-            items[i].t==BLD_BLACKSMITH    || items[i].t==BLD_MARKET) && !is_feudal) prereq_ok=false;
+            items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
+            items[i].t==BLD_WATCH_TOWER) && !is_feudal) prereq_ok=false;
+        if(items[i].t==BLD_MONASTERY && !is_castle) prereq_ok=false;
         bool clickable = can && prereq_ok;
         bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
         if(items[i].t==BLD_FARM && !has_mill)
             DrawText("Needs Mill",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
-            items[i].t==BLD_BLACKSMITH    || items[i].t==BLD_MARKET) && !is_feudal)
+            items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
+            items[i].t==BLD_WATCH_TOWER) && !is_feudal)
             DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
+        if(items[i].t==BLD_MONASTERY && !is_castle)
+            DrawText("Castle Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if(pressed && clickable){
             gs->build_mode.type=items[i].t;
             gs->build_mode.active=true;
             ui->build_panel_open=false;
             char msg[48];
-            snprintf(msg,sizeof(msg),"Placing: %s",BLD_NAMES[items[i].t]);
+            snprintf(msg,sizeof(msg),"Placing: %s",building_name(items[i].t));
             game_set_alert(gs,msg);
         }
     }
-    DrawText("[ESC] Cancel  |  Hotkeys: H=House R=Barracks A=Arch F=Farm M=Mill",
+    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O",
              mx,my+bh*4+gap*3+4,9,CLITERAL(Color){100,90,60,200});
 }
 
@@ -115,8 +117,10 @@ void hud_draw(GameState *gs, UIState *ui){
         DrawText(pm,GetScreenWidth()/2-MeasureText(pm,22)/2,GetScreenHeight()/2-11,22,CLITERAL(Color){220,200,140,255});
     }
 
-    char dbuf[64];
-    const char *ap[]={"Gather","Build","Military","Attack"};
-    snprintf(dbuf,sizeof(dbuf),"AI: %s | mil: %d",ap[gs->ai_phase],unit_count_military(gs,1));
-    DrawText(dbuf,8,HUD_TOP_H+4,10,CLITERAL(Color){100,90,65,180});
+    if(gs->mode != GAME_MODE_SANDBOX){
+        char dbuf[64];
+        const char *ap[]={"Gather","Build","Military","Attack"};
+        snprintf(dbuf,sizeof(dbuf),"AI: %s | mil: %d",ap[gs->ai_phase],unit_count_military(gs,1));
+        DrawText(dbuf,8,HUD_TOP_H+4,10,CLITERAL(Color){100,90,65,180});
+    }
 }

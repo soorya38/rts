@@ -32,17 +32,53 @@ void select_unit(GameState *gs, UIState *ui, int uid) {
 }
 
 /* ─── World-hit testers ───────────────────────────────────── */
-bool hit_building_iso(Building *b, Vector2 wp) {
+static bool building_hit_info(Building *b, UIState *ui, Vector2 wp,
+                              int *out_rank, float *out_dist2, float *out_depth_y) {
     float bx = (float)b->tx * TILE_SIZE, by = (float)b->ty * TILE_SIZE;
     float bw = (float)b->tw * TILE_SIZE, bh = (float)b->th * TILE_SIZE;
     Vec2 c = iso_to_world(wp.x, wp.y);
-    if (c.x >= bx && c.x <= bx + bw && c.y >= by && c.y <= by + bh) return true;
-    
+    bool in_footprint = (c.x >= bx && c.x <= bx + bw && c.y >= by && c.y <= by + bh);
+
     Vector2 p = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh * 0.5f));
-    float hit_w = (bw + bh) * 0.3f;
-    float hit_h = (bw + bh) * 0.3f + 15.0f;
-    return (wp.x >= p.x - hit_w / 2 && wp.x <= p.x + hit_w / 2 &&
-            wp.y >= p.y - hit_h && wp.y <= p.y);
+    float footprint_screen_w = bw + bh;
+    float hit_w = footprint_screen_w * 0.40f;
+    float hit_h = 42.0f + (float)b->th * 6.0f;
+    Texture2D tex = ui ? ui->tex_buildings[b->type] : (Texture2D){0};
+
+    if (tex.id != 0) {
+        float base_ratio = 1.25f / 4.0f;
+        float boost = 1.25f;
+        float sc = (float)b->tw * base_ratio * boost;
+        float tw = tex.width * sc;
+        float th = tex.height * sc;
+
+        float sprite_hit_w = tw * 0.38f;
+        float sprite_hit_h = th * 0.30f;
+        if (sprite_hit_h > 86.0f) sprite_hit_h = 86.0f;
+        if (sprite_hit_w > hit_w) hit_w = sprite_hit_w;
+        if (sprite_hit_h > hit_h) hit_h = sprite_hit_h;
+    } else {
+        float fallback_hit_w = footprint_screen_w * 0.46f;
+        float fallback_hit_h = 54.0f;
+        if (fallback_hit_w > hit_w) hit_w = fallback_hit_w;
+        if (fallback_hit_h > hit_h) hit_h = fallback_hit_h;
+    }
+
+    bool in_sprite_box = (wp.x >= p.x - hit_w / 2 && wp.x <= p.x + hit_w / 2 &&
+                          wp.y >= p.y - hit_h && wp.y <= p.y - 6.0f);
+    if (!in_footprint && !in_sprite_box) return false;
+
+    if (out_rank) *out_rank = in_footprint ? 2 : 1;
+    if (out_dist2) {
+        float dx = wp.x - p.x;
+        float dy = wp.y - (in_footprint ? p.y : (p.y - hit_h * 0.55f));
+        *out_dist2 = dx * dx + dy * dy;
+    }
+    if (out_depth_y) {
+        Vector2 depth_p = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh));
+        *out_depth_y = depth_p.y;
+    }
+    return true;
 }
 
 int find_friendly_unit_at(GameState *gs, Vector2 wp) {
@@ -54,14 +90,29 @@ int find_friendly_unit_at(GameState *gs, Vector2 wp) {
     }
     return -1;
 }
-int find_friendly_building_at(GameState *gs, Vector2 wp) {
+int find_friendly_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     int lp = net_get_local_player();
+    int best_id = -1;
+    int best_rank = -1;
+    float best_dist2 = 0.0f;
+    float best_depth_y = 0.0f;
     for (int i = 0; i < MAX_BUILDINGS; i++) {
         Building *b = &gs->buildings[i];
         if (!b->active || b->player != lp) continue;
-        if (hit_building_iso(b, wp)) return i;
+        int rank = 0;
+        float dist2 = 0.0f;
+        float depth_y = 0.0f;
+        if (!building_hit_info(b, ui, wp, &rank, &dist2, &depth_y)) continue;
+        if (best_id < 0 || depth_y > best_depth_y + 1.0f ||
+            (fabsf(depth_y - best_depth_y) <= 1.0f &&
+             (rank > best_rank || (rank == best_rank && dist2 < best_dist2)))) {
+            best_id = i;
+            best_rank = rank;
+            best_dist2 = dist2;
+            best_depth_y = depth_y;
+        }
     }
-    return -1;
+    return best_id;
 }
 int find_enemy_unit_at(GameState *gs, Vector2 wp) {
     int lp = net_get_local_player();
@@ -75,28 +126,58 @@ int find_enemy_unit_at(GameState *gs, Vector2 wp) {
     }
     return -1;
 }
-int find_enemy_building_at(GameState *gs, Vector2 wp) {
+int find_enemy_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     int lp = net_get_local_player();
+    int best_id = -1;
+    int best_rank = -1;
+    float best_dist2 = 0.0f;
+    float best_depth_y = 0.0f;
     for (int i = 0; i < MAX_BUILDINGS; i++) {
         Building *b = &gs->buildings[i];
         if (!b->active || b->player == lp) continue;
         int bmx = clampi(b->tx, 0, MAP_W - 1), bmy = clampi(b->ty, 0, MAP_H - 1);
         if (gs->map[bmy][bmx].fog[lp] == FOG_HIDDEN) continue;
-        if (hit_building_iso(b, wp)) return i;
+        int rank = 0;
+        float dist2 = 0.0f;
+        float depth_y = 0.0f;
+        if (!building_hit_info(b, ui, wp, &rank, &dist2, &depth_y)) continue;
+        if (best_id < 0 || depth_y > best_depth_y + 1.0f ||
+            (fabsf(depth_y - best_depth_y) <= 1.0f &&
+             (rank > best_rank || (rank == best_rank && dist2 < best_dist2)))) {
+            best_id = i;
+            best_rank = rank;
+            best_dist2 = dist2;
+            best_depth_y = depth_y;
+        }
     }
-    return -1;
+    return best_id;
 }
-int find_unfinished_building_at(GameState *gs, Vector2 wp) {
+int find_unfinished_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     int lp = net_get_local_player();
+    int best_id = -1;
+    int best_rank = -1;
+    float best_dist2 = 0.0f;
+    float best_depth_y = 0.0f;
     for (int i = 0; i < MAX_BUILDINGS; i++) {
         Building *b = &gs->buildings[i];
         if (!b->active || b->player != lp || b->complete) continue;
-        if (hit_building_iso(b, wp)) return i;
+        int rank = 0;
+        float dist2 = 0.0f;
+        float depth_y = 0.0f;
+        if (!building_hit_info(b, ui, wp, &rank, &dist2, &depth_y)) continue;
+        if (best_id < 0 || depth_y > best_depth_y + 1.0f ||
+            (fabsf(depth_y - best_depth_y) <= 1.0f &&
+             (rank > best_rank || (rank == best_rank && dist2 < best_dist2)))) {
+            best_id = i;
+            best_rank = rank;
+            best_dist2 = dist2;
+            best_depth_y = depth_y;
+        }
     }
-    return -1;
+    return best_id;
 }
-int find_friendly_dropoff_at(GameState *gs, Vector2 wp) {
-    int fb = find_friendly_building_at(gs, wp);
+int find_friendly_dropoff_at(GameState *gs, UIState *ui, Vector2 wp) {
+    int fb = find_friendly_building_at(gs, ui, wp);
     if (fb >= 0 && gs->buildings[fb].complete) {
         int t = gs->buildings[fb].type;
         if (t == BLD_TOWN_CENTER || t == BLD_MILL || t == BLD_LUMBER_CAMP || t == BLD_MINING_CAMP)
@@ -112,9 +193,9 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
     if (!map_in_bounds(tx, ty)) return;
 
     int eu = find_enemy_unit_at(gs, world);
-    int eb = (eu < 0) ? find_enemy_building_at(gs, world) : -1;
-    int ub = find_unfinished_building_at(gs, world);
-    int dropoff = find_friendly_dropoff_at(gs, world);
+    int eb = (eu < 0) ? find_enemy_building_at(gs, ui, world) : -1;
+    int ub = find_unfinished_building_at(gs, ui, world);
+    int dropoff = find_friendly_dropoff_at(gs, ui, world);
 
     TileType tt = gs->map[ty][tx].type;
     bool is_resource = (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE || tt == TILE_BERRIES || tt == TILE_FARM);
@@ -252,7 +333,7 @@ void handle_left_up(GameState *gs, UIState *ui) {
 
     bool shift = IsKeyDown(KEY_LEFT_SHIFT);
     int fu = find_friendly_unit_at(gs, we);
-    int fb = find_friendly_building_at(gs, we);
+    int fb = find_friendly_building_at(gs, ui, we);
 
     bool has_villagers = false;
     for (int i = 0; i < ui->sel_count; i++)
@@ -326,7 +407,7 @@ void handle_tap(GameState *gs, UIState *ui) {
     Vector2 we = GetScreenToWorld2D(mp, ui->camera);
     bool shift = IsKeyDown(KEY_LEFT_SHIFT);
     int fu = find_friendly_unit_at(gs, we);
-    int fb = find_friendly_building_at(gs, we);
+    int fb = find_friendly_building_at(gs, ui, we);
 
     bool has_villagers = false;
     for (int i = 0; i < ui->sel_count; i++)
@@ -393,8 +474,8 @@ void update_hover(GameState *gs, UIState *ui) {
     int u = find_friendly_unit_at(gs, wp);
     if (u < 0) u = find_enemy_unit_at(gs, wp);
     if (u >= 0) { ui->hover_unit = u; return; }
-    int b = find_friendly_building_at(gs, wp);
-    if (b < 0) b = find_enemy_building_at(gs, wp);
+    int b = find_friendly_building_at(gs, ui, wp);
+    if (b < 0) b = find_enemy_building_at(gs, ui, wp);
     if (b >= 0) { ui->hover_building = b; return; }
     int lp = net_get_local_player();
     Vector2 cart = to_rvec2(iso_to_world(wp.x, wp.y));

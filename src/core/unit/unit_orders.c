@@ -26,8 +26,12 @@ static const UnitStats STATS[UNIT_COUNT] = {
     /*SCOUT*/       {45,  3, 0, 1.3f, 7.0f, 130.0f, 2.0f,  0},
     /*MILITIA*/     {40,  4, 0, 1.3f, 4.0f,  95.0f, 2.0f,  0},
     /*MAN_AT_ARMS*/ {45,  6, 2, 1.3f, 4.0f,  95.0f, 2.0f,  0},
+    /*SPEARMAN*/    {45,  3, 0, 1.3f, 4.0f,  90.0f, 2.0f,  0},
     /*ARCHER*/      {30,  5, 0, 5.0f, 6.0f,  90.0f, 2.0f,  0},
+    /*SKIRMISHER*/  {35,  3, 1, 4.5f, 6.0f,  92.0f, 1.9f,  0},
+    /*CAV_ARCHER*/  {50,  6, 0, 5.0f, 7.0f, 110.0f, 2.2f,  0},
     /*KNIGHT*/      {100,10, 3, 1.3f, 4.0f, 115.0f, 2.0f,  0},
+    /*MONK*/        {30,  0, 0, 5.0f, 8.0f,  80.0f, 6.0f,  0},
 };
 
 void unit_init_stats(GameState *gs, Unit *u){
@@ -63,7 +67,13 @@ void unit_init_stats(GameState *gs, Unit *u){
             u->attack_dmg += 1;
             u->attack_range += 1.0f;
         }
-        if (gs->res[u->player].tech_unlocked[TECH_MOUNTED_ARMOR] && (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT)) {
+        if (gs->res[u->player].tech_unlocked[TECH_FORGED_ARROWS] &&
+            (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
+            u->attack_dmg += 1;
+            u->attack_range += 1.0f;
+        }
+        if (gs->res[u->player].tech_unlocked[TECH_MOUNTED_ARMOR] &&
+            (u->type == UNIT_KNIGHT || u->type == UNIT_SCOUT || u->type == UNIT_CAVALRY_ARCHER)) {
             u->max_hp += 20;
             u->hp += 20;
         }

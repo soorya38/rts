@@ -6,9 +6,8 @@
 #include "hud_common.h"
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include "net.h"
-
-static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
 /* ── Scaled icon helpers ─────────────────────────────────── */
 void draw_food_icon(UIState *ui, int x,int y){
@@ -71,7 +70,7 @@ bool draw_button(const char *label, int x, int y, int w, int h, bool enabled){
     if (nl) {
         int len1 = nl - label;
         char line1[64];
-        if (len1 >= sizeof(line1)) len1 = sizeof(line1) - 1;
+        if ((size_t)len1 >= sizeof(line1)) len1 = (int)sizeof(line1) - 1;
         strncpy(line1, label, len1);
         line1[len1] = '\0';
         const char *line2 = nl + 1;
@@ -135,15 +134,10 @@ void draw_placement_bar(GameState *gs, UIState *ui){
     (void)ui;
     if(!gs->build_mode.active) return;
     float sc = hud_scale();
-    static const char *BLD_NAMES[BLD_COUNT]={
-        "Town Center","House","Barracks","Archery Range","Stable",
-        "Blacksmith","Market",
-        "Mill","Lumber Camp","Mining Camp","Farm"
-    };
     char buf[80];
     snprintf(buf,sizeof(buf),
              "  Placing: %s   ·   Tap map to place   ·   [ESC] to cancel  ",
-             BLD_NAMES[gs->build_mode.type]);
+             building_name(gs->build_mode.type));
     int fs=(int)(12*sc);
     int tw=MeasureText(buf,fs);
     int bh=(int)(20*sc);
@@ -266,10 +260,11 @@ void draw_menu(GameState *gs, UIState *ui){
     const char *lines[]={
         "Gather resources  \xc2\xb7  Build structures  \xc2\xb7  Train armies",
         "Destroy the enemy Town Center to win!",
+        "Sandbox mode starts with every major system ready to test",
         "Controls:  WASD / edge scroll  |  Pinch: zoom  |  Drag: pan",
         "Tap to select  |  Tap (selected) = command  |  Tap [B] Build"
     };
-    for(int i=0;i<4;i++)
+    for(int i=0;i<5;i++)
         DrawText(lines[i],sw/2-MeasureText(lines[i],lfs)/2,
                  sh/2-(int)(52*sc)+i*(int)(16*sc),lfs,CLITERAL(Color){150,140,110,220});
 
@@ -279,6 +274,11 @@ void draw_menu(GameState *gs, UIState *ui){
     /* Solo */
     if(draw_button("Start Solo Campaign", bx, by, bw, bh, true)){
         game_init_started_game(gs, (uint32_t)time(NULL), 2);
+    }
+    by += bh + (int)(8*sc);
+
+    if(draw_button("Open Sandbox Test Grounds", bx, by, bw, bh, true)){
+        game_init_sandbox(gs, (uint32_t)time(NULL));
     }
     by += bh + (int)(8*sc);
 
@@ -360,5 +360,3 @@ void draw_menu(GameState *gs, UIState *ui){
     DrawText("Built with Raylib 5.0 + ENet",
              8, sh-20, (int)(10*sc), CLITERAL(Color){60,55,40,200});
 }
-
-static const char *_age_names_unused(void){ return age_names[0]; } /* suppress warning */

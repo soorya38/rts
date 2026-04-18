@@ -94,6 +94,18 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         if (ui->build_panel_open) { ui->build_panel_open = false; return; }
         clear_selection(gs, ui);
     }
+
+    if (gs->mode == GAME_MODE_SANDBOX) {
+        int lp = net_get_local_player();
+        int enemy = (gs->num_players > 1 && lp == 0) ? 1 : 0;
+        if (IsKeyPressed(KEY_F1)) game_sandbox_add_resources(gs, lp, 1000);
+        if (IsKeyPressed(KEY_F2)) game_sandbox_next_age(gs, lp);
+        if (IsKeyPressed(KEY_F3)) game_sandbox_spawn_wave(gs, lp);
+        if (IsKeyPressed(KEY_F4)) game_sandbox_spawn_wave(gs, enemy);
+        if (IsKeyPressed(KEY_F5))
+            game_sandbox_heal_selection(gs, lp, ui->sel_building, ui->sel_units, ui->sel_count);
+    }
+
     if (IsKeyPressed(KEY_B)) {
         bool vil = false;
         for (int i = 0; i < ui->sel_count; i++)
@@ -115,17 +127,21 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         if (IsKeyPressed(KEY_R)) qt = BLD_BARRACKS;
         if (IsKeyPressed(KEY_A) && cur_age >= 1) qt = BLD_ARCHERY_RANGE;
         if (IsKeyPressed(KEY_A) && cur_age < 1)  game_set_alert(gs, "Archery Range requires Feudal Age!");
+        if (IsKeyPressed(KEY_V) && cur_age >= 1) qt = BLD_STABLE;
+        if (IsKeyPressed(KEY_K) && cur_age >= 1) qt = BLD_BLACKSMITH;
+        if (IsKeyPressed(KEY_Y) && cur_age >= 1) qt = BLD_MARKET;
         if (IsKeyPressed(KEY_M)) qt = BLD_MILL;
+        if (IsKeyPressed(KEY_L)) qt = BLD_LUMBER_CAMP;
+        if (IsKeyPressed(KEY_N)) qt = BLD_MINING_CAMP;
         if (IsKeyPressed(KEY_F)) qt = BLD_FARM;
+        if (IsKeyPressed(KEY_T) && cur_age >= 1) qt = BLD_WATCH_TOWER;
+        if (IsKeyPressed(KEY_O) && cur_age >= 2) qt = BLD_MONASTERY;
         if (qt != BLD_COUNT && res_can_afford(&gs->res[lp], building_cost(qt))) {
             gs->build_mode.type = qt;
             gs->build_mode.active = true;
             ui->build_panel_open = false;
-            static const char *BN[BLD_COUNT] = {
-                "Town Center","House","Barracks","Archery Range","Stable",
-                "Blacksmith","Market","Mill","Lumber Camp","Mining Camp","Farm"};
             char msg[48];
-            snprintf(msg, sizeof(msg), "Placing: %s", BN[qt]);
+            snprintf(msg, sizeof(msg), "Placing: %s", building_name(qt));
             game_set_alert(gs, msg);
         }
     }

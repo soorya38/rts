@@ -149,8 +149,9 @@ typedef struct { int x, y; } PathCell;
 /* ─── Unit types & stats ─────────────────────────────────────── */
 typedef enum {
     UNIT_VILLAGER=0, UNIT_SCOUT,
-    UNIT_MILITIA, UNIT_MAN_AT_ARMS,
-    UNIT_ARCHER,  UNIT_KNIGHT,
+    UNIT_MILITIA, UNIT_MAN_AT_ARMS, UNIT_SPEARMAN,
+    UNIT_ARCHER,  UNIT_SKIRMISHER, UNIT_CAVALRY_ARCHER,
+    UNIT_KNIGHT,  UNIT_MONK,
     UNIT_COUNT
 } UnitType;
 
@@ -206,7 +207,7 @@ typedef enum {
     BLD_BARRACKS, BLD_ARCHERY_RANGE, BLD_STABLE,
     BLD_BLACKSMITH, BLD_MARKET,
     BLD_MILL, BLD_LUMBER_CAMP, BLD_MINING_CAMP,
-    BLD_FARM, BLD_COUNT
+    BLD_FARM, BLD_WATCH_TOWER, BLD_MONASTERY, BLD_COUNT
 } BldType;
 
 #define BQUEUE_CAP 5
@@ -228,6 +229,10 @@ typedef struct {
     int      resource_amt;      /* For farms: remaining food */
     TechType active_tech;
     float    tech_timer;
+    int      attack_dmg;
+    float    attack_range;
+    float    attack_cd;
+    float    attack_timer;
 } Building;
 
 /* ─── Build mode ghost ───────────────────────────────────────── */
@@ -238,6 +243,12 @@ typedef struct {
     bool    valid;
 } BuildMode;
 
+/* ─── Match mode ─────────────────────────────────────────────── */
+typedef enum {
+    GAME_MODE_STANDARD = 0,
+    GAME_MODE_SANDBOX
+} GameMode;
+
 /* ─── Game phase ─────────────────────────────────────────────── */
 typedef enum {
     PHASE_MENU=0, PHASE_PLAYING,
@@ -246,6 +257,7 @@ typedef enum {
 
 /* ─── Master game state ──────────────────────────────────────── */
 typedef struct {
+    GameMode   mode;
     GamePhase  phase;
     float      game_time;
 
@@ -313,6 +325,8 @@ int  unit_count_military(GameState *gs,int player);
 
 /* building.c */
 int  building_place(GameState *gs,int player,BldType type,int tx,int ty);
+int  building_place_ready(GameState *gs,int player,BldType type,int tx,int ty);
+void building_on_complete(GameState *gs, Building *b);
 void building_destroy(GameState *gs, int bid);
 void building_sell(GameState *gs, int bid);
 void building_update(GameState *gs,Building *b,float dt);
@@ -325,6 +339,11 @@ int  building_th(BldType t);
 int  building_max_hp(BldType t);
 float building_train_time(UnitType ut);
 Cost  unit_cost(UnitType ut);
+int   unit_age_required(UnitType t);
+int   building_age_required(BldType t);
+bool  building_can_train_unit(BldType bt, UnitType ut);
+const char* unit_name(UnitType t);
+const char* building_name(BldType t);
 
 /* Technologies */
 Cost  tech_cost(TechType t);
@@ -348,5 +367,11 @@ void ai_update(GameState *gs,float dt);
 /* game.c */
 void game_init(GameState *gs);
 void game_init_started_game(GameState *gs, uint32_t seed, int num_players);
+void game_init_sandbox(GameState *gs, uint32_t seed);
 void game_update(GameState *gs,float dt);
 void game_set_alert(GameState *gs,const char *msg);
+void game_sandbox_add_resources(GameState *gs, int player, int amount);
+void game_sandbox_next_age(GameState *gs, int player);
+void game_sandbox_spawn_wave(GameState *gs, int player);
+void game_sandbox_heal_selection(GameState *gs, int player, int building_id,
+                                 const int *unit_ids, int unit_count);
