@@ -28,7 +28,6 @@ int main(void){
     TraceLog(LOG_INFO, "RTS >> InitWindow done. screen=%dx%d",
              GetScreenWidth(), GetScreenHeight());
 
-    SetTargetFPS(60);
     SetExitKey(KEY_NULL);   /* Don't quit on ESC */
 
     /* ── Game state ── */
