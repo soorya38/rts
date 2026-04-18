@@ -5,6 +5,8 @@
 #include "net.h"
 #include <stdio.h>
 
+#define UNIT_PERSONAL_SPACE 10.0f
+
 static ResType tile_to_res_ai(TileType t){
     switch(t){
         case TILE_FOREST:  return RES_WOOD;
@@ -30,6 +32,69 @@ static void unit_step_path(Unit *u, float dt){
     u->facing=atan2f(dy,dx);
     u->wx+=(dx/dist)*spd;
     u->wy+=(dy/dist)*spd;
+}
+
+static bool unit_can_stand_at(GameState *gs, float wx, float wy){
+    int tx = (int)(wx / TILE_SIZE);
+    int ty = (int)(wy / TILE_SIZE);
+    return map_in_bounds(tx, ty) && map_is_passable(gs, tx, ty);
+}
+
+static void resolve_unit_overlap(GameState *gs, Unit *a, Unit *b){
+    float dx = b->wx - a->wx;
+    float dy = b->wy - a->wy;
+    float dist_sq = dx*dx + dy*dy;
+    if(dist_sq >= UNIT_PERSONAL_SPACE * UNIT_PERSONAL_SPACE) return;
+
+    float dist = sqrtf(dist_sq);
+    if(dist < 0.001f){
+        /* Deterministic nudge if two units land on the exact same point. */
+        float angle = (float)(((a->id * 37 + b->id * 17) % 360) * (3.14159265f / 180.0f));
+        dx = cosf(angle);
+        dy = sinf(angle);
+        dist = 1.0f;
+    } else {
+        dx /= dist;
+        dy /= dist;
+    }
+
+    float push = (UNIT_PERSONAL_SPACE - dist) * 0.5f;
+    if(push <= 0.0f) return;
+
+    float anx = a->wx - dx * push;
+    float any = a->wy - dy * push;
+    float bnx = b->wx + dx * push;
+    float bny = b->wy + dy * push;
+
+    bool a_ok = unit_can_stand_at(gs, anx, any);
+    bool b_ok = unit_can_stand_at(gs, bnx, bny);
+
+    if(a_ok && b_ok){
+        a->wx = anx; a->wy = any;
+        b->wx = bnx; b->wy = bny;
+        return;
+    }
+    if(a_ok){
+        a->wx = anx; a->wy = any;
+        return;
+    }
+    if(b_ok){
+        b->wx = bnx; b->wy = bny;
+    }
+}
+
+static void unit_apply_separation(GameState *gs){
+    for(int pass=0; pass<2; pass++){
+        for(int i=0;i<MAX_UNITS;i++){
+            Unit *a = &gs->units[i];
+            if(!a->active || a->state == US_DEAD || a->state == US_DYING) continue;
+            for(int j=i+1;j<MAX_UNITS;j++){
+                Unit *b = &gs->units[j];
+                if(!b->active || b->state == US_DEAD || b->state == US_DYING) continue;
+                resolve_unit_overlap(gs, a, b);
+            }
+        }
+    }
 }
 
 /* ─── Gather ───────────────────────────────────────────────── */
@@ -389,6 +454,7 @@ void unit_update(GameState *gs, Unit *u, float dt){
 
 void units_update_all(GameState *gs, float dt){
     for(int i=0;i<MAX_UNITS;i++) unit_update(gs,&gs->units[i],dt);
+    unit_apply_separation(gs);
 }
 
 int unit_find_idle_villager(GameState *gs, int player){

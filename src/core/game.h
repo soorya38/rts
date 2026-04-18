@@ -332,6 +332,12 @@ int pathfind(GameState *gs,int sx,int sy,int ex,int ey,PathCell *out,int max_len
 /* unit.c */
 void unit_init_stats(GameState *gs, Unit *u);
 int  unit_spawn(GameState *gs,int player,UnitType type,float wx,float wy);
+bool unit_tile_occupied(GameState *gs, int tx, int ty);
+bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
+                              const PathCell *reserved, int reserved_count,
+                              int *out_tx, int *out_ty);
+void unit_compute_formation_targets(GameState *gs, int anchor_tx, int anchor_ty,
+                                    int unit_count, PathCell *out_targets);
 void unit_give_move_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_gather_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_dropoff_order(GameState *gs,Unit *u,int tx,int ty);

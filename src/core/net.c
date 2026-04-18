@@ -101,9 +101,13 @@ static void apply_packet(GameState *gs, NetPacket *pkt) {
         game_init_started_game(gs, _rng, np);
     }
     else if (pkt->type == PKT_MOVE) {
+        PathCell formation_targets[64];
+        int move_count = pkt->unit_count < 64 ? pkt->unit_count : 64;
+        unit_compute_formation_targets(gs, pkt->tx, pkt->ty, move_count, formation_targets);
         for (int i=0; i<pkt->unit_count && i<64; i++) {
             if (pkt->units[i] < MAX_UNITS)
-                unit_give_move_order(gs, &gs->units[pkt->units[i]], pkt->tx, pkt->ty);
+                unit_give_move_order(gs, &gs->units[pkt->units[i]],
+                                     formation_targets[i].x, formation_targets[i].y);
         }
     }
     else if (pkt->type == PKT_GATHER) {

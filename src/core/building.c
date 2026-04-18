@@ -287,9 +287,13 @@ void building_update(GameState *gs, Building *b, float dt){
     UnitType ut=b->queue[0];
     int spawn_tx = b->tx + b->tw / 2;
     int spawn_ty = b->ty + b->th + 1;
-    if(!map_find_passable_near(gs, spawn_tx, spawn_ty, &spawn_tx, &spawn_ty)){
+    if(!unit_find_free_tile_near(gs, spawn_tx, spawn_ty, NULL, 0, &spawn_tx, &spawn_ty)){
         spawn_tx = b->rally_tx;
         spawn_ty = b->rally_ty;
+        if(!unit_find_free_tile_near(gs, spawn_tx, spawn_ty, NULL, 0, &spawn_tx, &spawn_ty)){
+            b->train_timer = 0.5f;
+            return;
+        }
     }
     float wx=(spawn_tx+0.5f)*TILE_SIZE;
     float wy=(spawn_ty+0.5f)*TILE_SIZE;

@@ -14,6 +14,110 @@ static ResType tile_to_res(TileType t){
     }
 }
 
+bool unit_tile_occupied(GameState *gs, int tx, int ty){
+    if(!map_in_bounds(tx, ty)) return true;
+    for(int i=0;i<MAX_UNITS;i++){
+        Unit *u = &gs->units[i];
+        if(!u->active || u->state == US_DEAD || u->state == US_DYING) continue;
+        int utx = (int)(u->wx / TILE_SIZE);
+        int uty = (int)(u->wy / TILE_SIZE);
+        if(utx == tx && uty == ty) return true;
+    }
+    return false;
+}
+
+static bool tile_reserved(const PathCell *reserved, int reserved_count, int tx, int ty){
+    for(int i=0;i<reserved_count;i++){
+        if(reserved[i].x == tx && reserved[i].y == ty) return true;
+    }
+    return false;
+}
+
+bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
+                              const PathCell *reserved, int reserved_count,
+                              int *out_tx, int *out_ty){
+    int best_x = -1, best_y = -1;
+    int best_score = 0x7fffffff;
+    int max_radius = (MAP_W > MAP_H) ? MAP_W : MAP_H;
+
+    for(int radius=0; radius<max_radius; radius++){
+        for(int dy=-radius; dy<=radius; dy++){
+            for(int dx=-radius; dx<=radius; dx++){
+                if(radius > 0 && abs(dx) != radius && abs(dy) != radius) continue;
+                int tx = desired_tx + dx;
+                int ty = desired_ty + dy;
+                if(!map_in_bounds(tx, ty)) continue;
+                if(!map_is_passable(gs, tx, ty)) continue;
+                if(tile_reserved(reserved, reserved_count, tx, ty)) continue;
+                if(unit_tile_occupied(gs, tx, ty)) continue;
+
+                int score = dx*dx + dy*dy;
+                if(score < best_score){
+                    best_score = score;
+                    best_x = tx;
+                    best_y = ty;
+                }
+            }
+        }
+        if(best_x >= 0) break;
+    }
+
+    if(best_x < 0){
+        for(int radius=0; radius<max_radius; radius++){
+            for(int dy=-radius; dy<=radius; dy++){
+                for(int dx=-radius; dx<=radius; dx++){
+                    if(radius > 0 && abs(dx) != radius && abs(dy) != radius) continue;
+                    int tx = desired_tx + dx;
+                    int ty = desired_ty + dy;
+                    if(!map_in_bounds(tx, ty)) continue;
+                    if(!map_is_passable(gs, tx, ty)) continue;
+                    if(tile_reserved(reserved, reserved_count, tx, ty)) continue;
+
+                    int score = dx*dx + dy*dy;
+                    if(score < best_score){
+                        best_score = score;
+                        best_x = tx;
+                        best_y = ty;
+                    }
+                }
+            }
+            if(best_x >= 0) break;
+        }
+    }
+
+    if(best_x < 0) return false;
+    *out_tx = best_x;
+    *out_ty = best_y;
+    return true;
+}
+
+void unit_compute_formation_targets(GameState *gs, int anchor_tx, int anchor_ty,
+                                    int unit_count, PathCell *out_targets){
+    if(unit_count <= 0 || !out_targets) return;
+
+    int width = (int)ceilf(sqrtf((float)unit_count));
+    if(width < 1) width = 1;
+    if(width > 5) width = 5;
+    int height = (unit_count + width - 1) / width;
+    float center_col = (float)(width - 1) * 0.5f;
+    float center_row = (float)(height - 1) * 0.5f;
+
+    for(int i=0;i<unit_count;i++){
+        int col = i % width;
+        int row = i / width;
+        int desired_tx = anchor_tx + (int)lroundf((float)col - center_col);
+        int desired_ty = anchor_ty + (int)lroundf((float)row - center_row);
+        int tx = desired_tx;
+        int ty = desired_ty;
+
+        if(!unit_find_free_tile_near(gs, desired_tx, desired_ty, out_targets, i, &tx, &ty)){
+            tx = clampi(anchor_tx, 0, MAP_W - 1);
+            ty = clampi(anchor_ty, 0, MAP_H - 1);
+        }
+        out_targets[i] = (PathCell){tx, ty};
+    }
+}
+
 /* ─── Stat table ─────────────────────────────────────────── */
 typedef struct {
     int   hp, attack_dmg, armor;
@@ -105,6 +209,7 @@ int unit_spawn(GameState *gs, int player, UnitType type, float wx, float wy){
 void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
                          float ux, float uy, int *ox, int *oy){
     int best=9999; *ox=-1; *oy=-1;
+    int fallback_best=9999, fallback_x=-1, fallback_y=-1;
     int utx=(int)(ux/TILE_SIZE), uty=(int)(uy/TILE_SIZE);
     for(int dy=-1;dy<=bh;dy++) for(int dx=-1;dx<=bw;dx++){
         int nx=bx+dx, ny=by+dy;
@@ -113,8 +218,11 @@ void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
         if(!map_in_bounds(nx,ny)) continue;
         if(!map_is_passable(gs,nx,ny)) continue;
         int d=abs(nx-utx)+abs(ny-uty);
+        if(d<fallback_best){fallback_best=d;fallback_x=nx;fallback_y=ny;}
+        if(unit_tile_occupied(gs, nx, ny)) continue;
         if(d<best){best=d;*ox=nx;*oy=ny;}
     }
+    if(*ox<0){*ox=fallback_x;*oy=fallback_y;}
 }
 
 /* ─── Orders ──────────────────────────────────────────────── */

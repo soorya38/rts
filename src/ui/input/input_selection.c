@@ -206,9 +206,12 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
         if (!map_find_passable_near(gs, tx, ty, &ftx, &fty)) return;
     }
 
-    int width = ui->sel_count < 5 ? ui->sel_count : 5;
-    if (width < 1) width = 1;
-    int height = (ui->sel_count + width - 1) / width;
+    PathCell formation_targets[64];
+    bool use_formation = (eu < 0 && eb < 0 && ub < 0 && dropoff < 0 && !is_resource);
+    if (use_formation) {
+        int formation_count = ui->sel_count < 64 ? ui->sel_count : 64;
+        unit_compute_formation_targets(gs, ftx, fty, formation_count, formation_targets);
+    }
 
     if (g_net_active) {
         NetPacket pkt = {0};
@@ -231,9 +234,6 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
             pkt.ty = ty;
         } else {
             pkt.type = PKT_MOVE;
-            // The formation generation will be done on the apply side? 
-            // Wait, for move commands with formation, it's easiest just to send the anchor point
-            // and let both clients compute the formation!
             pkt.tx = ftx;
             pkt.ty = fty;
         }
@@ -276,9 +276,12 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
             } else if (is_resource && u->type == UNIT_VILLAGER) {
                 unit_give_gather_order(gs, u, tx, ty);
             } else {
-                int col = i % width, row = i / width;
-                int ox = col - (width / 2), oy = row - (height / 2);
-                int ntx = clampi(ftx + ox, 0, MAP_W - 1), nty = clampi(fty + oy, 0, MAP_H - 1);
+                int ntx = ftx;
+                int nty = fty;
+                if (use_formation && i < 64) {
+                    ntx = formation_targets[i].x;
+                    nty = formation_targets[i].y;
+                }
                 unit_give_move_order(gs, u, ntx, nty);
             }
         }
