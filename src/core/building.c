@@ -29,6 +29,7 @@ bool building_supports_rally(BldType type){
         case BLD_ARCHERY_RANGE:
         case BLD_STABLE:
         case BLD_MONASTERY:
+        case BLD_SIEGE_WORKSHOP:
             return true;
         default:
             return false;

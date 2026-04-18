@@ -36,7 +36,7 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_buildings[BLD_MARKET]        = LoadTexture("assets/buildings/market.png");
     ui->tex_buildings[BLD_FARM]          = LoadTexture("assets/buildings/farm.png");
 
-    ui->tex_units[UNIT_VILLAGER]         = LoadTexture("assets/units/villager_m.png"); /* could also use f */
+    ui->tex_units[UNIT_VILLAGER]         = LoadTexture("assets/units/villager_f.png");
     ui->tex_units[UNIT_SCOUT]            = LoadTexture("assets/units/scout.png");
     ui->tex_units[UNIT_MILITIA]          = LoadTexture("assets/units/militia.png");
     ui->tex_units[UNIT_MAN_AT_ARMS]      = LoadTexture("assets/units/man_at_arms.png");
