@@ -216,7 +216,10 @@ void ai_update(GameState *gs, float dt){
             if(pr->age >= 2 && building_find(gs,AI,BLD_SIEGE_WORKSHOP,false)<0 && pr->amount[RES_WOOD] >= 200)
                 ai_try_build(gs,BLD_SIEGE_WORKSHOP);
             if(pr->age >= 2 && building_find(gs,AI,BLD_SIEGE_WORKSHOP,true)>=0){
-                if(pr->amount[RES_WOOD] >= 160 && pr->amount[RES_GOLD] >= 135)
+                if(pr->tech_unlocked[TECH_CANNON_EMPLACEMENTS] &&
+                   pr->amount[RES_WOOD] >= 225 && pr->amount[RES_GOLD] >= 225)
+                    ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_BOMBARD_CANNON);
+                else if(pr->amount[RES_WOOD] >= 160 && pr->amount[RES_GOLD] >= 135)
                     ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_MANGONEL);
                 else if(pr->amount[RES_WOOD] >= 75 && pr->amount[RES_GOLD] >= 75)
                     ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_SCORPION);

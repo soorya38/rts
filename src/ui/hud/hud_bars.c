@@ -42,6 +42,8 @@ static bool can_queue_unit_now(GameState *gs, Building *b, int player, UnitType 
     if(!b || !b->complete || b->active_tech != TECH_NONE) return false;
     if(b->queue_len >= BQUEUE_CAP) return false;
     if(!building_can_train_unit(b->type, ut)) return false;
+    if(ut == UNIT_BOMBARD_CANNON &&
+       !gs->res[player].tech_unlocked[TECH_CANNON_EMPLACEMENTS]) return false;
     if(gs->res[player].age < unit_age_required(ut)) return false;
     if(!res_can_afford(&gs->res[player], unit_cost(ut))) return false;
     if(gs->res[player].population + building_queued_population(b) >= gs->res[player].pop_cap) return false;
@@ -61,6 +63,8 @@ static const char *tech_button_label(TechType t, bool compact){
         case TECH_MURDER_HOLES:   return "Murder\nHoles";
         case TECH_TREADMILL_CRANE:return "Treadmill\nCrane";
         case TECH_HEATED_SHOT:    return "Heated\nShot";
+        case TECH_CANNON_EMPLACEMENTS:return "Cannon\nEmplace";
+        case TECH_MISSILE_GUIDANCE:return "Missile\nGuide";
         default:                  return tech_name(t);
     }
 }
@@ -376,7 +380,9 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 break;
             }
             case BLD_SIEGE_WORKSHOP: {
-                int bw2=(int)(92*sc);
+                int bw2=(int)(102*sc);
+                int row_gap=(int)(8*sc);
+                bool cannon_unlocked = gs->res[lp].tech_unlocked[TECH_CANNON_EMPLACEMENTS];
                 if(draw_button("Ram\n160W 75G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_BATTERING_RAM))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
@@ -398,8 +404,25 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_SCORPION);
                 }
+                if(draw_button("Bombard\n225W 225G",bx,bby+btn_h+row_gap,bw2,btn_h,
+                               can_queue_unit_now(gs,b,lp,UNIT_BOMBARD_CANNON))) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_BOMBARD_CANNON;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_BOMBARD_CANNON);
+                }
+                if(!cannon_unlocked){
+                    DrawText("Research Cannon Emplacements at the University to unlock Bombard Cannons.",
+                             bx + bw2 + btn_gap, bby + btn_h + row_gap + (int)(16*sc),
+                             fs10, CLITERAL(Color){220,160,80,220});
+                } else {
+                    DrawText("Bombard Cannons deliver long-range anti-building siege fire.",
+                             bx + bw2 + btn_gap, bby + btn_h + row_gap + (int)(16*sc),
+                             fs10, CLITERAL(Color){180,165,130,220});
+                }
                 DrawText("Ram crushes buildings. Mangonel deals splash damage. Scorpion is ranged siege support.",
-                         bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
+                         bx,bby+2*btn_h+row_gap+(int)(10*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
             }
             case BLD_UNIVERSITY:
@@ -451,9 +474,9 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             else if(b->active_tech == TECH_NONE &&
                     gs->res[lp].population + building_queued_population(b) >= gs->res[lp].pop_cap)
                 DrawText("Need more housing to queue more units", pad, by_start+(int)(96*sc), fs10, CLITERAL(Color){220,160,80,220});
-            TechType techs[10] = {
-                TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE,
-                TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE
+            TechType techs[12] = {
+                TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE,
+                TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE
             };
             int tc = 0;
             if(b->type == BLD_TOWN_CENTER){ techs[0]=TECH_LOOM; techs[1]=TECH_WHEELBARROW; techs[2]=TECH_HAND_CART; tc=3; }
@@ -493,11 +516,12 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 techs[0]=TECH_MASONRY; techs[1]=TECH_ARCHITECTURE; techs[2]=TECH_FORTIFIED_WALL;
                 techs[3]=TECH_GUARD_TOWER; techs[4]=TECH_KEEP; techs[5]=TECH_MURDER_HOLES;
                 techs[6]=TECH_TREADMILL_CRANE; techs[7]=TECH_CHEMISTRY; techs[8]=TECH_HOARDINGS;
-                techs[9]=TECH_HEATED_SHOT; tc=10;
+                techs[9]=TECH_HEATED_SHOT; techs[10]=TECH_CANNON_EMPLACEMENTS;
+                techs[11]=TECH_MISSILE_GUIDANCE; tc=12;
             }
             bool compact_tech_grid = (tc > 6);
             int tech_gap=(int)(((compact_tech_grid ? 6 : 5) * sc));
-            int tech_cols = (tc > 6) ? 5 : ((tc > 3) ? 3 : tc);
+            int tech_cols = (tc > 10) ? 6 : ((tc > 6) ? 5 : ((tc > 3) ? 3 : tc));
             int tech_available_w = panel_w - bx - pad;
             int tech_btn_w;
             int tech_btn_h;

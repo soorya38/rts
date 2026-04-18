@@ -66,7 +66,8 @@ bool game_damage_building(GameState *gs, int target_bld, int dmg){
 
 bool unit_uses_projectiles(UnitType type){
     return type == UNIT_ARCHER || type == UNIT_SKIRMISHER || type == UNIT_CAVALRY_ARCHER ||
-           type == UNIT_MANGONEL || type == UNIT_SCORPION;
+           type == UNIT_MANGONEL || type == UNIT_SCORPION ||
+           type == UNIT_BOMBARD_CANNON;
 }
 
 bool building_uses_projectiles(BldType type){
@@ -195,7 +196,7 @@ static void sandbox_setup_bases(GameState *gs){
         UNIT_SCOUT, UNIT_MILITIA, UNIT_MAN_AT_ARMS,
         UNIT_SPEARMAN, UNIT_ARCHER, UNIT_SKIRMISHER,
         UNIT_CAVALRY_ARCHER, UNIT_KNIGHT, UNIT_MONK,
-        UNIT_BATTERING_RAM, UNIT_MANGONEL, UNIT_SCORPION
+        UNIT_BATTERING_RAM, UNIT_MANGONEL, UNIT_SCORPION, UNIT_BOMBARD_CANNON
     };
 
     sandbox_clear_map(gs);

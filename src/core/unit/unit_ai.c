@@ -334,6 +334,8 @@ static int bonus_damage_vs_building(Unit *u){
             return 28;
         case UNIT_MANGONEL:
             return 8;
+        case UNIT_BOMBARD_CANNON:
+            return 18;
         default:
             return 0;
     }
@@ -449,6 +451,9 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                 } else if(u->type == UNIT_MANGONEL){
                     proj = PROJ_STONE;
                     arc_height = 42.0f;
+                } else if(u->type == UNIT_BOMBARD_CANNON){
+                    proj = PROJ_STONE;
+                    arc_height = 30.0f;
                 }
                 game_spawn_projectile(gs, u->player, proj,
                                       u->wx, u->wy, t->wx, t->wy,
@@ -477,6 +482,9 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
             } else if(u->type == UNIT_MANGONEL){
                 proj = PROJ_STONE;
                 arc_height = 40.0f;
+            } else if(u->type == UNIT_BOMBARD_CANNON){
+                proj = PROJ_STONE;
+                arc_height = 28.0f;
             }
             game_spawn_projectile(gs, u->player, proj,
                                   u->wx, u->wy, bx, by,

@@ -31,7 +31,8 @@ static void building_apply_arrow_upgrades(GameState *gs, Building *b){
 }
 
 static bool unit_is_siege_target(UnitType type){
-    return type == UNIT_BATTERING_RAM || type == UNIT_MANGONEL || type == UNIT_SCORPION;
+    return type == UNIT_BATTERING_RAM || type == UNIT_MANGONEL ||
+           type == UNIT_SCORPION || type == UNIT_BOMBARD_CANNON;
 }
 
 static void building_refresh_upgrades(GameState *gs, Building *b){
@@ -63,6 +64,13 @@ static void building_refresh_upgrades(GameState *gs, Building *b){
         if(pr->tech_unlocked[TECH_KEEP]){
             b->attack_dmg += 3;
             b->attack_range += 1.0f;
+        }
+        if(pr->tech_unlocked[TECH_CANNON_EMPLACEMENTS]){
+            b->attack_dmg += 5;
+        }
+        if(pr->tech_unlocked[TECH_MISSILE_GUIDANCE]){
+            b->attack_dmg += 2;
+            b->attack_range += 2.0f;
         }
     }
     if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER) &&
@@ -228,6 +236,8 @@ void building_enqueue_unit(GameState *gs, Building *b, UnitType ut){
     if(!b->complete) return;
     if(b->active_tech != TECH_NONE) return;
     if(!building_can_train_unit(b->type, ut)) return;
+    if(ut == UNIT_BOMBARD_CANNON &&
+       !gs->res[b->player].tech_unlocked[TECH_CANNON_EMPLACEMENTS]) return;
     if(gs->res[b->player].age < unit_age_required(ut)) return;
     Cost c=unit_cost(ut);
     if(!res_can_afford(&gs->res[b->player],c)) return;
@@ -262,7 +272,12 @@ void building_update(GameState *gs, Building *b, float dt){
                     dmg += 8;
                 if(dmg < 1) dmg = 1;
                 if(building_uses_projectiles(b->type)){
-                    game_spawn_projectile(gs, b->player, PROJ_BOLT,
+                    ProjectileType proj = PROJ_BOLT;
+                    if(b->type == BLD_WATCH_TOWER &&
+                       gs->res[b->player].tech_unlocked[TECH_CANNON_EMPLACEMENTS]) {
+                        proj = PROJ_STONE;
+                    }
+                    game_spawn_projectile(gs, b->player, proj,
                                           cx, cy, u->wx, u->wy,
                                           target, -1, dmg,
                                           building_projectile_duration(best), 34.0f);
@@ -388,6 +403,8 @@ Cost tech_cost(TechType t) {
         case TECH_CHEMISTRY:      return (Cost){100, 0, 200, 0};
         case TECH_HOARDINGS:      return (Cost){200, 150, 0, 0};
         case TECH_HEATED_SHOT:    return (Cost){0, 0, 200, 0};
+        case TECH_CANNON_EMPLACEMENTS:return (Cost){0, 250, 350, 0};
+        case TECH_MISSILE_GUIDANCE:return (Cost){0, 200, 300, 0};
         default: return (Cost){0,0,0,0};
     }
 }
@@ -455,6 +472,8 @@ float tech_time(TechType t) {
         case TECH_CHEMISTRY:      return 50.0f;
         case TECH_HOARDINGS:      return 45.0f;
         case TECH_HEATED_SHOT:    return 45.0f;
+        case TECH_CANNON_EMPLACEMENTS:return 60.0f;
+        case TECH_MISSILE_GUIDANCE:return 55.0f;
         default: return 10.0f;
     }
 }
@@ -523,6 +542,8 @@ int tech_age_required(TechType t) {
         case TECH_KEEP:
         case TECH_CHEMISTRY:
         case TECH_HEATED_SHOT:
+        case TECH_CANNON_EMPLACEMENTS:
+        case TECH_MISSILE_GUIDANCE:
             return 3;
         case TECH_BLAST_FURNACE:
         case TECH_BODKIN_ARROW:
@@ -595,6 +616,8 @@ const char* tech_name(TechType t) {
         case TECH_CHEMISTRY:      return "Chemistry";
         case TECH_HOARDINGS:      return "Hoardings";
         case TECH_HEATED_SHOT:    return "Heated Shot";
+        case TECH_CANNON_EMPLACEMENTS:return "Cannon Emplacements";
+        case TECH_MISSILE_GUIDANCE:return "Missile Guidance";
         default: return "Unknown Tech";
     }
 }
@@ -662,6 +685,8 @@ const char* tech_desc(TechType t) {
         case TECH_CHEMISTRY:      return "+1 Att (Archers/Defenses)";
         case TECH_HOARDINGS:      return "+500 HP (Town Center)";
         case TECH_HEATED_SHOT:    return "+8 vs Siege (Defenses)";
+        case TECH_CANNON_EMPLACEMENTS:return "Unlock Bombard Cannon";
+        case TECH_MISSILE_GUIDANCE:return "+2 Att, +2 Rng (Towers)";
         default: return "";
     }
 }

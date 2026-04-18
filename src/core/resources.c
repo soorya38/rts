@@ -161,6 +161,7 @@ Cost unit_cost(UnitType t){
         case UNIT_BATTERING_RAM:return (Cost){0,160,75,0};
         case UNIT_MANGONEL:     return (Cost){0,160,135,0};
         case UNIT_SCORPION:     return (Cost){0,75,75,0};
+        case UNIT_BOMBARD_CANNON:return (Cost){0,225,225,0};
         default:                return (Cost){50,0,0,0};
     }
 }
@@ -180,6 +181,7 @@ float building_train_time(UnitType t){
         case UNIT_BATTERING_RAM:return 36.0f;
         case UNIT_MANGONEL:    return 46.0f;
         case UNIT_SCORPION:    return 34.0f;
+        case UNIT_BOMBARD_CANNON:return 56.0f;
         default:               return 25.0f;
     }
 }
@@ -197,6 +199,8 @@ int unit_age_required(UnitType t){
         case UNIT_MANGONEL:
         case UNIT_SCORPION:
             return 2;
+        case UNIT_BOMBARD_CANNON:
+            return 3;
         default:
             return 0;
     }
@@ -232,7 +236,8 @@ bool building_can_train_unit(BldType bt, UnitType ut){
         case BLD_MONASTERY:
             return ut == UNIT_MONK;
         case BLD_SIEGE_WORKSHOP:
-            return ut == UNIT_BATTERING_RAM || ut == UNIT_MANGONEL || ut == UNIT_SCORPION;
+            return ut == UNIT_BATTERING_RAM || ut == UNIT_MANGONEL ||
+                   ut == UNIT_SCORPION || ut == UNIT_BOMBARD_CANNON;
         default:
             return false;
     }
@@ -253,6 +258,7 @@ const char* unit_name(UnitType t){
         case UNIT_BATTERING_RAM: return "Battering Ram";
         case UNIT_MANGONEL: return "Mangonel";
         case UNIT_SCORPION: return "Scorpion";
+        case UNIT_BOMBARD_CANNON: return "Bombard Cannon";
         default: return "Unit";
     }
 }

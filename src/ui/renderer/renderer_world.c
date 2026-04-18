@@ -249,6 +249,7 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
     else if (u->type == UNIT_BATTERING_RAM) size_mult = 1.8f;
     else if (u->type == UNIT_MANGONEL) size_mult = 1.6f;
     else if (u->type == UNIT_SCORPION) size_mult = 1.5f;
+    else if (u->type == UNIT_BOMBARD_CANNON) size_mult = 1.7f;
     draw_shadow(wx, wy, 10 * size_mult, 8 * size_mult);
 
     if(u->selected) {
@@ -279,6 +280,12 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
         } else if (u->type == UNIT_SCORPION) {
             DrawRectangle((int)(px-9),(int)(py-4),18,8,mc);
             DrawLine((int)px,(int)(py-8),(int)(px+10),(int)(py-14),CLITERAL(Color){200,190,150,255});
+        } else if (u->type == UNIT_BOMBARD_CANNON) {
+            DrawCircle((int)(px-8),(int)(py+3),4,dc);
+            DrawCircle((int)(px+8),(int)(py+3),4,dc);
+            DrawRectangle((int)(px-11),(int)(py-2),22,7,mc);
+            DrawRectangle((int)(px-2),(int)(py-10),14,4,CLITERAL(Color){190,180,165,255});
+            DrawCircle((int)(px-5),(int)(py-4),3,CLITERAL(Color){90,80,72,255});
         } else {
             DrawRectangle((int)(px-4),(int)(py-3),8,8,mc);
             DrawCircle((int)px,(int)(py-7),5,CLITERAL(Color){220,185,145,255});

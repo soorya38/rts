@@ -139,6 +139,7 @@ static const UnitStats STATS[UNIT_COUNT] = {
     /*BAT_RAM*/     {175, 2, 4, 1.2f, 4.5f,  52.0f, 2.8f,  0},
     /*MANGONEL*/    {60, 35, 0, 7.0f, 8.0f,  58.0f, 4.5f,  0},
     /*SCORPION*/    {55, 16, 1, 6.0f, 8.0f,  62.0f, 3.1f,  0},
+    /*BOMBARD*/     {75, 42, 1, 8.5f, 9.0f,  56.0f, 5.0f,  0},
 };
 
 static bool unit_is_infantry(UnitType t){
@@ -158,7 +159,8 @@ static bool unit_is_melee_military(UnitType t){
 }
 
 static bool unit_is_siege(UnitType t){
-    return t == UNIT_BATTERING_RAM || t == UNIT_MANGONEL || t == UNIT_SCORPION;
+    return t == UNIT_BATTERING_RAM || t == UNIT_MANGONEL ||
+           t == UNIT_SCORPION || t == UNIT_BOMBARD_CANNON;
 }
 
 void unit_refresh_upgrades(GameState *gs, Unit *u){
