@@ -52,6 +52,24 @@ static bool can_set_rally_now(Building *b, int player){
     return b && b->active && b->complete && b->player == player && building_supports_rally(b->type);
 }
 
+static const char *tech_button_label(TechType t, bool compact){
+    if(!compact) return tech_name(t);
+    switch(t){
+        case TECH_ARCHITECTURE:   return "Archi-\ntecture";
+        case TECH_FORTIFIED_WALL: return "Fortified\nWall";
+        case TECH_GUARD_TOWER:    return "Guard\nTower";
+        case TECH_MURDER_HOLES:   return "Murder\nHoles";
+        case TECH_TREADMILL_CRANE:return "Treadmill\nCrane";
+        case TECH_HEATED_SHOT:    return "Heated\nShot";
+        default:                  return tech_name(t);
+    }
+}
+
+static void draw_text_centered_in_box(const char *text, int x, int y, int w, int fs, Color color){
+    int tw = MeasureText(text, fs);
+    DrawText(text, x + (w - tw) / 2, y, fs, color);
+}
+
 static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_start){
     if(gs->mode != GAME_MODE_SANDBOX) return;
 
@@ -369,6 +387,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                          bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
             }
+            case BLD_UNIVERSITY:
+                break;
             case BLD_MILL:
                 DrawText("Economic upgrades for farms and food collection",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
                 break;
@@ -416,7 +436,10 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             else if(b->active_tech == TECH_NONE &&
                     gs->res[lp].population + building_queued_population(b) >= gs->res[lp].pop_cap)
                 DrawText("Need more housing to queue more units", pad, by_start+(int)(96*sc), fs10, CLITERAL(Color){220,160,80,220});
-            TechType techs[6] = {TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE};
+            TechType techs[10] = {
+                TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE,
+                TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE, TECH_NONE
+            };
             int tc = 0;
             if(b->type == BLD_TOWN_CENTER){ techs[0]=TECH_LOOM; techs[1]=TECH_WHEELBARROW; techs[2]=TECH_HAND_CART; tc=3; }
             else if(b->type == BLD_MILL){
@@ -451,22 +474,48 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 techs[0]=TECH_SCALE_ARMOR; techs[1]=TECH_BLAST_FURNACE; techs[2]=TECH_FORGED_ARROWS;
                 techs[3]=TECH_PLATE_ARMOR; techs[4]=TECH_BODKIN_ARROW; techs[5]=TECH_BRACER; tc=6;
             }
-            int tech_btn_w=(int)(107*sc), tech_btn_h=(int)((tc > 3) ? 34 : 40), tech_gap=(int)(5*sc);
-            int tech_cols = (tc > 3) ? 3 : tc;
-            int tech_row_gap = (int)((tc > 3) ? 28 * sc : 0);
+            else if(b->type == BLD_UNIVERSITY){
+                techs[0]=TECH_MASONRY; techs[1]=TECH_ARCHITECTURE; techs[2]=TECH_FORTIFIED_WALL;
+                techs[3]=TECH_GUARD_TOWER; techs[4]=TECH_KEEP; techs[5]=TECH_MURDER_HOLES;
+                techs[6]=TECH_TREADMILL_CRANE; techs[7]=TECH_CHEMISTRY; techs[8]=TECH_HOARDINGS;
+                techs[9]=TECH_HEATED_SHOT; tc=10;
+            }
+            bool compact_tech_grid = (tc > 6);
+            int tech_gap=(int)(((compact_tech_grid ? 6 : 5) * sc));
+            int tech_cols = (tc > 6) ? 5 : ((tc > 3) ? 3 : tc);
+            int tech_available_w = panel_w - bx - pad;
+            int tech_btn_w;
+            int tech_btn_h;
+            int tech_row_gap;
+            int tech_start_y;
+            if(compact_tech_grid){
+                tech_btn_w = (tech_available_w - tech_gap * (tech_cols - 1)) / tech_cols;
+                int tech_min_w = (int)(120 * sc);
+                if(tech_btn_w < tech_min_w) tech_btn_w = tech_min_w;
+                tech_btn_h = (int)(28 * sc);
+                tech_row_gap = (int)(26 * sc);
+                tech_start_y = bby + (int)(6 * sc);
+            } else {
+                tech_btn_w = (int)(107 * sc);
+                tech_btn_h = (int)(((tc > 3) ? 34 : 40) * sc);
+                tech_row_gap = (int)(((tc > 3) ? 28 : 0) * sc);
+                tech_start_y = bby + (int)(58 * sc);
+            }
+            int tech_grid_w = tech_cols * tech_btn_w + tech_gap * (tech_cols - 1);
+            int tech_grid_x = compact_tech_grid ? (bx + (tech_available_w - tech_grid_w) / 2) : bx;
+            if(tech_grid_x < bx) tech_grid_x = bx;
             if(tech_cols < 1) tech_cols = 1;
             for(int ti=0; ti<tc; ti++){
                 TechType tt2 = techs[ti];
                 int tcol = ti % tech_cols;
                 int trow = ti / tech_cols;
-                int tbx = bx + tcol*(tech_btn_w+tech_gap);
-                int tby = bby + (int)(58*sc) + trow*(tech_btn_h + tech_row_gap);
+                int tbx = tech_grid_x + tcol*(tech_btn_w+tech_gap);
+                int tby = tech_start_y + trow*(tech_btn_h + tech_row_gap);
                 if(!gs->res[lp].tech_unlocked[tt2]){
                     Cost tc2 = tech_cost(tt2);
                     bool age_ok = gs->res[lp].age >= tech_age_required(tt2);
                     bool can = res_can_afford(&gs->res[lp], tc2) && !busy && age_ok;
-                    char tbuf[80];
-                    snprintf(tbuf,sizeof(tbuf),"%s",tech_name(tt2));
+                    const char *tbuf = tech_button_label(tt2, compact_tech_grid);
                     if(draw_button(tbuf, tbx, tby, tech_btn_w, tech_btn_h, can)){
                         if(g_net_active){
                             NetPacket pkt={0}; pkt.type=PKT_RESEARCH;
@@ -474,14 +523,25 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                             net_dispatch_packet(gs,&pkt);
                         } else building_start_tech(gs,b,tt2);
                     }
-                    DrawText(tech_desc(tt2), tbx, tby + tech_btn_h + (int)(2*sc), fs10, CLITERAL(Color){160,200,255,200});
+                    draw_text_centered_in_box(tech_desc(tt2), tbx, tby + tech_btn_h + (int)(2*sc), tech_btn_w,
+                                              compact_tech_grid ? fs9 : fs10, CLITERAL(Color){160,200,255,200});
                     if(!age_ok){
                         static const char *AGE_NAMES[] = {"Dark Age","Feudal Age","Castle Age","Imperial Age"};
-                        DrawText(AGE_NAMES[tech_age_required(tt2)], tbx, tby + tech_btn_h + (int)(14*sc), fs9, CLITERAL(Color){220,140,60,220});
+                        draw_text_centered_in_box(AGE_NAMES[tech_age_required(tt2)],
+                                                  tbx, tby + tech_btn_h + (int)(((compact_tech_grid ? 15 : 14) * sc)),
+                                                  tech_btn_w, fs9, CLITERAL(Color){220,140,60,220});
                     }
                 } else {
-                    DrawText(tech_name(tt2), tbx, tby + (int)(4*sc), fs10, CLITERAL(Color){80,220,100,220});
-                    DrawText("[Researched]", tbx, tby + (int)(16*sc), fs9, CLITERAL(Color){60,180,80,200});
+                    if(compact_tech_grid){
+                        draw_button(tech_button_label(tt2, true), tbx, tby, tech_btn_w, tech_btn_h, false);
+                        draw_text_centered_in_box("[Done]", tbx, tby + tech_btn_h + (int)(6*sc), tech_btn_w, fs9,
+                                                  CLITERAL(Color){60,180,80,200});
+                    } else {
+                        draw_text_centered_in_box(tech_name(tt2), tbx, tby + (int)(4*sc), tech_btn_w, fs10,
+                                                  CLITERAL(Color){80,220,100,220});
+                        draw_text_centered_in_box("[Researched]", tbx, tby + (int)(16*sc), tech_btn_w, fs9,
+                                                  CLITERAL(Color){60,180,80,200});
+                    }
                 }
             }
         }

@@ -237,7 +237,9 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
             if(nx==utx&&ny==uty) adj=true;
         }
     if(!adj){unit_give_build_order(gs,u,u->build_id);return;}
-    b->construction+=dt*0.035f;
+    float build_rate = 0.035f;
+    if(gs->res[u->player].tech_unlocked[TECH_TREADMILL_CRANE]) build_rate *= 1.5f;
+    b->construction+=dt*build_rate;
     if(b->construction>=1.0f){
         extern void building_on_complete(GameState *gs, Building *b);
         building_on_complete(gs, b);

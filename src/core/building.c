@@ -30,6 +30,55 @@ static void building_apply_arrow_upgrades(GameState *gs, Building *b){
     b->attack_range += (float)range_bonus;
 }
 
+static bool unit_is_siege_target(UnitType type){
+    return type == UNIT_BATTERING_RAM || type == UNIT_MANGONEL || type == UNIT_SCORPION;
+}
+
+static void building_refresh_upgrades(GameState *gs, Building *b){
+    if(!gs || !b || !b->active) return;
+
+    int missing_hp = 0;
+    if(b->max_hp > 0) missing_hp = clampi(b->max_hp - b->hp, 0, b->max_hp);
+
+    b->max_hp = building_max_hp(b->type);
+    building_apply_combat_stats(b);
+    building_apply_arrow_upgrades(gs, b);
+
+    PlayerRes *pr = &gs->res[b->player];
+    if(pr->tech_unlocked[TECH_MASONRY])     b->max_hp = (int)lroundf((float)b->max_hp * 1.15f);
+    if(pr->tech_unlocked[TECH_ARCHITECTURE]) b->max_hp = (int)lroundf((float)b->max_hp * 1.20f);
+
+    if(pr->tech_unlocked[TECH_FORTIFIED_WALL] &&
+       (b->type == BLD_WALL || b->type == BLD_GATE)) {
+        b->max_hp += 600;
+    }
+    if(pr->tech_unlocked[TECH_HOARDINGS] && b->type == BLD_TOWN_CENTER) {
+        b->max_hp += 500;
+    }
+    if(b->type == BLD_WATCH_TOWER){
+        if(pr->tech_unlocked[TECH_GUARD_TOWER]){
+            b->attack_dmg += 2;
+            b->attack_range += 1.0f;
+        }
+        if(pr->tech_unlocked[TECH_KEEP]){
+            b->attack_dmg += 3;
+            b->attack_range += 1.0f;
+        }
+    }
+    if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER) &&
+       pr->tech_unlocked[TECH_MURDER_HOLES]) {
+        b->attack_range += 1.0f;
+    }
+    if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER) &&
+       pr->tech_unlocked[TECH_CHEMISTRY] && b->attack_dmg > 0) {
+        b->attack_dmg += 1;
+    }
+
+    if(b->hp <= 0) b->hp = b->max_hp;
+    else b->hp = clampi(b->max_hp - missing_hp, 1, b->max_hp);
+    if(b->attack_timer > b->attack_cd) b->attack_timer = b->attack_cd;
+}
+
 static float building_projectile_duration(float dist_tiles){
     return clampf(0.10f + dist_tiles * 0.05f, 0.16f, 0.50f);
 }
@@ -84,8 +133,7 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     b->rally_ty     = ty+h+1;
     b->active_tech  = TECH_NONE;
     b->tech_timer   = 0.0f;
-    building_apply_combat_stats(b);
-    building_apply_arrow_upgrades(gs, b);
+    building_refresh_upgrades(gs, b);
     map_place_building(gs,tx,ty,w,h,slot);
     if(slot >= gs->bld_count) gs->bld_count=slot+1;
     printf("building_place success: bid=%d\n", slot);
@@ -96,6 +144,7 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty){
 void building_on_complete(GameState *gs, Building *b){
     b->complete     = true;
     b->construction = 1.0f;
+    building_refresh_upgrades(gs, b);
     b->hp           = b->max_hp;
     /* Farm: convert tile footprint to TILE_FARM so villagers can gather food */
     if(b->type == BLD_FARM){
@@ -161,8 +210,7 @@ int building_place_ready(GameState *gs,int player,BldType type,int tx,int ty){
         b->active_tech = TECH_NONE;
         b->construction=1.0f; b->complete=true;
         b->rally_tx=tx+w/2; b->rally_ty=ty+h+1;
-        building_apply_combat_stats(b);
-        building_apply_arrow_upgrades(gs, b);
+        building_refresh_upgrades(gs, b);
         map_place_building(gs,tx,ty,w,h,i);
         if(i>=gs->bld_count) gs->bld_count=i+1;
         building_on_complete(gs,b);  /* handles farm tile conversion */
@@ -210,6 +258,8 @@ void building_update(GameState *gs, Building *b, float dt){
             if(target >= 0){
                 Unit *u = &gs->units[target];
                 int dmg = b->attack_dmg - u->armor;
+                if(gs->res[b->player].tech_unlocked[TECH_HEATED_SHOT] && unit_is_siege_target(u->type))
+                    dmg += 8;
                 if(dmg < 1) dmg = 1;
                 if(building_uses_projectiles(b->type)){
                     game_spawn_projectile(gs, b->player, PROJ_BOLT,
@@ -235,13 +285,10 @@ void building_update(GameState *gs, Building *b, float dt){
                 Unit *u = &gs->units[i];
                 if (u->active && u->player == b->player) unit_refresh_upgrades(gs, u);
             }
-            if (t_id == TECH_FORGED_ARROWS || t_id == TECH_BODKIN_ARROW || t_id == TECH_BRACER) {
-                for (int i=0; i<MAX_BUILDINGS; i++) {
-                    Building *tb = &gs->buildings[i];
-                    if (tb->active && tb->player == b->player && tb->attack_dmg > 0) {
-                        building_apply_combat_stats(tb);
-                        building_apply_arrow_upgrades(gs, tb);
-                    }
+            for (int i=0; i<MAX_BUILDINGS; i++) {
+                Building *tb = &gs->buildings[i];
+                if (tb->active && tb->player == b->player) {
+                    building_refresh_upgrades(gs, tb);
                 }
             }
         }
@@ -331,6 +378,16 @@ Cost tech_cost(TechType t) {
         case TECH_FORGED_ARROWS:  return (Cost){75, 50, 50, 0};
         case TECH_BODKIN_ARROW:   return (Cost){0, 150, 100, 0};
         case TECH_BRACER:         return (Cost){0, 200, 200, 0};
+        case TECH_MASONRY:        return (Cost){150, 175, 0, 0};
+        case TECH_ARCHITECTURE:   return (Cost){300, 200, 0, 0};
+        case TECH_FORTIFIED_WALL: return (Cost){0, 200, 100, 0};
+        case TECH_GUARD_TOWER:    return (Cost){0, 150, 100, 0};
+        case TECH_KEEP:           return (Cost){0, 250, 200, 0};
+        case TECH_MURDER_HOLES:   return (Cost){0, 150, 100, 0};
+        case TECH_TREADMILL_CRANE:return (Cost){150, 125, 0, 0};
+        case TECH_CHEMISTRY:      return (Cost){100, 0, 200, 0};
+        case TECH_HOARDINGS:      return (Cost){200, 150, 0, 0};
+        case TECH_HEATED_SHOT:    return (Cost){0, 0, 200, 0};
         default: return (Cost){0,0,0,0};
     }
 }
@@ -388,6 +445,16 @@ float tech_time(TechType t) {
         case TECH_FORGED_ARROWS:  return 35.0f;
         case TECH_BODKIN_ARROW:   return 40.0f;
         case TECH_BRACER:         return 55.0f;
+        case TECH_MASONRY:        return 40.0f;
+        case TECH_ARCHITECTURE:   return 55.0f;
+        case TECH_FORTIFIED_WALL: return 45.0f;
+        case TECH_GUARD_TOWER:    return 45.0f;
+        case TECH_KEEP:           return 55.0f;
+        case TECH_MURDER_HOLES:   return 35.0f;
+        case TECH_TREADMILL_CRANE:return 40.0f;
+        case TECH_CHEMISTRY:      return 50.0f;
+        case TECH_HOARDINGS:      return 45.0f;
+        case TECH_HEATED_SHOT:    return 45.0f;
         default: return 10.0f;
     }
 }
@@ -426,6 +493,12 @@ int tech_age_required(TechType t) {
         case TECH_ILLUMINATION:
         case TECH_REINFORCED_RAM:
         case TECH_SIEGE_ENGINEERS:
+        case TECH_MASONRY:
+        case TECH_FORTIFIED_WALL:
+        case TECH_GUARD_TOWER:
+        case TECH_MURDER_HOLES:
+        case TECH_TREADMILL_CRANE:
+        case TECH_HOARDINGS:
             return 2;
         case TECH_IRRIGATION:
         case TECH_REAPING:
@@ -446,6 +519,10 @@ int tech_age_required(TechType t) {
         case TECH_TORSION_ENGINES:
         case TECH_PLATE_ARMOR:
         case TECH_BRACER:
+        case TECH_ARCHITECTURE:
+        case TECH_KEEP:
+        case TECH_CHEMISTRY:
+        case TECH_HEATED_SHOT:
             return 3;
         case TECH_BLAST_FURNACE:
         case TECH_BODKIN_ARROW:
@@ -508,6 +585,16 @@ const char* tech_name(TechType t) {
         case TECH_FORGED_ARROWS:  return "Forged Arrows";
         case TECH_BODKIN_ARROW:   return "Bodkin Arrow";
         case TECH_BRACER:         return "Bracer";
+        case TECH_MASONRY:        return "Masonry";
+        case TECH_ARCHITECTURE:   return "Architecture";
+        case TECH_FORTIFIED_WALL: return "Fortified Wall";
+        case TECH_GUARD_TOWER:    return "Guard Tower";
+        case TECH_KEEP:           return "Keep";
+        case TECH_MURDER_HOLES:   return "Murder Holes";
+        case TECH_TREADMILL_CRANE:return "Treadmill Crane";
+        case TECH_CHEMISTRY:      return "Chemistry";
+        case TECH_HOARDINGS:      return "Hoardings";
+        case TECH_HEATED_SHOT:    return "Heated Shot";
         default: return "Unknown Tech";
     }
 }
@@ -565,6 +652,16 @@ const char* tech_desc(TechType t) {
         case TECH_FORGED_ARROWS:  return "+1 Att (Archers)";
         case TECH_BODKIN_ARROW:   return "+1 Att, +1 Range (Archers/Towers)";
         case TECH_BRACER:         return "+1 Att, +1 Range (Archers/Towers)";
+        case TECH_MASONRY:        return "+15% HP (Buildings)";
+        case TECH_ARCHITECTURE:   return "+20% HP (Buildings)";
+        case TECH_FORTIFIED_WALL: return "+600 HP (Walls/Gates)";
+        case TECH_GUARD_TOWER:    return "+2 Att, +1 Rng (Towers)";
+        case TECH_KEEP:           return "+3 Att, +1 Rng (Towers)";
+        case TECH_MURDER_HOLES:   return "+1 Rng (TC/Towers)";
+        case TECH_TREADMILL_CRANE:return "+50% Build Speed";
+        case TECH_CHEMISTRY:      return "+1 Att (Archers/Defenses)";
+        case TECH_HOARDINGS:      return "+500 HP (Town Center)";
+        case TECH_HEATED_SHOT:    return "+8 vs Siege (Defenses)";
         default: return "";
     }
 }

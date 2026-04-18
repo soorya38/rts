@@ -332,6 +332,10 @@ void unit_refresh_upgrades(GameState *gs, Unit *u){
         u->attack_dmg += 1;
         u->attack_range += 1.0f;
     }
+    if (pr->tech_unlocked[TECH_CHEMISTRY] &&
+        (u->type == UNIT_ARCHER || u->type == UNIT_SKIRMISHER || u->type == UNIT_CAVALRY_ARCHER)) {
+        u->attack_dmg += 1;
+    }
 
     if (u->hp <= 0) u->hp = u->max_hp;
     else u->hp = clampi(u->max_hp - missing_hp, 1, u->max_hp);

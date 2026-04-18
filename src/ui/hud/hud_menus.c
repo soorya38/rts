@@ -24,27 +24,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
     if(!vil){ui->build_panel_open=false;return;}
 
-    int mx=100, my=HUD_BOT_Y-346, bw=116, bh=48, gap=6;
-    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*5+gap*4+36);
-    DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
-    /* DrawRectangleRoundedLines API history:
-     *  raylib 4.x         : (rec, roundness, segments, color)           <- 4 args
-     *  raylib 5.0 – 5.1   : (rec, roundness, segments, lineThick, color)<- 5 args
-     *  raylib 5.5+        : reverted to (rec, roundness, segments, color)<- 4 args
-     *                       (5-arg version renamed to DrawRectangleRoundedLinesEx)
-     */
-#if RAYLIB_VERSION_MAJOR >= 5 && RAYLIB_VERSION_MINOR >= 5
-    /* 5.5+ uses the same 4-arg form as 4.x */
-    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
-#elif RAYLIB_VERSION_MAJOR >= 5
-    /* 5.0 – 5.1: 5-arg form with lineThick */
-    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,1.0f,C_HUD_LINE);
-#else
-    /* 4.x */
-    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
-#endif
-    DrawText("BUILD MENU  — select a structure",mx,my-22,12,CLITERAL(Color){200,180,100,255});
-
+    int mx=100, bw=116, bh=48, gap=6;
     int lp = net_get_local_player();
     int cur_age = gs->res[lp].age;
     bool has_mill=(building_find(gs,lp,BLD_MILL,true)>=0);
@@ -64,10 +44,25 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         {BLD_WATCH_TOWER,  "Tower (T)\n125W 125S",       {0,125,0,125}},
         {BLD_MONASTERY,    "Monastery (O)\n175W",        {0,175,0,0}},
         {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",           {0,200,0,0}},
+        {BLD_UNIVERSITY,   "University (C)\n200W",       {0,200,0,0}},
         {BLD_WALL,         "Wall (U)\n20 Wood",          {0,20, 0,0}},
         {BLD_GATE,         "Gate (J)\n35W 15S",          {0,35, 0,15}},
     };
     int n=(int)(sizeof(items)/sizeof(items[0]));
+    int rows = (n + 2) / 3;
+    int my = HUD_BOT_Y - (bh * rows + gap * (rows - 1) + 6);
+    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*rows+gap*(rows-1)+36);
+
+    DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
+#if RAYLIB_VERSION_MAJOR >= 5 && RAYLIB_VERSION_MINOR >= 5
+    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
+#elif RAYLIB_VERSION_MAJOR >= 5
+    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,1.0f,C_HUD_LINE);
+#else
+    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
+#endif
+    DrawText("BUILD MENU  — select a structure",mx,my-22,12,CLITERAL(Color){200,180,100,255});
+
     for(int i=0;i<n;i++){
         int col=i%3, row=i/3;
         int bx=mx+col*(bw+gap), by=my+row*(bh+gap);
@@ -78,7 +73,8 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
             items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
             items[i].t==BLD_WATCH_TOWER) && !is_feudal) prereq_ok=false;
-        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP) && !is_castle) prereq_ok=false;
+        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP ||
+            items[i].t==BLD_UNIVERSITY) && !is_castle) prereq_ok=false;
         bool clickable = can && prereq_ok;
         bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
         if(items[i].t==BLD_FARM && !has_mill)
@@ -87,19 +83,21 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
             items[i].t==BLD_WATCH_TOWER) && !is_feudal)
             DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
-        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP) && !is_castle)
+        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP ||
+            items[i].t==BLD_UNIVERSITY) && !is_castle)
             DrawText("Castle Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if(pressed && clickable){
             gs->build_mode.type=items[i].t;
             gs->build_mode.active=true;
+            gs->build_mode.dragging=false;
             ui->build_panel_open=false;
             char msg[48];
             snprintf(msg,sizeof(msg),"Placing: %s",building_name(items[i].t));
             game_set_alert(gs,msg);
         }
     }
-    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I U J",
-             mx,my+bh*5+gap*4+4,9,CLITERAL(Color){100,90,60,200});
+    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I C U J",
+             mx,my+bh*rows+gap*(rows-1)+4,9,CLITERAL(Color){100,90,60,200});
 }
 
 /* ─── Master HUD draw ─────────────────────────────────────── */
