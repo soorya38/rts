@@ -342,6 +342,11 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 DrawText("Monks heal nearby allies and convert enemy units",bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
             }
+            case BLD_SIEGE_WORKSHOP:
+                DrawText("Siege Workshop ready",bx,bby+(int)(12*sc),fs11,CLITERAL(Color){200,180,100,230});
+                DrawText("Siege-unit production is not implemented yet",bx,bby+(int)(30*sc),fs10,CLITERAL(Color){180,165,130,220});
+                DrawText("The building can already be placed and selected",bx,bby+(int)(44*sc),fs10,CLITERAL(Color){180,165,130,220});
+                break;
             case BLD_BLACKSMITH:
                 DrawText("No units  —  research upgrades below",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
                 break;

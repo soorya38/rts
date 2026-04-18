@@ -24,8 +24,8 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
     if(!vil){ui->build_panel_open=false;return;}
 
-    int mx=100, my=HUD_BOT_Y-292, bw=116, bh=48, gap=6;
-    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*4+gap*3+36);
+    int mx=100, my=HUD_BOT_Y-346, bw=116, bh=48, gap=6;
+    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*5+gap*4+36);
     DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
     /* DrawRectangleRoundedLines API history:
      *  raylib 4.x         : (rec, roundness, segments, color)           <- 4 args
@@ -63,6 +63,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         {BLD_FARM,         "Farm (F)\n60 Wood",          {0,60, 0,0}},
         {BLD_WATCH_TOWER,  "Tower (T)\n125W 125S",       {0,125,0,125}},
         {BLD_MONASTERY,    "Monastery (O)\n175W",        {0,175,0,0}},
+        {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",           {0,200,0,0}},
     };
     int n=(int)(sizeof(items)/sizeof(items[0]));
     for(int i=0;i<n;i++){
@@ -75,7 +76,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
             items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
             items[i].t==BLD_WATCH_TOWER) && !is_feudal) prereq_ok=false;
-        if(items[i].t==BLD_MONASTERY && !is_castle) prereq_ok=false;
+        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP) && !is_castle) prereq_ok=false;
         bool clickable = can && prereq_ok;
         bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
         if(items[i].t==BLD_FARM && !has_mill)
@@ -84,7 +85,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
             items[i].t==BLD_WATCH_TOWER) && !is_feudal)
             DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
-        if(items[i].t==BLD_MONASTERY && !is_castle)
+        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP) && !is_castle)
             DrawText("Castle Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if(pressed && clickable){
             gs->build_mode.type=items[i].t;
@@ -95,8 +96,8 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             game_set_alert(gs,msg);
         }
     }
-    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O",
-             mx,my+bh*4+gap*3+4,9,CLITERAL(Color){100,90,60,200});
+    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I",
+             mx,my+bh*5+gap*4+4,9,CLITERAL(Color){100,90,60,200});
 }
 
 /* ─── Master HUD draw ─────────────────────────────────────── */

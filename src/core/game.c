@@ -200,6 +200,7 @@ static void sandbox_setup_bases(GameState *gs){
     building_place_ready(gs, 0, BLD_BLACKSMITH,   20, 37);
     building_place_ready(gs, 0, BLD_MARKET,       24, 37);
     building_place_ready(gs, 0, BLD_MONASTERY,    28, 37);
+    building_place_ready(gs, 0, BLD_SIEGE_WORKSHOP, 32, 37);
     building_place_ready(gs, 0, BLD_WATCH_TOWER,  18, 30);
 
     building_place_ready(gs, 1, BLD_TOWN_CENTER,   48, 28);
@@ -211,6 +212,7 @@ static void sandbox_setup_bases(GameState *gs){
     building_place_ready(gs, 1, BLD_ARCHERY_RANGE, 44, 18);
     building_place_ready(gs, 1, BLD_STABLE,        40, 37);
     building_place_ready(gs, 1, BLD_MARKET,        44, 37);
+    building_place_ready(gs, 1, BLD_SIEGE_WORKSHOP, 36, 37);
     building_place_ready(gs, 1, BLD_WATCH_TOWER,   46, 30);
 
     gs->res[0].amount[RES_FOOD]  = 5000;
