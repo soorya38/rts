@@ -354,6 +354,7 @@ void building_update(GameState *gs,Building *b,float dt);
 void buildings_update_all(GameState *gs,float dt);
 int  building_find(GameState *gs,int player,BldType type,bool complete_only);
 void building_enqueue_unit(GameState *gs,Building *b,UnitType ut);
+int  building_queued_population(const Building *b);
 Cost building_cost(BldType t);
 int  building_tw(BldType t);
 int  building_th(BldType t);

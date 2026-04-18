@@ -11,6 +11,43 @@
 
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
+static void draw_training_queue(Building *b, int x, int y, int fs10, int fs9){
+    if(b->queue_len <= 0) return;
+
+    DrawText("Queue:", x, y, fs10, CLITERAL(Color){180,165,130,220});
+    int slot_w = 54;
+    int slot_h = 20;
+    int slot_gap = 5;
+    int sx = x + 42;
+    for(int i=0; i<BQUEUE_CAP; i++){
+        int bx = sx + i * (slot_w + slot_gap);
+        Color bg = (i < b->queue_len)
+            ? CLITERAL(Color){56,46,26,255}
+            : CLITERAL(Color){28,23,14,200};
+        DrawRectangle(bx, y - 2, slot_w, slot_h, bg);
+        DrawRectangleLinesEx((Rectangle){(float)bx,(float)(y - 2),(float)slot_w,(float)slot_h},
+                             1.0f, C_HUD_LINE);
+        if(i < b->queue_len){
+            const char *name = unit_name(b->queue[i]);
+            char mini[16];
+            snprintf(mini, sizeof(mini), "%-.6s", name);
+            DrawText(mini, bx + 4, y + 3, fs9, i == 0 ? C_GOLD : C_HUD_TXT);
+        } else {
+            DrawText("-", bx + slot_w/2 - 2, y + 3, fs9, CLITERAL(Color){90,80,55,180});
+        }
+    }
+}
+
+static bool can_queue_unit_now(GameState *gs, Building *b, int player, UnitType ut){
+    if(!b || !b->complete || b->active_tech != TECH_NONE) return false;
+    if(b->queue_len >= BQUEUE_CAP) return false;
+    if(!building_can_train_unit(b->type, ut)) return false;
+    if(gs->res[player].age < unit_age_required(ut)) return false;
+    if(!res_can_afford(&gs->res[player], unit_cost(ut))) return false;
+    if(gs->res[player].population + building_queued_population(b) >= gs->res[player].pop_cap) return false;
+    return true;
+}
+
 static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_start){
     if(gs->mode != GAME_MODE_SANDBOX) return;
 
@@ -181,20 +218,21 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             int bar_w=(int)(160*sc), bar_h=(int)(6*sc);
             DrawRectangle(pad,by_start+(int)(60*sc),bar_w,bar_h,CLITERAL(Color){40,35,20,255});
             DrawRectangle(pad,by_start+(int)(60*sc),(int)(bar_w*prog),bar_h,CLITERAL(Color){50,200,60,255});
+            draw_training_queue(b, pad, by_start+(int)(72*sc), fs10, fs9);
         }
         int btn_w=(int)(80*sc), btn_h=(int)(50*sc), btn_gap=(int)(8*sc);
         int bx=(int)(220*sc), bby=by_start+(int)(10*sc);
         int lp = net_get_local_player();
         switch(b->type){
             case BLD_TOWN_CENTER:
-                if(draw_button("Villager\n50F",bx,bby,btn_w,btn_h,gs->res[lp].amount[RES_FOOD]>=50)) {
+                if(draw_button("Villager\n50F",bx,bby,btn_w,btn_h,can_queue_unit_now(gs,b,lp,UNIT_VILLAGER))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_VILLAGER;
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_VILLAGER);
                 }
-                if(draw_button("Scout\n80F",bx+btn_w+btn_gap,bby,btn_w,btn_h,gs->res[lp].amount[RES_FOOD]>=80)) {
+                if(draw_button("Scout\n80F",bx+btn_w+btn_gap,bby,btn_w,btn_h,can_queue_unit_now(gs,b,lp,UNIT_SCOUT))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_SCOUT;
@@ -204,14 +242,14 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 break;
             case BLD_BARRACKS: {
                 int bw2=(int)(90*sc);
-                if(draw_button("Militia\n60F 20G",bx,bby,bw2,btn_h,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
+                if(draw_button("Militia\n60F 20G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_MILITIA))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_MILITIA;
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_MILITIA);
                 }
-                if(gs->res[lp].age>=1&&draw_button("Man@Arms\n60F 20G",bx+bw2+btn_gap,bby,bw2,btn_h,gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=20)) {
+                if(gs->res[lp].age>=1&&draw_button("Man@Arms\n60F 20G",bx+bw2+btn_gap,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_MAN_AT_ARMS))) {
                      if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_MAN_AT_ARMS;
@@ -219,7 +257,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_MAN_AT_ARMS);
                 }
                 if(gs->res[lp].age>=1&&draw_button("Spearman\n35F 25W",bx+2*(bw2+btn_gap),bby,bw2,btn_h,
-                    gs->res[lp].amount[RES_FOOD]>=35&&gs->res[lp].amount[RES_WOOD]>=25)) {
+                    can_queue_unit_now(gs,b,lp,UNIT_SPEARMAN))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_SPEARMAN;
@@ -230,7 +268,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
             case BLD_ARCHERY_RANGE: {
                 int bw2=(int)(90*sc);
-                if(draw_button("Archer\n25W 45G",bx,bby,bw2,btn_h,gs->res[lp].amount[RES_WOOD]>=25&&gs->res[lp].amount[RES_GOLD]>=45)) {
+                if(draw_button("Archer\n25W 45G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_ARCHER))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_ARCHER;
@@ -238,7 +276,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_ARCHER);
                 }
                 if(gs->res[lp].age>=1&&draw_button("Skirm\n25F 35W",bx+bw2+btn_gap,bby,bw2,btn_h,
-                    gs->res[lp].amount[RES_FOOD]>=25&&gs->res[lp].amount[RES_WOOD]>=35)) {
+                    can_queue_unit_now(gs,b,lp,UNIT_SKIRMISHER))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_SKIRMISHER;
@@ -246,7 +284,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     } else building_enqueue_unit(gs,b,UNIT_SKIRMISHER);
                 }
                 if(gs->res[lp].age>=2&&draw_button("Cav Archer\n40F 70G",bx+2*(bw2+btn_gap),bby,bw2,btn_h,
-                    gs->res[lp].amount[RES_FOOD]>=40&&gs->res[lp].amount[RES_GOLD]>=70)) {
+                    can_queue_unit_now(gs,b,lp,UNIT_CAVALRY_ARCHER))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_CAVALRY_ARCHER;
@@ -257,7 +295,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
             case BLD_STABLE: {
                 int bw2=(int)(90*sc);
-                if(draw_button("Knight\n60F 75G",bx,bby,bw2,btn_h,gs->res[lp].age>=2&&gs->res[lp].amount[RES_FOOD]>=60&&gs->res[lp].amount[RES_GOLD]>=75)) {
+                if(draw_button("Knight\n60F 75G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_KNIGHT))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_KNIGHT;
@@ -268,7 +306,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
             case BLD_MONASTERY: {
                 int bw2=(int)(96*sc);
-                if(draw_button("Monk\n100G",bx,bby,bw2,btn_h,gs->res[lp].age>=2&&gs->res[lp].amount[RES_GOLD]>=100)) {
+                if(draw_button("Monk\n100G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_MONK))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_MONK;
@@ -308,6 +346,11 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         /* Research tech buttons */
         bool busy = (b->active_tech != TECH_NONE || b->queue_len > 0);
         if(b->player == lp){
+            if(b->active_tech == TECH_NONE && b->queue_len >= BQUEUE_CAP)
+                DrawText("Queue full", pad, by_start+(int)(96*sc), fs10, CLITERAL(Color){220,160,80,220});
+            else if(b->active_tech == TECH_NONE &&
+                    gs->res[lp].population + building_queued_population(b) >= gs->res[lp].pop_cap)
+                DrawText("Need more housing to queue more units", pad, by_start+(int)(96*sc), fs10, CLITERAL(Color){220,160,80,220});
             TechType techs[2] = {TECH_NONE, TECH_NONE};
             int tc = 0;
             if(b->type == BLD_MILL){ techs[0]=TECH_CROP_ROTATION; techs[1]=TECH_FERTILIZER; tc=2; }

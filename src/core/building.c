@@ -151,14 +151,19 @@ int building_place_ready(GameState *gs,int player,BldType type,int tx,int ty){
     return -1;
 }
 
+int building_queued_population(const Building *b){
+    return b ? b->queue_len : 0;
+}
+
 void building_enqueue_unit(GameState *gs, Building *b, UnitType ut){
     if(b->queue_len>=BQUEUE_CAP) return;
     if(!b->complete) return;
+    if(b->active_tech != TECH_NONE) return;
     if(!building_can_train_unit(b->type, ut)) return;
     if(gs->res[b->player].age < unit_age_required(ut)) return;
     Cost c=unit_cost(ut);
     if(!res_can_afford(&gs->res[b->player],c)) return;
-    if(gs->res[b->player].population>=gs->res[b->player].pop_cap) return;
+    if(gs->res[b->player].population + building_queued_population(b) >= gs->res[b->player].pop_cap) return;
     res_deduct(&gs->res[b->player],c);
     b->queue[b->queue_len++]=ut;
     if(b->queue_len==1) b->train_timer=building_train_time(ut);
@@ -270,7 +275,10 @@ void building_update(GameState *gs, Building *b, float dt){
     UnitType ut=b->queue[0];
     float wx=(b->rally_tx+0.5f)*TILE_SIZE;
     float wy=(b->rally_ty+0.5f)*TILE_SIZE;
-    unit_spawn(gs,b->player,ut,wx,wy);
+    if(unit_spawn(gs,b->player,ut,wx,wy) < 0){
+        b->train_timer = 0.5f;
+        return;
+    }
     /* Shift queue */
     for(int i=0;i<b->queue_len-1;i++) b->queue[i]=b->queue[i+1];
     b->queue_len--;
