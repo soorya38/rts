@@ -32,7 +32,9 @@ static void draw_projectiles(GameState *gs){
 
         Color pc = (p->type == PROJ_BOLT)
             ? CLITERAL(Color){160, 210, 255, 255}
-            : CLITERAL(Color){240, 220, 140, 255};
+            : (p->type == PROJ_STONE)
+                ? CLITERAL(Color){180, 170, 155, 255}
+                : CLITERAL(Color){240, 220, 140, 255};
         Color tc = player_color(p->owner_player);
         DrawLineEx(prev, cur, p->type == PROJ_BOLT ? 3.0f : 2.0f, pc);
         DrawCircleV(cur, p->type == PROJ_BOLT ? 3.4f : 2.4f, tc);
@@ -158,7 +160,11 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
     Color mc = player_color_alpha(u->player,(unsigned char)alpha);
     Color dc = player_color_dark(u->player); dc.a=(unsigned char)alpha;
 
-    float size_mult = (u->type == UNIT_SCOUT) ? 1.4f : 1.0f;
+    float size_mult = 1.0f;
+    if (u->type == UNIT_SCOUT) size_mult = 1.4f;
+    else if (u->type == UNIT_BATTERING_RAM) size_mult = 1.8f;
+    else if (u->type == UNIT_MANGONEL) size_mult = 1.6f;
+    else if (u->type == UNIT_SCORPION) size_mult = 1.5f;
     draw_shadow(wx, wy, 10 * size_mult, 8 * size_mult);
 
     if(u->selected) {
@@ -180,8 +186,19 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
         DrawTextureEx(utex, (Vector2){px - tw/2.0f, py - th + 12 * size_mult}, 0.0f, sc, WHITE);
     } else {
         /* Fallback primitive drawing */
-        DrawRectangle((int)(px-4),(int)(py-3),8,8,mc);
-        DrawCircle((int)px,(int)(py-7),5,CLITERAL(Color){220,185,145,255});
+        if (u->type == UNIT_BATTERING_RAM) {
+            DrawRectangle((int)(px-10),(int)(py-6),20,12,mc);
+            DrawRectangle((int)(px-14),(int)(py-3),28,6,dc);
+        } else if (u->type == UNIT_MANGONEL) {
+            DrawRectangle((int)(px-8),(int)(py-5),16,10,mc);
+            DrawCircle((int)px,(int)(py-8),5,CLITERAL(Color){150,140,120,255});
+        } else if (u->type == UNIT_SCORPION) {
+            DrawRectangle((int)(px-9),(int)(py-4),18,8,mc);
+            DrawLine((int)px,(int)(py-8),(int)(px+10),(int)(py-14),CLITERAL(Color){200,190,150,255});
+        } else {
+            DrawRectangle((int)(px-4),(int)(py-3),8,8,mc);
+            DrawCircle((int)px,(int)(py-7),5,CLITERAL(Color){220,185,145,255});
+        }
     }
 
     if(u->type==UNIT_VILLAGER && u->carry_amt>0){

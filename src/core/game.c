@@ -65,7 +65,8 @@ bool game_damage_building(GameState *gs, int target_bld, int dmg){
 }
 
 bool unit_uses_projectiles(UnitType type){
-    return type == UNIT_ARCHER || type == UNIT_SKIRMISHER || type == UNIT_CAVALRY_ARCHER;
+    return type == UNIT_ARCHER || type == UNIT_SKIRMISHER || type == UNIT_CAVALRY_ARCHER ||
+           type == UNIT_MANGONEL || type == UNIT_SCORPION;
 }
 
 bool building_uses_projectiles(BldType type){
@@ -96,6 +97,20 @@ void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,
     }
 }
 
+static void damage_units_in_radius(GameState *gs, int owner_player, float cx, float cy,
+                                   float radius_px, int damage, int skip_unit){
+    for(int i=0;i<MAX_UNITS;i++){
+        Unit *t = &gs->units[i];
+        if(i == skip_unit) continue;
+        if(!t->active || t->player == owner_player || t->state == US_DEAD || t->state == US_DYING) continue;
+        float d = dist2f(cx, cy, t->wx, t->wy);
+        if(d > radius_px) continue;
+        int splash = damage - (int)(d / 18.0f);
+        if(splash < 1) splash = 1;
+        game_damage_unit(gs, i, splash);
+    }
+}
+
 void game_update_projectiles(GameState *gs, float dt){
     for(int i=0;i<MAX_PROJECTILES;i++){
         Projectile *p = &gs->projectiles[i];
@@ -104,8 +119,16 @@ void game_update_projectiles(GameState *gs, float dt){
         if(p->elapsed < p->duration) continue;
         if(p->target_unit >= 0){
             game_damage_unit(gs, p->target_unit, p->damage);
+            if(p->type == PROJ_STONE){
+                damage_units_in_radius(gs, p->owner_player, p->ex, p->ey,
+                                       TILE_SIZE * 1.35f, p->damage / 2, p->target_unit);
+            }
         } else if(p->target_bld >= 0){
             game_damage_building(gs, p->target_bld, p->damage);
+            if(p->type == PROJ_STONE){
+                damage_units_in_radius(gs, p->owner_player, p->ex, p->ey,
+                                       TILE_SIZE * 1.5f, p->damage / 2, -1);
+            }
         }
         p->active = false;
     }
@@ -171,7 +194,8 @@ static void sandbox_setup_bases(GameState *gs){
     static const UnitType preview_units[] = {
         UNIT_SCOUT, UNIT_MILITIA, UNIT_MAN_AT_ARMS,
         UNIT_SPEARMAN, UNIT_ARCHER, UNIT_SKIRMISHER,
-        UNIT_CAVALRY_ARCHER, UNIT_KNIGHT, UNIT_MONK
+        UNIT_CAVALRY_ARCHER, UNIT_KNIGHT, UNIT_MONK,
+        UNIT_BATTERING_RAM, UNIT_MANGONEL, UNIT_SCORPION
     };
 
     sandbox_clear_map(gs);
@@ -323,7 +347,7 @@ void game_sandbox_next_age(GameState *gs, int player){
 
 void game_sandbox_spawn_wave(GameState *gs, int player){
     static const UnitType WAVE[] = {
-        UNIT_MAN_AT_ARMS, UNIT_SPEARMAN, UNIT_ARCHER, UNIT_KNIGHT, UNIT_MONK
+        UNIT_MAN_AT_ARMS, UNIT_SPEARMAN, UNIT_ARCHER, UNIT_KNIGHT, UNIT_MANGONEL
     };
     if(!gs || gs->mode != GAME_MODE_SANDBOX || player < 0 || player >= gs->num_players) return;
     int lane = (unit_count_military(gs, player) / 5) % 3;

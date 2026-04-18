@@ -258,6 +258,9 @@ static int bonus_damage_vs_unit(Unit *u, Unit *t){
         case UNIT_CAVALRY_ARCHER:
             if(t->type == UNIT_SPEARMAN) return 3;
             break;
+        case UNIT_SCORPION:
+            if(t->type == UNIT_ARCHER || t->type == UNIT_SKIRMISHER || t->type == UNIT_CAVALRY_ARCHER) return 4;
+            break;
         default:
             break;
     }
@@ -271,6 +274,10 @@ static int bonus_damage_vs_building(Unit *u){
             return 2;
         case UNIT_KNIGHT:
             return 1;
+        case UNIT_BATTERING_RAM:
+            return 28;
+        case UNIT_MANGONEL:
+            return 8;
         default:
             return 0;
     }
@@ -378,10 +385,19 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
             int dmg=u->attack_dmg + bonus_damage_vs_unit(u, t) - t->armor;
             if(dmg<1)dmg=1;
             if(unit_uses_projectiles(u->type)){
-                game_spawn_projectile(gs, u->player, PROJ_ARROW,
+                ProjectileType proj = PROJ_ARROW;
+                float arc_height = 26.0f;
+                if(u->type == UNIT_SCORPION){
+                    proj = PROJ_BOLT;
+                    arc_height = 18.0f;
+                } else if(u->type == UNIT_MANGONEL){
+                    proj = PROJ_STONE;
+                    arc_height = 42.0f;
+                }
+                game_spawn_projectile(gs, u->player, proj,
                                       u->wx, u->wy, t->wx, t->wy,
                                       u->target_unit, -1, dmg,
-                                      projectile_duration_for_distance(dist), 26.0f);
+                                      projectile_duration_for_distance(dist), arc_height);
             } else if(!game_damage_unit(gs, u->target_unit, dmg)){
                 u->target_unit=-1;
             }
@@ -397,10 +413,19 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
         if(unit_uses_projectiles(u->type)){
             float bx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
             float by = (b->ty + b->th * 0.5f) * TILE_SIZE;
-            game_spawn_projectile(gs, u->player, PROJ_ARROW,
+            ProjectileType proj = PROJ_ARROW;
+            float arc_height = 24.0f;
+            if(u->type == UNIT_SCORPION){
+                proj = PROJ_BOLT;
+                arc_height = 18.0f;
+            } else if(u->type == UNIT_MANGONEL){
+                proj = PROJ_STONE;
+                arc_height = 40.0f;
+            }
+            game_spawn_projectile(gs, u->player, proj,
                                   u->wx, u->wy, bx, by,
                                   -1, u->target_bld, dmg,
-                                  projectile_duration_for_distance(dist), 24.0f);
+                                  projectile_duration_for_distance(dist), arc_height);
         } else if(!game_damage_building(gs, u->target_bld, dmg)){
             u->target_bld=-1;
         }

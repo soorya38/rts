@@ -342,11 +342,33 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 DrawText("Monks heal nearby allies and convert enemy units",bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
             }
-            case BLD_SIEGE_WORKSHOP:
-                DrawText("Siege Workshop ready",bx,bby+(int)(12*sc),fs11,CLITERAL(Color){200,180,100,230});
-                DrawText("Siege-unit production is not implemented yet",bx,bby+(int)(30*sc),fs10,CLITERAL(Color){180,165,130,220});
-                DrawText("The building can already be placed and selected",bx,bby+(int)(44*sc),fs10,CLITERAL(Color){180,165,130,220});
+            case BLD_SIEGE_WORKSHOP: {
+                int bw2=(int)(92*sc);
+                if(draw_button("Ram\n160W 75G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_BATTERING_RAM))) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_BATTERING_RAM;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_BATTERING_RAM);
+                }
+                if(draw_button("Mangonel\n160W 135G",bx+bw2+btn_gap,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_MANGONEL))) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_MANGONEL;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_MANGONEL);
+                }
+                if(draw_button("Scorpion\n75W 75G",bx+2*(bw2+btn_gap),bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_SCORPION))) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_SCORPION;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_SCORPION);
+                }
+                DrawText("Ram crushes buildings. Mangonel deals splash damage. Scorpion is ranged siege support.",
+                         bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
+            }
             case BLD_BLACKSMITH:
                 DrawText("No units  —  research upgrades below",bx,bby+(int)(18*sc),fs11,CLITERAL(Color){160,145,110,200});
                 break;

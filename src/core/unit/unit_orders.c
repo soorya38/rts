@@ -136,6 +136,9 @@ static const UnitStats STATS[UNIT_COUNT] = {
     /*CAV_ARCHER*/  {50,  6, 0, 5.0f, 7.0f, 110.0f, 2.2f,  0},
     /*KNIGHT*/      {100,10, 3, 1.3f, 4.0f, 115.0f, 2.0f,  0},
     /*MONK*/        {30,  0, 0, 5.0f, 8.0f,  80.0f, 6.0f,  0},
+    /*BAT_RAM*/     {175, 2, 4, 1.2f, 4.5f,  52.0f, 2.8f,  0},
+    /*MANGONEL*/    {60, 35, 0, 7.0f, 8.0f,  58.0f, 4.5f,  0},
+    /*SCORPION*/    {55, 16, 1, 6.0f, 8.0f,  62.0f, 3.1f,  0},
 };
 
 void unit_init_stats(GameState *gs, Unit *u){

@@ -153,6 +153,7 @@ typedef enum {
     UNIT_MILITIA, UNIT_MAN_AT_ARMS, UNIT_SPEARMAN,
     UNIT_ARCHER,  UNIT_SKIRMISHER, UNIT_CAVALRY_ARCHER,
     UNIT_KNIGHT,  UNIT_MONK,
+    UNIT_BATTERING_RAM, UNIT_MANGONEL, UNIT_SCORPION,
     UNIT_COUNT
 } UnitType;
 
@@ -247,7 +248,8 @@ typedef struct {
 
 typedef enum {
     PROJ_ARROW = 0,
-    PROJ_BOLT
+    PROJ_BOLT,
+    PROJ_STONE
 } ProjectileType;
 
 typedef struct {

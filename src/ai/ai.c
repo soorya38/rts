@@ -213,6 +213,16 @@ void ai_update(GameState *gs, float dt){
                 ai_try_build(gs,BLD_MONASTERY);
             if(pr->age >= 2 && building_find(gs,AI,BLD_MONASTERY,true)>=0 && pr->amount[RES_GOLD] >= 100)
                 ai_train_unit(gs,BLD_MONASTERY,UNIT_MONK);
+            if(pr->age >= 2 && building_find(gs,AI,BLD_SIEGE_WORKSHOP,false)<0 && pr->amount[RES_WOOD] >= 200)
+                ai_try_build(gs,BLD_SIEGE_WORKSHOP);
+            if(pr->age >= 2 && building_find(gs,AI,BLD_SIEGE_WORKSHOP,true)>=0){
+                if(pr->amount[RES_WOOD] >= 160 && pr->amount[RES_GOLD] >= 135)
+                    ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_MANGONEL);
+                else if(pr->amount[RES_WOOD] >= 75 && pr->amount[RES_GOLD] >= 75)
+                    ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_SCORPION);
+                else if(pr->amount[RES_WOOD] >= 160 && pr->amount[RES_GOLD] >= 75)
+                    ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_BATTERING_RAM);
+            }
 
             if(unit_count_military(gs,AI)>=5)
                 gs->ai_phase=AI_ATTACK;
@@ -232,6 +242,9 @@ void ai_update(GameState *gs, float dt){
                 ai_train_unit(gs,BLD_ARCHERY_RANGE,UNIT_ARCHER);
             if(building_find(gs,AI,BLD_STABLE,true)>=0 && pr->age >= 2 && pr->amount[RES_FOOD]>=60 && pr->amount[RES_GOLD]>=75)
                 ai_train_unit(gs,BLD_STABLE,UNIT_KNIGHT);
+            if(building_find(gs,AI,BLD_SIEGE_WORKSHOP,true)>=0 && pr->age >= 2 &&
+               pr->amount[RES_WOOD]>=75 && pr->amount[RES_GOLD]>=75)
+                ai_train_unit(gs,BLD_SIEGE_WORKSHOP,UNIT_SCORPION);
             break;
     }
 
