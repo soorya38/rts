@@ -226,7 +226,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
 
     draw_hp_bar(px+w*0.5f,py+h*0.5f,w*0.8f,b->hp,b->max_hp,35);
 
-    if(b->queue_len>0){
+    if(b->player == lp && b->queue_len>0){
         float progress=1.0f-(b->train_timer/building_train_time(b->queue[0]));
         Vector2 p = to_rvec2(world_to_iso(px + w*0.5f, py + h*0.5f));
         DrawRectangleRec((Rectangle){p.x-w*0.4f, p.y-40, w*0.8f, 4}, C_HP_BG);

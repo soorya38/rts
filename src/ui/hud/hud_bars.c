@@ -794,10 +794,18 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         if(ui->sel_building<0 && ui->sel_tile_x>=0 && ui->sel_tile_y>=0 && map_in_bounds(ui->sel_tile_x,ui->sel_tile_y)){
             Tile *t=&gs->map[ui->sel_tile_y][ui->sel_tile_x];
             if(t->type==TILE_FOREST||t->type==TILE_GOLD||t->type==TILE_STONE||t->type==TILE_BERRIES||t->type==TILE_FARM){
-                static const char *TILE_LABEL[]={"Grass","Water","Forest","Gold Deposit","Stone Deposit","Berry Bush","Farmland"};
-                static Color TILE_COLOR[]={{80,120,60,255},{60,100,170,255},{60,130,50,255},{210,175,30,255},{160,155,140,255},{180,60,80,255},{160,140,80,255}};
-                Color col=TILE_COLOR[t->type];
-                DrawText(TILE_LABEL[t->type],pad,by_start+(int)(8*sc),fs16+4,col);
+                const char *tile_label = "Resource";
+                Color col = CLITERAL(Color){180,60,80,255};
+                int maxv = 500;
+                switch(t->type){
+                    case TILE_FOREST: tile_label="Forest"; col=CLITERAL(Color){60,130,50,255}; maxv=250; break;
+                    case TILE_GOLD: tile_label="Gold Deposit"; col=CLITERAL(Color){210,175,30,255}; maxv=900; break;
+                    case TILE_STONE: tile_label="Stone Deposit"; col=CLITERAL(Color){160,155,140,255}; maxv=800; break;
+                    case TILE_BERRIES: tile_label="Berry Bush"; col=CLITERAL(Color){180,60,80,255}; maxv=500; break;
+                    case TILE_FARM: tile_label="Farmland"; col=CLITERAL(Color){160,140,80,255}; maxv=400; break;
+                    default: break;
+                }
+                DrawText(tile_label,pad,by_start+(int)(8*sc),fs16+4,col);
                 char rbuf[48];
                 static const char *RNAME[]={"Food","Wood","Gold","Stone"};
                 ResType rtype;
@@ -809,8 +817,6 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 }
                 snprintf(rbuf,sizeof(rbuf),"%s remaining: %d",RNAME[rtype],t->resource_amt);
                 DrawText(rbuf,pad,by_start+(int)(30*sc),fs12,CLITERAL(Color){200,185,140,220});
-                static const int MAX_AMT[]={0,0,250,900,800,500,400};
-                int maxv=MAX_AMT[t->type]; if(maxv<=0) maxv=500;
                 int bar_w=(int)(200*sc), bar_h=(int)(8*sc);
                 int bar_val=(int)((float)bar_w*((float)t->resource_amt/(float)maxv));
                 if(bar_val<0)bar_val=0; if(bar_val>bar_w)bar_val=bar_w;

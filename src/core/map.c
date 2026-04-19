@@ -83,7 +83,7 @@ static void place_start_resources(GameState *gs, int tc_x, int tc_y){
 
     for(int i=0; i<7; i++){
         int d    = idx[i];
-        int dist = 7 + (int)(rng_next() % 7);  /* 7-13 tiles */
+        int dist = 9 + (int)(rng_next() % 7);  /* 9-15 tiles */
         int jx   = (int)(rng_next() % 3) - 1;  /* −1..+1 jitter */
         int jy   = (int)(rng_next() % 3) - 1;
         int cx   = tc_x + (DX[d] * dist) / 10 + jx;

@@ -11,8 +11,30 @@
 #define AI_MILITARY 2
 #define AI_ATTACK   3
 
-#define AI_THINK_RATE 1.5f
+#define AI_THINK_RATE 0.5f
 #define AI_ATTACK_CD  60.0f
+
+static int ai_count_queued_units(GameState *gs, UnitType type){
+    int count = 0;
+    for(int i=0; i<MAX_BUILDINGS; i++){
+        Building *b = &gs->buildings[i];
+        if(!b->active || b->player != AI) continue;
+        for(int j=0; j<b->queue_len; j++){
+            if(b->queue[j] == type) count++;
+        }
+    }
+    return count;
+}
+
+static int ai_dark_age_villager_target(GameState *gs){
+    (void)gs;
+    return 13;
+}
+
+static int ai_feudal_econ_villager_target(GameState *gs){
+    (void)gs;
+    return 24;
+}
 
 static bool ai_send_villager_gather(GameState *gs, int uid, ResType rt){
     Unit *u = &gs->units[uid];
@@ -21,6 +43,161 @@ static bool ai_send_villager_gather(GameState *gs, int uid, ResType rt){
     int uty = (int)(u->wy / TILE_SIZE);
     if(!map_find_resource(gs, AI, rt, utx, uty, &tx, &ty)) return false;
     unit_give_gather_order(gs, u, tx, ty);
+    return true;
+}
+
+static bool ai_find_tc_center(GameState *gs, int *out_tx, int *out_ty){
+    int tc = building_find(gs, AI, BLD_TOWN_CENTER, true);
+    if(tc < 0) return false;
+    Building *town = &gs->buildings[tc];
+    *out_tx = town->tx + town->tw / 2;
+    *out_ty = town->ty + town->th / 2;
+    return true;
+}
+
+static int ai_find_scout(GameState *gs){
+    for(int i=0; i<MAX_UNITS; i++){
+        Unit *u = &gs->units[i];
+        if(!u->active || u->player != AI || u->state == US_DEAD) continue;
+        if(u->type == UNIT_SCOUT) return i;
+    }
+    return -1;
+}
+
+static bool ai_find_hidden_explore_target(GameState *gs, int scout_tx, int scout_ty,
+                                          int *out_tx, int *out_ty){
+    int best_score = 0x7fffffff;
+    bool found = false;
+
+    for(int y=0; y<MAP_H; y++){
+        for(int x=0; x<MAP_W; x++){
+            Tile *t = &gs->map[y][x];
+            if(t->fog[AI] != FOG_HIDDEN) continue;
+
+            int move_tx = x;
+            int move_ty = y;
+            if(!map_find_passable_near(gs, x, y, &move_tx, &move_ty)) continue;
+
+            int dist = abs(move_tx - scout_tx) + abs(move_ty - scout_ty);
+            if(dist < 4) continue;
+
+            /* Prefer nearer frontier tiles so the scout keeps sweeping outward smoothly. */
+            int score = dist;
+            if(score < best_score){
+                best_score = score;
+                *out_tx = move_tx;
+                *out_ty = move_ty;
+                found = true;
+            }
+        }
+    }
+
+    return found;
+}
+
+static bool ai_find_roaming_target(GameState *gs, int scout_tx, int scout_ty,
+                                   int *out_tx, int *out_ty){
+    static const int LANDMARKS[][2] = {
+        {2, 2}, {MAP_W - 3, 2}, {MAP_W - 3, MAP_H - 3}, {2, MAP_H - 3},
+        {MAP_W / 2, 2}, {MAP_W - 3, MAP_H / 2}, {MAP_W / 2, MAP_H - 3}, {2, MAP_H / 2},
+        {MAP_W / 2, MAP_H / 2}
+    };
+
+    int start = ((int)(gs->game_time / 6.0f) + scout_tx + scout_ty) % (int)(sizeof(LANDMARKS) / sizeof(LANDMARKS[0]));
+    int best_dist = -1;
+    bool found = false;
+
+    for(int i=0; i<(int)(sizeof(LANDMARKS) / sizeof(LANDMARKS[0])); i++){
+        int idx = (start + i) % (int)(sizeof(LANDMARKS) / sizeof(LANDMARKS[0]));
+        int move_tx = LANDMARKS[idx][0];
+        int move_ty = LANDMARKS[idx][1];
+        if(!map_find_passable_near(gs, move_tx, move_ty, &move_tx, &move_ty)) continue;
+
+        int dist = abs(move_tx - scout_tx) + abs(move_ty - scout_ty);
+        if(dist > best_dist){
+            best_dist = dist;
+            *out_tx = move_tx;
+            *out_ty = move_ty;
+            found = true;
+        }
+    }
+
+    return found;
+}
+
+static int ai_find_builder_villager(GameState *gs, int target_tx, int target_ty){
+    int best_idle = -1;
+    int best_idle_dist = 0x7fffffff;
+    int best_worker = -1;
+    int best_worker_dist = 0x7fffffff;
+
+    for(int i=0; i<MAX_UNITS; i++){
+        Unit *u = &gs->units[i];
+        if(!u->active || u->player != AI || u->type != UNIT_VILLAGER) continue;
+        if(u->state == US_DEAD || u->state == US_DYING || u->state == US_BUILDING) continue;
+
+        int utx = (int)(u->wx / TILE_SIZE);
+        int uty = (int)(u->wy / TILE_SIZE);
+        int dist = abs(utx - target_tx) + abs(uty - target_ty);
+
+        if(u->state == US_IDLE){
+            if(dist < best_idle_dist){
+                best_idle_dist = dist;
+                best_idle = i;
+            }
+            continue;
+        }
+
+        if(u->build_id >= 0) continue;
+        if(dist < best_worker_dist){
+            best_worker_dist = dist;
+            best_worker = i;
+        }
+    }
+
+    return (best_idle >= 0) ? best_idle : best_worker;
+}
+
+static bool ai_try_build_near_resource(GameState *gs, BldType type, ResType rt){
+    int tcx, tcy;
+    if(!ai_find_tc_center(gs, &tcx, &tcy)) return false;
+
+    int rx, ry;
+    if(!map_find_resource(gs, AI, rt, tcx, tcy, &rx, &ry)) return false;
+
+    int w = building_tw(type), h = building_th(type);
+    Cost c = building_cost(type);
+    if(!res_can_afford(&gs->res[AI], c)) return false;
+
+    int best_tx = -1, best_ty = -1;
+    int best_score = 999999;
+    for(int r=2; r<=6; r++){
+        for(int dy=-r; dy<=r; dy++){
+            for(int dx=-r; dx<=r; dx++){
+                if(abs(dx) != r && abs(dy) != r) continue;
+                int tx = rx + dx - w / 2;
+                int ty = ry + dy - h / 2;
+                if(!map_in_bounds(tx, ty) || !map_in_bounds(tx + w - 1, ty + h - 1)) continue;
+                if(!map_is_buildable(gs, tx, ty, w, h)) continue;
+
+                int score = abs((tx + w / 2) - tcx) + abs((ty + h / 2) - tcy);
+                if(score < best_score){
+                    best_score = score;
+                    best_tx = tx;
+                    best_ty = ty;
+                }
+            }
+        }
+        if(best_tx >= 0) break;
+    }
+
+    if(best_tx < 0) return false;
+    int vid = ai_find_builder_villager(gs, best_tx + w / 2, best_ty + h / 2);
+    if(vid < 0) return false;
+
+    int bid = building_place(gs, AI, type, best_tx, best_ty);
+    if(bid < 0) return false;
+    unit_give_build_order(gs, &gs->units[vid], bid);
     return true;
 }
 
@@ -56,6 +233,20 @@ static int ai_count_total_queued_population(GameState *gs){
     return queued;
 }
 
+static int ai_count_queued_at_building(GameState *gs, BldType type){
+    int count = 0;
+    for(int i=0; i<MAX_BUILDINGS; i++){
+        Building *b = &gs->buildings[i];
+        if(!b->active || b->player != AI || b->type != type) continue;
+        count += b->queue_len;
+    }
+    return count;
+}
+
+static int ai_total_unit_count(GameState *gs, UnitType type){
+    return ai_count_units(gs, type) + ai_count_queued_units(gs, type);
+}
+
 static int ai_count_resource_workers(GameState *gs, ResType rt){
     int count = 0;
     for(int i=0; i<MAX_UNITS; i++){
@@ -63,6 +254,17 @@ static int ai_count_resource_workers(GameState *gs, ResType rt){
         if(!u->active || u->player != AI || u->type != UNIT_VILLAGER) continue;
         if(u->state != US_GATHERING && u->state != US_RETURNING) continue;
         if(u->carry_type == rt) count++;
+    }
+    return count;
+}
+
+static int ai_count_tiles_with_resource(GameState *gs, TileType type){
+    int count = 0;
+    for(int y=0; y<MAP_H; y++){
+        for(int x=0; x<MAP_W; x++){
+            Tile *t = &gs->map[y][x];
+            if(t->type == type && t->resource_amt > 0) count++;
+        }
     }
     return count;
 }
@@ -93,11 +295,25 @@ static int ai_count_siege(GameState *gs){
 static bool ai_should_save_for_age(const PlayerRes *pr){
     if(pr->advancing || pr->age >= 3) return false;
     switch(pr->age){
-        case 0: return pr->amount[RES_FOOD] >= 325;
-        case 1: return pr->amount[RES_FOOD] >= 550 || pr->amount[RES_WOOD] >= 120;
+        case 0: return pr->amount[RES_FOOD] >= 425;
+        case 1: return pr->amount[RES_FOOD] >= 700 || pr->amount[RES_WOOD] >= 160;
         case 2: return pr->amount[RES_FOOD] >= 700 || pr->amount[RES_GOLD] >= 500;
         default: return false;
     }
+}
+
+static bool ai_is_early_feudal_econ_focus(GameState *gs){
+    PlayerRes *pr = &gs->res[AI];
+    if(pr->age != 1 || pr->advancing) return false;
+    return ai_total_unit_count(gs, UNIT_VILLAGER) < ai_feudal_econ_villager_target(gs);
+}
+
+static void ai_dark_age_targets(GameState *gs, int desired[RES_COUNT]){
+    int villagers = ai_count_units(gs, UNIT_VILLAGER);
+    desired[RES_FOOD] = clampi(villagers, 0, 4);
+    desired[RES_WOOD] = clampi(villagers - 4, 0, 3);
+    desired[RES_GOLD] = clampi(villagers - 7, 0, 3);
+    desired[RES_STONE] = clampi(villagers - 10, 0, 3);
 }
 
 static void ai_auto_assign_villagers(GameState *gs){
@@ -110,6 +326,7 @@ static void ai_auto_assign_villagers(GameState *gs){
         ai_count_resource_workers(gs, RES_STONE)
     };
 
+    if(pr->age == 0) ai_dark_age_targets(gs, desired);
     if(pr->age >= 1){
         desired[RES_FOOD] += 2;
         desired[RES_WOOD] += 1;
@@ -127,15 +344,17 @@ static void ai_auto_assign_villagers(GameState *gs){
         desired[RES_STONE] = 2;
     }
 
-    if(pr->age < 3){
+    if(pr->age >= 1 && pr->age < 3){
         Cost age_cost = age_advance_cost(pr->age);
         if(pr->amount[RES_FOOD] < age_cost.food) desired[RES_FOOD] += 2;
         if(pr->amount[RES_WOOD] < age_cost.wood) desired[RES_WOOD] += 2;
         if(pr->amount[RES_GOLD] < age_cost.gold) desired[RES_GOLD] += 3;
     }
 
-    if(ai_count_buildings(gs, BLD_HOUSE, false) < 4) desired[RES_WOOD] += 1;
-    if(ai_count_buildings(gs, BLD_FARM, false) < 2 && pr->amount[RES_FOOD] < 250) desired[RES_FOOD] += 1;
+    if(pr->age >= 1){
+        if(ai_count_buildings(gs, BLD_HOUSE, false) < 4) desired[RES_WOOD] += 1;
+        if(ai_count_buildings(gs, BLD_FARM, false) < 2 && pr->amount[RES_FOOD] < 250) desired[RES_FOOD] += 1;
+    }
 
     for(int i=0; i<MAX_UNITS; i++){
         Unit *u = &gs->units[i];
@@ -163,6 +382,44 @@ static void ai_auto_assign_villagers(GameState *gs){
     }
 }
 
+static void ai_manage_foundations(GameState *gs){
+    for(int i=0; i<MAX_BUILDINGS; i++){
+        Building *b = &gs->buildings[i];
+        if(!b->active || b->player != AI || b->complete) continue;
+
+        bool has_builder = false;
+        for(int j=0; j<MAX_UNITS; j++){
+            Unit *u = &gs->units[j];
+            if(!u->active || u->player != AI || u->type != UNIT_VILLAGER) continue;
+            if(u->build_id == b->id && u->state != US_DEAD && u->state != US_DYING){
+                has_builder = true;
+                break;
+            }
+        }
+        if(has_builder) continue;
+
+        int vid = ai_find_builder_villager(gs, b->tx + b->tw / 2, b->ty + b->th / 2);
+        if(vid >= 0) unit_give_build_order(gs, &gs->units[vid], b->id);
+    }
+}
+
+static void ai_manage_scout_exploration(GameState *gs){
+    int scout_id = ai_find_scout(gs);
+    if(scout_id < 0) return;
+
+    Unit *scout = &gs->units[scout_id];
+    if(scout->state != US_IDLE) return;
+
+    int tx, ty;
+    int scout_tx = (int)(scout->wx / TILE_SIZE);
+    int scout_ty = (int)(scout->wy / TILE_SIZE);
+
+    if(ai_find_hidden_explore_target(gs, scout_tx, scout_ty, &tx, &ty) ||
+       ai_find_roaming_target(gs, scout_tx, scout_ty, &tx, &ty)){
+        unit_give_move_order(gs, scout, tx, ty);
+    }
+}
+
 static bool ai_try_build(GameState *gs, BldType type){
     int tc = building_find(gs, AI, BLD_TOWN_CENTER, true);
     if(tc < 0) return false;
@@ -178,10 +435,11 @@ static bool ai_try_build(GameState *gs, BldType type){
             int ty = town->ty + rng_range(-r, r);
             if(!map_in_bounds(tx, ty) || !map_in_bounds(tx + w - 1, ty + h - 1)) continue;
             if(!map_is_buildable(gs, tx, ty, w, h)) continue;
+            int vid = ai_find_builder_villager(gs, tx + w / 2, ty + h / 2);
+            if(vid < 0) continue;
             int bid = building_place(gs, AI, type, tx, ty);
             if(bid < 0) continue;
-            int vid = unit_find_idle_villager(gs, AI);
-            if(vid >= 0) unit_give_build_order(gs, &gs->units[vid], bid);
+            unit_give_build_order(gs, &gs->units[vid], bid);
             return true;
         }
     }
@@ -220,26 +478,45 @@ static void ai_manage_housing(GameState *gs){
     PlayerRes *pr = &gs->res[AI];
     int free_pop = pr->pop_cap - (pr->population + ai_count_total_queued_population(gs));
     int pending_houses = ai_count_buildings(gs, BLD_HOUSE, false) - ai_count_buildings(gs, BLD_HOUSE, true);
-    if(free_pop <= 4 && pending_houses < 2 && pr->amount[RES_WOOD] >= 25)
+    int threshold = (pr->age == 0) ? 2 : 4;
+    if(free_pop <= threshold && pending_houses < 2 && pr->amount[RES_WOOD] >= 25)
         ai_try_build(gs, BLD_HOUSE);
 }
 
 static void ai_manage_economy_buildings(GameState *gs){
     PlayerRes *pr = &gs->res[AI];
     int villagers = ai_count_units(gs, UNIT_VILLAGER);
+    bool early_feudal_econ = ai_is_early_feudal_econ_focus(gs);
+    bool berries_exhausted = ai_count_tiles_with_resource(gs, TILE_BERRIES) == 0;
 
-    if(ai_count_buildings(gs, BLD_MILL, false) < 1 && pr->amount[RES_WOOD] >= 100)
-        ai_try_build(gs, BLD_MILL);
-    if(ai_count_buildings(gs, BLD_LUMBER_CAMP, false) < 1 && pr->amount[RES_WOOD] >= 100)
-        ai_try_build(gs, BLD_LUMBER_CAMP);
+    if(pr->age == 0 && ai_count_buildings(gs, BLD_MILL, false) < 1 && pr->amount[RES_WOOD] >= 100)
+        ai_try_build_near_resource(gs, BLD_MILL, RES_FOOD);
+    if(pr->age == 0 &&
+       ai_count_buildings(gs, BLD_MILL, false) > 0 &&
+       ai_count_buildings(gs, BLD_LUMBER_CAMP, false) < 1 &&
+       pr->amount[RES_WOOD] >= 100)
+        ai_try_build_near_resource(gs, BLD_LUMBER_CAMP, RES_WOOD);
+    if(pr->age == 0 &&
+       villagers >= 8 &&
+       ai_count_buildings(gs, BLD_LUMBER_CAMP, true) > 0 &&
+       ai_count_buildings(gs, BLD_MINING_CAMP, false) < 1 &&
+       pr->amount[RES_WOOD] >= 100)
+        ai_try_build_near_resource(gs, BLD_MINING_CAMP, RES_GOLD);
     if(pr->age >= 1 && ai_count_buildings(gs, BLD_MINING_CAMP, false) < 1 && pr->amount[RES_WOOD] >= 100)
-        ai_try_build(gs, BLD_MINING_CAMP);
+        ai_try_build_near_resource(gs, BLD_MINING_CAMP, RES_GOLD);
 
-    if(ai_count_buildings(gs, BLD_MILL, true) > 0 &&
-       villagers >= 10 &&
+    if(pr->age == 0 &&
+       berries_exhausted &&
+       ai_count_buildings(gs, BLD_MILL, true) > 0 &&
        pr->amount[RES_WOOD] >= 60 &&
-       ai_count_buildings(gs, BLD_FARM, false) < 2 + pr->age * 2 &&
-       pr->amount[RES_FOOD] < 250){
+       ai_count_buildings(gs, BLD_FARM, false) < 4){
+        ai_try_build(gs, BLD_FARM);
+    } else if(pr->age >= 1 &&
+              ai_count_buildings(gs, BLD_MILL, true) > 0 &&
+              villagers >= 12 &&
+              pr->amount[RES_WOOD] >= 60 &&
+              ai_count_buildings(gs, BLD_FARM, false) < (early_feudal_econ ? 4 : (1 + pr->age * 2)) &&
+              pr->amount[RES_FOOD] < (early_feudal_econ ? 325 : 250)){
         ai_try_build(gs, BLD_FARM);
     }
 }
@@ -247,9 +524,18 @@ static void ai_manage_economy_buildings(GameState *gs){
 static void ai_manage_military_buildings(GameState *gs){
     PlayerRes *pr = &gs->res[AI];
     int military = unit_count_military(gs, AI);
+    int villagers = ai_count_units(gs, UNIT_VILLAGER);
+    bool early_feudal_econ = ai_is_early_feudal_econ_focus(gs);
 
-    if(ai_count_buildings(gs, BLD_BARRACKS, false) < 1 && pr->amount[RES_WOOD] >= 175)
+    if(ai_count_buildings(gs, BLD_BARRACKS, false) < 1 &&
+       pr->amount[RES_WOOD] >= 175 &&
+       (pr->age >= 1 ||
+        (villagers >= 14 &&
+         ai_count_buildings(gs, BLD_MILL, true) > 0 &&
+         ai_count_buildings(gs, BLD_LUMBER_CAMP, true) > 0)))
         ai_try_build(gs, BLD_BARRACKS);
+    if(early_feudal_econ) return;
+
     if(pr->age >= 1 && ai_count_buildings(gs, BLD_ARCHERY_RANGE, false) < 1 && pr->amount[RES_WOOD] >= 175)
         ai_try_build(gs, BLD_ARCHERY_RANGE);
     if(pr->age >= 1 && ai_count_buildings(gs, BLD_STABLE, false) < 1 && pr->amount[RES_WOOD] >= 175)
@@ -283,21 +569,26 @@ static void ai_manage_military_buildings(GameState *gs){
 static void ai_manage_research(GameState *gs){
     PlayerRes *pr = &gs->res[AI];
     int villagers = ai_count_units(gs, UNIT_VILLAGER);
+    int total_villagers = ai_total_unit_count(gs, UNIT_VILLAGER);
     int infantry = ai_count_infantry(gs);
     int archers = ai_count_archers(gs);
     int cavalry = ai_count_cavalry(gs);
     int siege = ai_count_siege(gs);
     int military = unit_count_military(gs, AI);
+    bool early_feudal_econ = ai_is_early_feudal_econ_focus(gs);
 
-    if(ai_try_research(gs, BLD_TOWN_CENTER, TECH_LOOM)) return;
-    if(villagers >= 8 && ai_try_research(gs, BLD_TOWN_CENTER, TECH_WHEELBARROW)) return;
+    if(pr->age >= 1 && ai_try_research(gs, BLD_TOWN_CENTER, TECH_LOOM)) return;
+    if(pr->age >= 1 && villagers >= 10 && ai_try_research(gs, BLD_TOWN_CENTER, TECH_WHEELBARROW)) return;
     if(pr->age >= 3 && villagers >= 16 && ai_try_research(gs, BLD_TOWN_CENTER, TECH_HAND_CART)) return;
 
-    if(ai_try_research(gs, BLD_LUMBER_CAMP, TECH_DOUBLE_BIT_AXE)) return;
+    if(pr->age >= 1 && ai_try_research(gs, BLD_LUMBER_CAMP, TECH_DOUBLE_BIT_AXE)) return;
+    if(early_feudal_econ && ai_try_research(gs, BLD_MILL, TECH_HAND_MILL)) return;
+    if(early_feudal_econ) return;
+
     if(pr->age >= 2 && ai_try_research(gs, BLD_LUMBER_CAMP, TECH_BOW_SAW)) return;
     if(pr->age >= 3 && ai_try_research(gs, BLD_LUMBER_CAMP, TECH_TWO_MAN_SAW)) return;
 
-    if(ai_try_research(gs, BLD_MILL, TECH_HAND_MILL)) return;
+    if(pr->age >= 1 && total_villagers >= ai_dark_age_villager_target(gs) && ai_try_research(gs, BLD_MILL, TECH_HAND_MILL)) return;
     if(pr->age >= 2 && ai_try_research(gs, BLD_MILL, TECH_CROP_ROTATION)) return;
     if(pr->age >= 2 && ai_try_research(gs, BLD_MILL, TECH_GRANARY_BASKETS)) return;
 
@@ -345,21 +636,35 @@ static void ai_manage_research(GameState *gs){
 
 static void ai_manage_training(GameState *gs){
     PlayerRes *pr = &gs->res[AI];
-    bool save_for_age = ai_should_save_for_age(pr);
+    bool save_for_age = (pr->age == 0) ? false : ai_should_save_for_age(pr);
     int villagers = ai_count_units(gs, UNIT_VILLAGER);
+    int total_villagers = ai_total_unit_count(gs, UNIT_VILLAGER);
     int infantry = ai_count_infantry(gs);
     int archers = ai_count_archers(gs);
     int cavalry = ai_count_cavalry(gs);
     int monks = ai_count_units(gs, UNIT_MONK);
     int siege = ai_count_siege(gs);
     int military = unit_count_military(gs, AI);
-    int villager_target = (pr->age == 0) ? 10 : (pr->age == 1) ? 16 : (pr->age == 2) ? 22 : 26;
+    int villager_target = (pr->age == 0) ? ai_dark_age_villager_target(gs) :
+                          (pr->age == 1) ? ai_feudal_econ_villager_target(gs) :
+                          (pr->age == 2) ? 30 : 34;
+    bool dark_age_feudal_save = (pr->age == 0) &&
+                                (total_villagers >= villager_target ||
+                                 (total_villagers >= villager_target - 1 &&
+                                  ai_count_buildings(gs, BLD_BARRACKS, true) > 0 &&
+                                  pr->amount[RES_FOOD] >= 425));
+    bool early_feudal_econ = ai_is_early_feudal_econ_focus(gs);
+    int tc_queue = ai_count_queued_at_building(gs, BLD_TOWN_CENTER);
+    int max_tc_queue = (pr->age == 0) ? 2 : (early_feudal_econ ? 2 : 3);
 
-    if(villagers < villager_target &&
+    if(total_villagers < villager_target &&
        pr->population + ai_count_total_queued_population(gs) < pr->pop_cap - 1 &&
-       (!save_for_age || villagers < 10)){
+       tc_queue < max_tc_queue &&
+       (!(save_for_age || dark_age_feudal_save) || villagers < 8)){
         ai_train_unit(gs, BLD_TOWN_CENTER, UNIT_VILLAGER);
     }
+
+    if(early_feudal_econ) return;
 
     if(pr->age >= 2){
         if(cavalry < 6 && (!save_for_age || military < 6))
@@ -388,6 +693,8 @@ static void ai_manage_training(GameState *gs){
             ai_train_unit(gs, BLD_BARRACKS, pr->age >= 1 ? UNIT_MAN_AT_ARMS : UNIT_MILITIA);
         if(archers < 3 && !save_for_age)
             ai_train_unit(gs, BLD_ARCHERY_RANGE, UNIT_SKIRMISHER);
+    } else if(pr->age == 0){
+        return;
     } else if(!save_for_age || military < 3){
         ai_train_unit(gs, BLD_BARRACKS, UNIT_MILITIA);
     }
@@ -461,6 +768,8 @@ void ai_update(GameState *gs, float dt){
     int attack_min = (pr->age == 0) ? 4 : (pr->age == 1) ? 6 : (pr->age == 2) ? 8 : 10;
 
     ai_auto_assign_villagers(gs);
+    ai_manage_scout_exploration(gs);
+    ai_manage_foundations(gs);
     ai_manage_housing(gs);
     ai_manage_economy_buildings(gs);
     ai_manage_military_buildings(gs);
@@ -480,7 +789,10 @@ void ai_update(GameState *gs, float dt){
         ai_launch_attack(gs);
     }
 
-    if(pr->age == 0 && !pr->advancing && pr->amount[RES_FOOD] >= 500)
+    if(pr->age == 0 && !pr->advancing &&
+       ai_count_units(gs, UNIT_VILLAGER) >= ai_dark_age_villager_target(gs) &&
+       ai_count_buildings(gs, BLD_BARRACKS, true) > 0 &&
+       pr->amount[RES_FOOD] >= 500)
         res_try_advance_age(gs, AI);
     else if(pr->age == 1 && !pr->advancing &&
             pr->amount[RES_FOOD] >= 800 && pr->amount[RES_WOOD] >= 200 &&
