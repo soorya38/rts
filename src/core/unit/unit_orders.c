@@ -414,8 +414,21 @@ void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
 /* ─── Orders ──────────────────────────────────────────────── */
 
 void unit_give_move_order(GameState *gs, Unit *u, int tx, int ty){
+    int move_tx = tx;
+    int move_ty = ty;
+    if(!map_find_passable_near(gs, tx, ty, &move_tx, &move_ty)){
+        u->path_len = 0;
+        u->path_idx = 0;
+        u->state = US_IDLE;
+        u->target_unit = -1;
+        u->target_bld = -1;
+        u->build_id = -1;
+        u->gather_tx = -1;
+        return;
+    }
+
     int sx=(int)(u->wx/TILE_SIZE), sy=(int)(u->wy/TILE_SIZE);
-    u->path_len = pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
+    u->path_len = pathfind(gs,sx,sy,move_tx,move_ty,u->path,ASTAR_PATH_CAP);
     u->path_idx = 0;
     u->state    = (u->path_len>0) ? US_MOVING : US_IDLE;
     u->target_unit=-1; u->target_bld=-1;
