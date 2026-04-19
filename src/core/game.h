@@ -327,7 +327,8 @@ typedef struct {
 /* ─── Match mode ─────────────────────────────────────────────── */
 typedef enum {
     GAME_MODE_STANDARD = 0,
-    GAME_MODE_SANDBOX
+    GAME_MODE_SANDBOX,
+    GAME_MODE_CAMPAIGN
 } GameMode;
 
 /* ─── Game phase ─────────────────────────────────────────────── */
@@ -365,6 +366,15 @@ typedef struct {
     /* Alert banner */
     char       alert[64];
     float      alert_timer;
+
+    /* Campaign */
+    uint32_t   campaign_seed;
+    int        campaign_mission;
+    char       campaign_title[96];
+    char       campaign_objective[224];
+    char       campaign_hint[224];
+    char       campaign_story[224];
+    char       campaign_result[224];
 } GameState;
 
 /* ─── Resource cost table helper ────────────────────────────── */
@@ -479,6 +489,10 @@ void ai_update(GameState *gs,float dt);
 /* game.c */
 void game_init(GameState *gs);
 void game_init_started_game(GameState *gs, uint32_t seed, int num_players);
+void game_init_campaign(GameState *gs, uint32_t seed, int mission);
+void game_campaign_restart(GameState *gs);
+void game_campaign_advance(GameState *gs);
+bool game_campaign_has_next(const GameState *gs);
 void game_init_sandbox(GameState *gs, uint32_t seed);
 void game_update(GameState *gs,float dt);
 void game_set_alert(GameState *gs,const char *msg);

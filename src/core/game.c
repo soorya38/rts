@@ -12,6 +12,253 @@ uint32_t _rng = 12345;
 /* Forward declare the building init helper from building.c */
 void buildings_init_player(GameState *gs,int player,int tc_tx,int tc_ty);
 
+#define CAMPAIGN_MISSION_COUNT 5
+
+static void campaign_set_text(GameState *gs, const char *title,
+                              const char *objective, const char *hint,
+                              const char *story, const char *result){
+    snprintf(gs->campaign_title, sizeof(gs->campaign_title), "%s", title ? title : "");
+    snprintf(gs->campaign_objective, sizeof(gs->campaign_objective), "%s", objective ? objective : "");
+    snprintf(gs->campaign_hint, sizeof(gs->campaign_hint), "%s", hint ? hint : "");
+    snprintf(gs->campaign_story, sizeof(gs->campaign_story), "%s", story ? story : "");
+    snprintf(gs->campaign_result, sizeof(gs->campaign_result), "%s", result ? result : "");
+}
+
+static bool campaign_place_ready_near_tc(GameState *gs, int player, BldType type,
+                                         int min_r, int max_r){
+    int tc = building_find(gs, player, BLD_TOWN_CENTER, true);
+    if(tc < 0) return false;
+
+    Building *town = &gs->buildings[tc];
+    int w = building_tw(type), h = building_th(type);
+    for(int r=min_r; r<=max_r; r++){
+        for(int dy=-r; dy<=r; dy++){
+            for(int dx=-r; dx<=r; dx++){
+                if(abs(dx) != r && abs(dy) != r) continue;
+                int tx = town->tx + dx;
+                int ty = town->ty + dy;
+                if(!map_in_bounds(tx, ty) || !map_in_bounds(tx + w - 1, ty + h - 1)) continue;
+                if(!map_is_buildable(gs, tx, ty, w, h)) continue;
+                return building_place_ready(gs, player, type, tx, ty) >= 0;
+            }
+        }
+    }
+    return false;
+}
+
+static int game_count_player_buildings(GameState *gs, int player, BldType type, bool complete_only){
+    int count = 0;
+    for(int i=0; i<MAX_BUILDINGS; i++){
+        Building *b = &gs->buildings[i];
+        if(!b->active || b->player != player || b->type != type) continue;
+        if(complete_only && !b->complete) continue;
+        count++;
+    }
+    return count;
+}
+
+static int game_count_player_units(GameState *gs, int player, UnitType type){
+    int count = 0;
+    for(int i=0; i<MAX_UNITS; i++){
+        Unit *u = &gs->units[i];
+        if(!u->active || u->player != player || u->type != type) continue;
+        if(u->state == US_DEAD || u->state == US_DYING) continue;
+        count++;
+    }
+    return count;
+}
+
+static int game_count_player_barracks_troops(GameState *gs, int player){
+    return game_count_player_units(gs, player, UNIT_MILITIA) +
+           game_count_player_units(gs, player, UNIT_MAN_AT_ARMS) +
+           game_count_player_units(gs, player, UNIT_SPEARMAN);
+}
+
+static void campaign_spawn_units_near_tc(GameState *gs, int player, UnitType type, int count){
+    int tc = building_find(gs, player, BLD_TOWN_CENTER, true);
+    if(tc < 0) return;
+    Building *town = &gs->buildings[tc];
+    for(int i=0; i<count; i++){
+        int tx = -1;
+        int ty = -1;
+        for(int r=1; r<=8 && tx < 0; r++){
+            for(int dy=-r; dy<=r && tx < 0; dy++){
+                for(int dx=-r; dx<=r; dx++){
+                    if(abs(dx) != r && abs(dy) != r) continue;
+                    int cx = town->tx + town->tw / 2 + dx;
+                    int cy = town->ty + town->th / 2 + dy;
+                    if(!map_in_bounds(cx, cy) || !map_is_passable(gs, cx, cy)) continue;
+                    if(unit_tile_occupied(gs, cx, cy)) continue;
+                    tx = cx;
+                    ty = cy;
+                    break;
+                }
+            }
+        }
+        if(tx < 0 || ty < 0) break;
+        float wx = (tx + 0.5f) * TILE_SIZE;
+        float wy = (ty + 0.5f) * TILE_SIZE;
+        unit_spawn(gs, player, type, wx, wy);
+    }
+}
+
+static void game_setup_random_starts(GameState *gs){
+    int start_x[NUM_PLAYERS] = {0};
+    int start_y[NUM_PLAYERS] = {0};
+    map_init(gs, start_x, start_y, gs->num_players);
+
+    for (int p=0; p < gs->num_players; p++) {
+        int tx = start_x[p], ty = start_y[p];
+        buildings_init_player(gs, p, tx - 2, ty - 2);
+        gs->res[p].pop_cap = pop_cap_from_buildings(gs, p);
+
+        float vx = (tx + 2) * TILE_SIZE + 16.0f;
+        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty - 2) * TILE_SIZE + 16.0f);
+        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty)     * TILE_SIZE + 16.0f);
+        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty + 2) * TILE_SIZE + 16.0f);
+        unit_spawn(gs, p, UNIT_SCOUT,    vx + TILE_SIZE, (ty) * TILE_SIZE + 16.0f);
+    }
+
+    int lp = net_get_local_player();
+    for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++)
+        for(int p=0; p<NUM_PLAYERS; p++)
+            if(p != lp) gs->map[y][x].fog[p]=FOG_HIDDEN;
+
+    map_update_fog(gs);
+}
+
+static void campaign_refresh_text(GameState *gs){
+    if(!gs || gs->mode != GAME_MODE_CAMPAIGN) return;
+
+    int houses = game_count_player_buildings(gs, 0, BLD_HOUSE, true);
+    int mill = game_count_player_buildings(gs, 0, BLD_MILL, true);
+    int lumber = game_count_player_buildings(gs, 0, BLD_LUMBER_CAMP, true);
+    int mining = game_count_player_buildings(gs, 0, BLD_MINING_CAMP, true);
+    int barracks = game_count_player_buildings(gs, 0, BLD_BARRACKS, true);
+    int farms = game_count_player_buildings(gs, 0, BLD_FARM, true);
+    int villagers = game_count_player_units(gs, 0, UNIT_VILLAGER);
+    int archery = game_count_player_buildings(gs, 0, BLD_ARCHERY_RANGE, true);
+    int archers = game_count_player_units(gs, 0, UNIT_ARCHER);
+    int barracks_troops = game_count_player_barracks_troops(gs, 0);
+    int enemy_barracks = game_count_player_buildings(gs, 1, BLD_BARRACKS, true);
+    int enemy_tc = building_find(gs, 1, BLD_TOWN_CENTER, true);
+    int enemy_tc_hp = (enemy_tc >= 0) ? gs->buildings[enemy_tc].hp : 0;
+    int army = unit_count_military(gs, 0);
+
+    switch(gs->campaign_mission){
+        case 0:
+            campaign_set_text(gs,
+                "Lesson I: First Harvest",
+                "Stock 120 food and 80 wood.\nFood %d/120  Wood %d/80",
+                "Select villagers, then right-click berries or trees.\nUse the scout to reveal nearby land and resources.",
+                "The River Clan reaches Ashfall Vale with one wagon of tools.\nIf the settlers cannot gather before nightfall, the expedition ends.",
+                "The wagons are stocked, and the clan can survive its first night.");
+            snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
+                     "Stock 120 food and 80 wood.\nFood %d/120  Wood %d/80",
+                     gs->res[0].amount[RES_FOOD], gs->res[0].amount[RES_WOOD]);
+            break;
+        case 1:
+            campaign_set_text(gs,
+                "Lesson II: Raise the Hamlet",
+                "Build 2 Houses, a Mill, and a Lumber Camp.\nReach 6 Villagers.",
+                "Select the Town Center to queue villagers.\nUse [B] with a villager to open the build menu.",
+                "Elder Mira orders the camp turned into a real hamlet.\nHomes, food stores, and timber yards must come before war.",
+                "New roofs rise over the camp, and Ashfall Vale becomes a village.");
+            snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
+                     "Build 2 Houses, a Mill, and a Lumber Camp.\nH%d/2  M%d/1  L%d/1  V%d/6",
+                     houses, mill, lumber, villagers);
+            break;
+        case 2:
+            campaign_set_text(gs,
+                "Lesson III: Prepare for Feudal",
+                "Add a Mining Camp, Barracks, and 2 Farms.\nAdvance to Feudal Age.",
+                "Gold and stone need a Mining Camp drop-off.\nWhen you have 400 food, use the top bar age-up button.",
+                "Scouts return with word of the Ashen Banner beyond the hills.\nThe village needs farms, steel, and a faster age of war.",
+                "The town reaches Feudal Age before the raiders descend.");
+            snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
+                     "Add a Mining Camp, Barracks, and 2 Farms.\nMine%d/1  Barr%d/1  Farm%d/2  Age:%s",
+                     mining, barracks, farms, gs->res[0].age >= 1 ? "Feudal" : "Dark");
+            break;
+        case 3:
+            campaign_set_text(gs,
+                "Lesson IV: Answer the Raid",
+                "Build an Archery Range, train 2 Archers and 3 Barracks troops.\nDestroy the raider Barracks.",
+                "Barracks train melee units; Archery Ranges train ranged units.\nRight-click enemies to attack, and use [G] to set rally points.",
+                "At dawn a raider outpost appears on the ridge above the valley.\nYou must field a mixed force before the camp strikes first.",
+                "The raider camp burns, but its banners point toward a larger army.");
+            snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
+                     "Build an Archery Range, train 2 Archers and 3 Barracks troops.\nRange%d/1  Arch%d/2  Troops%d/3  Camp:%s",
+                     archery, archers, barracks_troops, enemy_barracks > 0 ? "Up" : "Down");
+            break;
+        case 4:
+        default:
+            campaign_set_text(gs,
+                "Finale: Break the Siege",
+                "Destroy the enemy Town Center.\nEnemy TC %d HP  Army %d",
+                "Keep villagers gathering while reinforcements train.\nAttack in groups and keep ranged units behind your front line.",
+                "The Ashen Banner marches on Ashfall Vale for a final siege.\nWin here and the valley becomes the River Clan's first stronghold.",
+                "Ashfall Vale stands. The River Clan has won its first war.");
+            snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
+                     "Destroy the enemy Town Center.\nEnemy TC %d HP  Army %d",
+                     enemy_tc_hp, army);
+            break;
+    }
+}
+
+static void game_update_campaign(GameState *gs){
+    if(!gs || gs->mode != GAME_MODE_CAMPAIGN || gs->phase != PHASE_PLAYING) return;
+
+    campaign_refresh_text(gs);
+
+    switch(gs->campaign_mission){
+        case 0:
+            if(gs->res[0].amount[RES_FOOD] >= 120 && gs->res[0].amount[RES_WOOD] >= 80){
+                gs->phase = PHASE_VICTORY;
+                game_set_alert(gs, "Mission complete: your first supplies are secured.");
+            }
+            break;
+        case 1: {
+            int houses = 0, villagers = 0;
+            for(int i=0;i<MAX_BUILDINGS;i++){
+                Building *b = &gs->buildings[i];
+                if(b->active && b->complete && b->player == 0 && b->type == BLD_HOUSE) houses++;
+            }
+            for(int i=0;i<MAX_UNITS;i++){
+                Unit *u = &gs->units[i];
+                if(u->active && u->player == 0 && u->type == UNIT_VILLAGER && u->state != US_DEAD) villagers++;
+            }
+            if(houses >= 2 &&
+               building_find(gs, 0, BLD_MILL, true) >= 0 &&
+               building_find(gs, 0, BLD_LUMBER_CAMP, true) >= 0 &&
+               villagers >= 6){
+                gs->phase = PHASE_VICTORY;
+                game_set_alert(gs, "Mission complete: the hamlet stands ready.");
+            }
+            break;
+        }
+        case 2:
+            if(building_find(gs, 0, BLD_MINING_CAMP, true) >= 0 &&
+               building_find(gs, 0, BLD_BARRACKS, true) >= 0 &&
+               game_count_player_buildings(gs, 0, BLD_FARM, true) >= 2 &&
+               gs->res[0].age >= 1){
+                gs->phase = PHASE_VICTORY;
+                game_set_alert(gs, "Mission complete: your town has reached Feudal Age.");
+            }
+            break;
+        case 3:
+            if(building_find(gs, 0, BLD_ARCHERY_RANGE, true) >= 0 &&
+               game_count_player_units(gs, 0, UNIT_ARCHER) >= 2 &&
+               game_count_player_barracks_troops(gs, 0) >= 3 &&
+               building_find(gs, 1, BLD_BARRACKS, true) < 0){
+                gs->phase = PHASE_VICTORY;
+                game_set_alert(gs, "Mission complete: the raider outpost has fallen.");
+            }
+            break;
+        default:
+            break;
+    }
+}
+
 static void game_handle_tc_destroyed(GameState *gs, int defeated_player){
     int lp = net_get_local_player();
     bool has_tc[NUM_PLAYERS] = {false};
@@ -22,6 +269,10 @@ static void game_handle_tc_destroyed(GameState *gs, int defeated_player){
     if(defeated_player == lp){
         game_set_alert(gs, "DEFEATED...");
         gs->phase = PHASE_DEFEAT;
+        return;
+    }
+    if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 3){
+        game_set_alert(gs, "The outpost is crippled. Finish off the raider Barracks.");
         return;
     }
     bool any_enemy_tc = false;
@@ -277,31 +528,125 @@ void game_set_alert(GameState *gs, const char *msg){
 
 void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
     game_init_match(gs, seed, num_players, GAME_MODE_STANDARD);
+    game_setup_random_starts(gs);
+}
 
-    int start_x[NUM_PLAYERS] = {0};
-    int start_y[NUM_PLAYERS] = {0};
-    map_init(gs, start_x, start_y, gs->num_players);
+void game_init_campaign(GameState *gs, uint32_t seed, int mission){
+    if(mission < 0) mission = 0;
+    if(mission >= CAMPAIGN_MISSION_COUNT) mission = CAMPAIGN_MISSION_COUNT - 1;
 
-    for (int p=0; p < gs->num_players; p++) {
-        int tx = start_x[p], ty = start_y[p];
-        buildings_init_player(gs, p, tx - 2, ty - 2);
-        gs->res[p].pop_cap = pop_cap_from_buildings(gs, p);
+    int num_players = (mission < 3) ? 1 : 2;
+    game_init_match(gs, seed, num_players, GAME_MODE_CAMPAIGN);
+    gs->campaign_seed = seed;
+    gs->campaign_mission = mission;
+    game_setup_random_starts(gs);
 
-        float vx = (tx + 2) * TILE_SIZE + 16.0f;
-        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty - 2) * TILE_SIZE + 16.0f);
-        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty)     * TILE_SIZE + 16.0f);
-        unit_spawn(gs, p, UNIT_VILLAGER, vx, (ty + 2) * TILE_SIZE + 16.0f);
-        unit_spawn(gs, p, UNIT_SCOUT,    vx + TILE_SIZE, (ty) * TILE_SIZE + 16.0f);
+    switch(mission){
+        case 0:
+            gs->res[0].amount[RES_FOOD] = 0;
+            gs->res[0].amount[RES_WOOD] = 0;
+            gs->res[0].amount[RES_GOLD] = 0;
+            gs->res[0].amount[RES_STONE] = 0;
+            break;
+        case 1:
+            gs->res[0].amount[RES_FOOD] = 180;
+            gs->res[0].amount[RES_WOOD] = 260;
+            gs->res[0].amount[RES_GOLD] = 0;
+            gs->res[0].amount[RES_STONE] = 0;
+            break;
+        case 2:
+            gs->res[0].amount[RES_FOOD] = 520;
+            gs->res[0].amount[RES_WOOD] = 340;
+            gs->res[0].amount[RES_GOLD] = 80;
+            gs->res[0].amount[RES_STONE] = 0;
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MILL, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_LUMBER_CAMP, 4, 14);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_VILLAGER, 3);
+            break;
+        case 3:
+            gs->res[0].age = 1;
+            gs->res[1].age = 0;
+            gs->res[0].amount[RES_FOOD] = 260;
+            gs->res[0].amount[RES_WOOD] = 320;
+            gs->res[0].amount[RES_GOLD] = 220;
+            gs->res[0].amount[RES_STONE] = 0;
+            gs->res[1].amount[RES_FOOD] = 0;
+            gs->res[1].amount[RES_WOOD] = 0;
+            gs->res[1].amount[RES_GOLD] = 0;
+            gs->res[1].amount[RES_STONE] = 0;
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MILL, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_LUMBER_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MINING_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_BARRACKS, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_VILLAGER, 4);
+            campaign_place_ready_near_tc(gs, 1, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_BARRACKS, 4, 14);
+            campaign_spawn_units_near_tc(gs, 1, UNIT_MILITIA, 3);
+            break;
+        case 4:
+        default:
+            gs->res[0].age = 1;
+            gs->res[1].age = 1;
+            gs->res[0].amount[RES_FOOD] = 650;
+            gs->res[0].amount[RES_WOOD] = 480;
+            gs->res[0].amount[RES_GOLD] = 320;
+            gs->res[0].amount[RES_STONE] = 80;
+            gs->res[1].amount[RES_FOOD] = 180;
+            gs->res[1].amount[RES_WOOD] = 260;
+            gs->res[1].amount[RES_GOLD] = 180;
+            gs->res[1].amount[RES_STONE] = 125;
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MILL, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_LUMBER_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MINING_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_BARRACKS, 5, 16);
+            campaign_place_ready_near_tc(gs, 0, BLD_ARCHERY_RANGE, 5, 16);
+            campaign_place_ready_near_tc(gs, 0, BLD_BLACKSMITH, 5, 16);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_VILLAGER, 5);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_MILITIA, 3);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_ARCHER, 2);
+            campaign_place_ready_near_tc(gs, 1, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_MILL, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_LUMBER_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_BARRACKS, 5, 16);
+            campaign_place_ready_near_tc(gs, 1, BLD_ARCHERY_RANGE, 5, 16);
+            campaign_place_ready_near_tc(gs, 1, BLD_WATCH_TOWER, 5, 16);
+            campaign_spawn_units_near_tc(gs, 1, UNIT_MILITIA, 3);
+            campaign_spawn_units_near_tc(gs, 1, UNIT_ARCHER, 2);
+            break;
     }
 
-    /* Fog: mark everyone's fog explored if not the local player? 
-       No, better to keep it hidden for competitive feel. */
-    int lp = net_get_local_player();
-    for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++)
-        for(int p=0; p<NUM_PLAYERS; p++)
-            if(p != lp) gs->map[y][x].fog[p]=FOG_HIDDEN;
+    campaign_refresh_text(gs);
+    game_set_alert(gs, gs->campaign_title);
+}
 
-    map_update_fog(gs);
+void game_campaign_restart(GameState *gs){
+    if(!gs || gs->mode != GAME_MODE_CAMPAIGN) return;
+    game_init_campaign(gs, gs->campaign_seed ? gs->campaign_seed : (uint32_t)time(NULL), gs->campaign_mission);
+}
+
+bool game_campaign_has_next(const GameState *gs){
+    return gs && gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission + 1 < CAMPAIGN_MISSION_COUNT;
+}
+
+void game_campaign_advance(GameState *gs){
+    if(!gs || gs->mode != GAME_MODE_CAMPAIGN) return;
+    if(game_campaign_has_next(gs)){
+        game_init_campaign(gs, gs->campaign_seed ? gs->campaign_seed : (uint32_t)time(NULL), gs->campaign_mission + 1);
+    } else {
+        game_init(gs);
+    }
 }
 
 void game_init_sandbox(GameState *gs, uint32_t seed){
@@ -437,8 +782,13 @@ void game_update(GameState *gs, float dt){
     game_update_projectiles(gs, dt);
 
     /* AI - only in singleplayer */
-    if (!g_net_active && gs->mode != GAME_MODE_SANDBOX) {
+    if (!g_net_active && gs->mode != GAME_MODE_SANDBOX &&
+        !(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission < 4)) {
         ai_update(gs,dt);
+    }
+
+    if (gs->mode == GAME_MODE_CAMPAIGN) {
+        game_update_campaign(gs);
     }
 
     /* Fog of war */

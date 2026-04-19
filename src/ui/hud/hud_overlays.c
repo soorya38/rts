@@ -96,6 +96,28 @@ void draw_tooltip(const char *text, int x, int y) {
     DrawText(text, x + 5, y + 3, fs, C_HUD_TXT);
 }
 
+static int draw_multiline_text(const char *text, int x, int y, int fs, Color color){
+    if(!text || !text[0]) return 0;
+
+    int line_h = fs + 2;
+    int line_count = 0;
+    const char *start = text;
+    while(start && *start){
+        const char *nl = strchr(start, '\n');
+        int len = nl ? (int)(nl - start) : (int)strlen(start);
+        char line[256];
+        if(len >= (int)sizeof(line)) len = (int)sizeof(line) - 1;
+        memcpy(line, start, (size_t)len);
+        line[len] = '\0';
+        DrawText(line, x, y + line_count * line_h, fs, color);
+        line_count++;
+        if(!nl) break;
+        start = nl + 1;
+    }
+
+    return line_count * line_h;
+}
+
 void draw_alert(GameState *gs, UIState *ui){
     (void)ui;
     if(gs->alert_timer<=0) return;
@@ -111,6 +133,34 @@ void draw_alert(GameState *gs, UIState *ui){
              CLITERAL(Color){230,200,100,(unsigned char)alpha});
 }
 
+void draw_campaign_panel(GameState *gs, UIState *ui){
+    (void)ui;
+    if(!gs || gs->mode != GAME_MODE_CAMPAIGN || gs->phase != PHASE_PLAYING) return;
+
+    float sc = hud_scale();
+    int x = 10;
+    int y = HUD_TOP_H + 10;
+    int w = (int)(430 * sc);
+    int h = (int)(132 * sc);
+    int fs14 = (int)(14 * sc);
+    int fs11 = (int)(11 * sc);
+    int fs10 = (int)(10 * sc);
+
+    DrawRectangleRounded((Rectangle){(float)x,(float)y,(float)w,(float)h},0.08f,6,
+                         CLITERAL(Color){18,14,10,230});
+    DrawRectangleLinesEx((Rectangle){(float)x,(float)y,(float)w,(float)h},1.2f,C_HUD_LINE);
+    DrawText(gs->campaign_title, x + (int)(10*sc), y + (int)(7*sc), fs14, C_AGE);
+    int body_x = x + (int)(10 * sc);
+    int body_y = y + (int)(26 * sc);
+    int story_h = draw_multiline_text(gs->campaign_story, body_x, body_y, fs10,
+                                      CLITERAL(Color){195,180,145,235});
+    int objective_y = body_y + story_h + (int)(4 * sc);
+    int objective_h = draw_multiline_text(gs->campaign_objective, body_x, objective_y, fs11, C_HUD_TXT);
+    int hint_y = objective_y + objective_h + (int)(4 * sc);
+    draw_multiline_text(gs->campaign_hint, body_x, hint_y, fs10,
+                        CLITERAL(Color){170,155,120,235});
+}
+
 void draw_end_screen(GameState *gs, UIState *ui){
     (void)ui;
     if(gs->phase!=PHASE_VICTORY&&gs->phase!=PHASE_DEFEAT) return;
@@ -118,13 +168,22 @@ void draw_end_screen(GameState *gs, UIState *ui){
     DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,180});
     bool win=(gs->phase==PHASE_VICTORY);
     const char *msg=win?"VICTORY!":"DEFEATED";
+    if(gs->mode == GAME_MODE_CAMPAIGN && win && !game_campaign_has_next(gs))
+        msg = "CAMPAIGN COMPLETE!";
     Color mc=win?CLITERAL(Color){220,200,50,255}:CLITERAL(Color){210,50,40,255};
     int fs=(int)(52*sc), tw=MeasureText(msg,fs);
     DrawText(msg,GetScreenWidth()/2-tw/2,GetScreenHeight()/2-60,fs,mc);
     const char *sub=win?"The enemy town center has fallen!":"Your town center has been destroyed!";
+    if(gs->mode == GAME_MODE_CAMPAIGN && win)
+        sub = gs->campaign_result[0] ? gs->campaign_result : gs->campaign_story;
     int sfs=(int)(18*sc), stw=MeasureText(sub,sfs);
     DrawText(sub,GetScreenWidth()/2-stw/2,GetScreenHeight()/2+10,sfs,CLITERAL(Color){200,185,150,255});
     const char *hint="Press [R] to restart or [Q] to quit";
+    if(gs->mode == GAME_MODE_CAMPAIGN){
+        hint = game_campaign_has_next(gs)
+            ? "Press [N] for the next mission, [R] to retry, or [Q] for the menu"
+            : "Press [R] to replay this mission or [Q] for the menu";
+    }
     int hfs=(int)(14*sc);
     DrawText(hint,GetScreenWidth()/2-MeasureText(hint,hfs)/2,
              GetScreenHeight()/2+50,hfs,CLITERAL(Color){150,135,100,255});
@@ -259,12 +318,14 @@ void draw_menu(GameState *gs, UIState *ui){
     int lfs=(int)(12*sc);
     const char *lines[]={
         "Gather resources  \xc2\xb7  Build structures  \xc2\xb7  Train armies",
-        "Destroy the enemy Town Center to win!",
-        "Sandbox mode starts with every major system ready to test",
+        "Solo Campaign now teaches economy, building, age-up, and combat in order.",
+        "Lead the River Clan through five missions from first landing to final siege.",
+        "Sandbox mode starts with every major system ready to test.",
         "Controls:  WASD / edge scroll  |  Pinch: zoom  |  Drag: pan",
         "Tap to select  |  Tap (selected) = command  |  Tap [B] Build"
     };
-    for(int i=0;i<5;i++)
+    int line_count = (int)(sizeof(lines)/sizeof(lines[0]));
+    for(int i=0;i<line_count;i++)
         DrawText(lines[i],sw/2-MeasureText(lines[i],lfs)/2,
                  sh/2-(int)(52*sc)+i*(int)(16*sc),lfs,CLITERAL(Color){150,140,110,220});
 
@@ -272,8 +333,8 @@ void draw_menu(GameState *gs, UIState *ui){
     int bw=(int)(260*sc), bh=(int)(46*sc), bx=sw/2-bw/2, by=sh/2+(int)(2*sc);
 
     /* Solo */
-    if(draw_button("Start Solo Campaign", bx, by, bw, bh, true)){
-        game_init_started_game(gs, (uint32_t)time(NULL), 2);
+    if(draw_button("Start Tutorial Campaign", bx, by, bw, bh, true)){
+        game_init_campaign(gs, (uint32_t)time(NULL), 0);
     }
     by += bh + (int)(8*sc);
 

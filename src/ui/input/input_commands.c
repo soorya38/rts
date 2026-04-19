@@ -336,7 +336,13 @@ void input_update(GameState *gs, UIState *ui) {
 #endif
 
     if (gs->phase == PHASE_VICTORY || gs->phase == PHASE_DEFEAT) {
-        if (IsKeyPressed(KEY_Q)) CloseWindow();
-        if (IsKeyPressed(KEY_R)) game_init(gs);
+        if (gs->mode == GAME_MODE_CAMPAIGN) {
+            if (IsKeyPressed(KEY_Q)) game_init(gs);
+            if (IsKeyPressed(KEY_R)) game_campaign_restart(gs);
+            if (gs->phase == PHASE_VICTORY && IsKeyPressed(KEY_N)) game_campaign_advance(gs);
+        } else {
+            if (IsKeyPressed(KEY_Q)) CloseWindow();
+            if (IsKeyPressed(KEY_R)) game_init(gs);
+        }
     }
 }
