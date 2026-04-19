@@ -57,6 +57,42 @@ static bool can_set_rally_now(Building *b, int player){
 static const char *tech_button_label(TechType t, bool compact){
     if(!compact) return tech_name(t);
     switch(t){
+        case TECH_CROP_ROTATION:  return "Crop\nRotation";
+        case TECH_GRANARY_BASKETS:return "Granary\nBaskets";
+        case TECH_DOUBLE_BIT_AXE: return "Double-Bit\nAxe";
+        case TECH_LOG_STRAPS:     return "Log\nStraps";
+        case TECH_TWO_MAN_SAW:    return "Two-Man\nSaw";
+        case TECH_HARDWOOD_CARTS: return "Hardwood\nCarts";
+        case TECH_HAND_CART:      return "Hand\nCart";
+        case TECH_IRON_WEAPONRY:  return "Iron\nWeaponry";
+        case TECH_CHAIN_MAIL:     return "Chain\nMail";
+        case TECH_HARDENED_BLADES:return "Hardened\nBlades";
+        case TECH_IMPERIAL_INFANTRY:return "Imperial\nInfantry";
+        case TECH_VETERAN_LEGION: return "Veteran\nLegion";
+        case TECH_COMPOSITE_BOWS: return "Composite\nBows";
+        case TECH_THUMB_RING:     return "Thumb\nRing";
+        case TECH_REINFORCED_STRINGS:return "Reinforced\nStrings";
+        case TECH_EAGLE_EYE:      return "Eagle\nEye";
+        case TECH_IMPERIAL_ARCHERY:return "Imperial\nArchery";
+        case TECH_FIELD_CRAFT:    return "Field\nCraft";
+        case TECH_MOUNTED_ARMOR:  return "Mounted\nArmor";
+        case TECH_CAVALRY_DRILL:  return "Cavalry\nDrill";
+        case TECH_BLOODLINES:     return "Blood-\nlines";
+        case TECH_IMPERIAL_CAVALRY:return "Imperial\nCavalry";
+        case TECH_STEEL_SPURS:    return "Steel\nSpurs";
+        case TECH_ILLUMINATION:   return "Illumi-\nnation";
+        case TECH_BLOCK_PRINTING: return "Block\nPrinting";
+        case TECH_HOLY_VISION:    return "Holy\nVision";
+        case TECH_REINFORCED_RAM: return "Reinforced\nRam";
+        case TECH_SIEGE_ENGINEERS:return "Siege\nEngineers";
+        case TECH_DRILL_CREW:     return "Drill\nCrew";
+        case TECH_HEAVY_SCORPION: return "Heavy\nScorpion";
+        case TECH_TORSION_ENGINES:return "Torsion\nEngines";
+        case TECH_SCALE_ARMOR:    return "Scale\nArmor";
+        case TECH_BLAST_FURNACE:  return "Blast\nFurnace";
+        case TECH_PLATE_ARMOR:    return "Plate\nArmor";
+        case TECH_FORGED_ARROWS:  return "Forged\nArrows";
+        case TECH_BODKIN_ARROW:   return "Bodkin\nArrow";
         case TECH_ARCHITECTURE:   return "Archi-\ntecture";
         case TECH_FORTIFIED_WALL: return "Fortified\nWall";
         case TECH_GUARD_TOWER:    return "Guard\nTower";
@@ -69,9 +105,94 @@ static const char *tech_button_label(TechType t, bool compact){
     }
 }
 
+static const char *compact_tech_desc(TechType t){
+    switch(t){
+        case TECH_CROP_ROTATION:  return "+75 farm\nfood";
+        case TECH_FERTILIZER:     return "+125 farm\nfood";
+        case TECH_HAND_MILL:      return "+15% food\nrate";
+        case TECH_GRANARY_BASKETS:return "+1 food\ncarry";
+        case TECH_IRRIGATION:     return "+15% food\nrate";
+        case TECH_REAPING:        return "+2 food\ncarry";
+        case TECH_DOUBLE_BIT_AXE: return "+15% wood\nrate";
+        case TECH_LOG_STRAPS:     return "+1 wood\ncarry";
+        case TECH_BOW_SAW:        return "+15% wood\nrate";
+        case TECH_TIMBER_ROUTE:   return "+6 villager\nspeed";
+        case TECH_TWO_MAN_SAW:    return "+20% wood\nrate";
+        case TECH_HARDWOOD_CARTS: return "+2 wood carry\n+6 speed";
+        case TECH_LOOM:           return "+15 HP\n+1 armor";
+        case TECH_WHEELBARROW:    return "+2 carry\n+8 speed";
+        case TECH_HAND_CART:      return "+3 carry\n+10 speed";
+        case TECH_IRON_WEAPONRY:  return "+1 atk\n+10 HP";
+        case TECH_SQUIRES:        return "+8 inf.\nspeed";
+        case TECH_CHAIN_MAIL:     return "+1 armor\n+10 HP";
+        case TECH_HARDENED_BLADES:return "+1 inf.\natk";
+        case TECH_IMPERIAL_INFANTRY:return "+2 atk\n+15 HP";
+        case TECH_VETERAN_LEGION: return "+15 inf.\nHP";
+        case TECH_COMPOSITE_BOWS: return "+1 atk\n+1 range";
+        case TECH_THUMB_RING:     return "+8 speed\nfast fire";
+        case TECH_REINFORCED_STRINGS:return "+1 atk\n+1 armor";
+        case TECH_EAGLE_EYE:      return "+1 range\n+1 vision";
+        case TECH_IMPERIAL_ARCHERY:return "+1 atk\n+1 range";
+        case TECH_FIELD_CRAFT:    return "+10 archer\nHP";
+        case TECH_MOUNTED_ARMOR:  return "+20 cav\nHP";
+        case TECH_HUSBANDRY:      return "+12 cav\nspeed";
+        case TECH_CAVALRY_DRILL:  return "+1 atk\n+10 speed";
+        case TECH_BLOODLINES:     return "+20 cav\nHP";
+        case TECH_IMPERIAL_CAVALRY:return "+20 HP\n+1 armor";
+        case TECH_STEEL_SPURS:    return "+1 cav\natk";
+        case TECH_SANCTITY:       return "+15 monk\nHP";
+        case TECH_DEVOTION:       return "+15 monk\nHP";
+        case TECH_FERVOR:         return "+12 monk\nspeed";
+        case TECH_ILLUMINATION:   return "Faster heal\nand convert";
+        case TECH_BLOCK_PRINTING: return "+1 monk\nrange";
+        case TECH_HOLY_VISION:    return "+2 monk\nvision";
+        case TECH_REINFORCED_RAM: return "+80 HP\n+4 atk";
+        case TECH_SIEGE_ENGINEERS:return "+1 siege\nrange";
+        case TECH_ONAGER:         return "+12 atk\n+1 range";
+        case TECH_DRILL_CREW:     return "+8 siege\nspeed";
+        case TECH_HEAVY_SCORPION: return "+8 atk\n+1 rng/arm";
+        case TECH_TORSION_ENGINES:return "+8 siege\natk";
+        case TECH_SCALE_ARMOR:    return "+1 armor\nmilitary";
+        case TECH_BLAST_FURNACE:  return "+1 melee\natk";
+        case TECH_PLATE_ARMOR:    return "+1 armor\nmilitary";
+        case TECH_FORGED_ARROWS:  return "+1 archer\natk";
+        case TECH_BODKIN_ARROW:   return "+1 atk\n+1 range";
+        case TECH_BRACER:         return "+1 atk\n+1 range";
+        case TECH_MASONRY:        return "+15% bldg\nHP";
+        case TECH_ARCHITECTURE:   return "+20% bldg\nHP";
+        case TECH_FORTIFIED_WALL: return "+600 wall\nHP";
+        case TECH_GUARD_TOWER:    return "+2 atk\n+1 range";
+        case TECH_KEEP:           return "+3 atk\n+1 range";
+        case TECH_MURDER_HOLES:   return "+1 TC/tower\nrange";
+        case TECH_TREADMILL_CRANE:return "+50%\nbuild speed";
+        case TECH_CHEMISTRY:      return "+1 archer\natk";
+        case TECH_HOARDINGS:      return "+500 TC\nHP";
+        case TECH_HEATED_SHOT:    return "+8 vs\nsiege";
+        case TECH_CANNON_EMPLACEMENTS:return "Unlock\nBombard";
+        case TECH_MISSILE_GUIDANCE:return "+2 atk\n+2 range";
+        default:                  return tech_desc(t);
+    }
+}
+
 static void draw_text_centered_in_box(const char *text, int x, int y, int w, int fs, Color color){
-    int tw = MeasureText(text, fs);
-    DrawText(text, x + (w - tw) / 2, y, fs, color);
+    const char *nl = strchr(text, '\n');
+    if(!nl){
+        int tw = MeasureText(text, fs);
+        DrawText(text, x + (w - tw) / 2, y, fs, color);
+        return;
+    }
+
+    int len1 = (int)(nl - text);
+    char line1[64];
+    if(len1 >= (int)sizeof(line1)) len1 = (int)sizeof(line1) - 1;
+    strncpy(line1, text, (size_t)len1);
+    line1[len1] = '\0';
+    const char *line2 = nl + 1;
+
+    int tw1 = MeasureText(line1, fs);
+    int tw2 = MeasureText(line2, fs);
+    DrawText(line1, x + (w - tw1) / 2, y, fs, color);
+    DrawText(line2, x + (w - tw2) / 2, y + fs + 1, fs, color);
 }
 
 static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_start){
@@ -209,6 +330,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
     int fs11=(int)(11*sc);
     int fs10=(int)(10*sc);
     int fs9 =(int)(9*sc);
+    int fs8 =(int)(8*sc);
     int pad =(int)(12*sc);
 
     if(ui->sel_building>=0){
@@ -269,6 +391,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         int rally_btn_x = panel_w - pad - rally_btn_w;
         int rally_btn_y = by_start + (int)(10*sc);
         bool can_set_rally = can_set_rally_now(b, lp);
+        bool prefer_side_tech_grid = false;
+        int train_area_right = bx;
 
         if(can_set_rally){
             const char *rally_label = ui->rally_mode ? "[G] Cancel" : "[G] Rally";
@@ -278,12 +402,12 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 else game_set_alert(gs, "Rally point canceled.");
             }
             snprintf(buf, sizeof(buf), "Point: %d,%d", b->rally_tx, b->rally_ty);
-            DrawText(buf, rally_btn_x, rally_btn_y + rally_btn_h + (int)(4*sc), fs10,
-                     CLITERAL(Color){180,165,130,220});
+            draw_text_centered_in_box(buf, rally_btn_x, rally_btn_y + rally_btn_h + (int)(4*sc),
+                                      rally_btn_w, fs9, CLITERAL(Color){180,165,130,220});
             if(ui->rally_mode){
-                DrawText("New units spawn here, then move there", rally_btn_x - (int)(44*sc),
-                         rally_btn_y + rally_btn_h + (int)(18*sc), fs9,
-                         CLITERAL(Color){120,200,255,220});
+                draw_text_centered_in_box("Units gather\nat this point",
+                                          rally_btn_x, rally_btn_y + rally_btn_h + (int)(17*sc),
+                                          rally_btn_w, fs9, CLITERAL(Color){120,200,255,220});
             }
         }
         switch(b->type){
@@ -305,6 +429,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 break;
             case BLD_BARRACKS: {
                 int bw2=(int)(90*sc);
+                prefer_side_tech_grid = true;
+                train_area_right = bx + 3*bw2 + 2*btn_gap;
                 if(draw_button("Militia\n60F 20G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_MILITIA))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
@@ -331,6 +457,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
             case BLD_ARCHERY_RANGE: {
                 int bw2=(int)(90*sc);
+                prefer_side_tech_grid = true;
+                train_area_right = bx + 3*bw2 + 2*btn_gap;
                 if(draw_button("Archer\n25W 45G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_ARCHER))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
@@ -358,6 +486,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
             case BLD_STABLE: {
                 int bw2=(int)(90*sc);
+                prefer_side_tech_grid = true;
+                train_area_right = bx + bw2;
                 if(draw_button("Knight\n60F 75G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_KNIGHT))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
@@ -369,6 +499,8 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             }
             case BLD_MONASTERY: {
                 int bw2=(int)(96*sc);
+                prefer_side_tech_grid = true;
+                train_area_right = bx + bw2;
                 if(draw_button("Monk\n100G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_MONK))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
@@ -376,13 +508,18 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_MONK);
                 }
-                DrawText("Monks heal nearby allies and convert enemy units",bx,bby+(int)(58*sc),fs10,CLITERAL(Color){180,165,130,220});
+                DrawText("Heals allies", bx, bby+(int)(58*sc), fs9, CLITERAL(Color){180,165,130,220});
+                DrawText("& converts", bx, bby+(int)(69*sc), fs9, CLITERAL(Color){180,165,130,220});
                 break;
             }
             case BLD_SIEGE_WORKSHOP: {
                 int bw2=(int)(102*sc);
                 int row_gap=(int)(8*sc);
                 bool cannon_unlocked = gs->res[lp].tech_unlocked[TECH_CANNON_EMPLACEMENTS];
+                int siege_role_y = bby + btn_h + (int)(4*sc);
+                int bombard_help_y = bby + 2*btn_h + row_gap + (int)(3*sc);
+                prefer_side_tech_grid = true;
+                train_area_right = bx + 3*bw2 + 2*btn_gap;
                 if(draw_button("Ram\n160W 75G",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_BATTERING_RAM))) {
                     if (g_net_active) {
                         NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
@@ -412,17 +549,19 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_BOMBARD_CANNON);
                 }
+                draw_text_centered_in_box("Anti-bldg", bx, siege_role_y, bw2, fs9,
+                                          CLITERAL(Color){180,165,130,220});
+                draw_text_centered_in_box("Splash", bx + bw2 + btn_gap, siege_role_y, bw2, fs9,
+                                          CLITERAL(Color){180,165,130,220});
+                draw_text_centered_in_box("Ranged", bx + 2*(bw2 + btn_gap), siege_role_y, bw2, fs9,
+                                          CLITERAL(Color){180,165,130,220});
                 if(!cannon_unlocked){
-                    DrawText("Research Cannon Emplacements at the University to unlock Bombard Cannons.",
-                             bx + bw2 + btn_gap, bby + btn_h + row_gap + (int)(16*sc),
-                             fs10, CLITERAL(Color){220,160,80,220});
+                    draw_text_centered_in_box("Unlock at\nUniversity", bx, bombard_help_y, bw2, fs9,
+                                              CLITERAL(Color){220,160,80,220});
                 } else {
-                    DrawText("Bombard Cannons deliver long-range anti-building siege fire.",
-                             bx + bw2 + btn_gap, bby + btn_h + row_gap + (int)(16*sc),
-                             fs10, CLITERAL(Color){180,165,130,220});
+                    draw_text_centered_in_box("Long-range\nanti-bldg", bx, bombard_help_y, bw2, fs9,
+                                              CLITERAL(Color){180,165,130,220});
                 }
-                DrawText("Ram crushes buildings. Mangonel deals splash damage. Scorpion is ranged siege support.",
-                         bx,bby+2*btn_h+row_gap+(int)(10*sc),fs10,CLITERAL(Color){180,165,130,220});
                 break;
             }
             case BLD_UNIVERSITY:
@@ -519,30 +658,63 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                 techs[9]=TECH_HEATED_SHOT; techs[10]=TECH_CANNON_EMPLACEMENTS;
                 techs[11]=TECH_MISSILE_GUIDANCE; tc=12;
             }
-            bool compact_tech_grid = (tc > 6);
+            bool compact_tech_grid = (tc >= 6);
+            bool tc_compact_grid = (b->type == BLD_TOWN_CENTER);
+            bool dense_tech_grid = (b->type == BLD_UNIVERSITY);
+            bool use_side_tech_grid = prefer_side_tech_grid && compact_tech_grid;
             int tech_gap=(int)(((compact_tech_grid ? 6 : 5) * sc));
-            int tech_cols = (tc > 10) ? 6 : ((tc > 6) ? 5 : ((tc > 3) ? 3 : tc));
-            int tech_available_w = panel_w - bx - pad;
+            int tech_cols = dense_tech_grid ? 4 : (compact_tech_grid ? 3 : ((tc > 3) ? 3 : tc));
             int tech_btn_w;
             int tech_btn_h;
             int tech_row_gap;
             int tech_start_y;
-            if(compact_tech_grid){
-                tech_btn_w = (tech_available_w - tech_gap * (tech_cols - 1)) / tech_cols;
-                int tech_min_w = (int)(120 * sc);
-                if(tech_btn_w < tech_min_w) tech_btn_w = tech_min_w;
+            int tech_grid_x = bx;
+            if(use_side_tech_grid){
+                int side_gap = (int)(18 * sc);
+                int side_available_w = panel_w - pad - (train_area_right + side_gap);
+                tech_btn_w = (side_available_w - tech_gap * (tech_cols - 1)) / tech_cols;
+                if(tech_btn_w < (int)(96 * sc)){
+                    use_side_tech_grid = false;
+                } else if(tech_btn_w > (int)(122 * sc)){
+                    tech_btn_w = (int)(122 * sc);
+                }
                 tech_btn_h = (int)(28 * sc);
-                tech_row_gap = (int)(26 * sc);
-                tech_start_y = bby + (int)(6 * sc);
-            } else {
-                tech_btn_w = (int)(107 * sc);
-                tech_btn_h = (int)(((tc > 3) ? 34 : 40) * sc);
+                tech_row_gap = (int)(24 * sc);
+                tech_start_y = bby + (int)(4 * sc);
+                tech_grid_x = train_area_right + side_gap;
+            }
+            if(!use_side_tech_grid && compact_tech_grid){
+                int tech_available_w = panel_w - bx - pad;
+                tech_btn_w = (tech_available_w - tech_gap * (tech_cols - 1)) / tech_cols;
+                if(dense_tech_grid){
+                    if(tech_btn_w < (int)(96 * sc)) tech_btn_w = (int)(96 * sc);
+                    tech_btn_h = (int)(32 * sc);
+                    tech_row_gap = (int)(12 * sc);
+                    tech_start_y = bby + (int)(2 * sc);
+                } else {
+                    if(tech_btn_w < (int)(120 * sc)) tech_btn_w = (int)(120 * sc);
+                    tech_btn_h = (int)(28 * sc);
+                    tech_row_gap = (int)(26 * sc);
+                    tech_start_y = bby + (int)(6 * sc);
+                }
+            } else if(!use_side_tech_grid) {
+                if(tc_compact_grid){
+                    tech_gap = (int)(12 * sc);
+                    tech_btn_w = (panel_w - bx - pad - tech_gap * (tech_cols - 1)) / tech_cols;
+                    if(tech_btn_w > (int)(136 * sc)) tech_btn_w = (int)(136 * sc);
+                } else {
+                    tech_btn_w = (int)(107 * sc);
+                }
+                tech_btn_h = (int)(((tc > 3) ? 34 : (tc_compact_grid ? 34 : 40)) * sc);
                 tech_row_gap = (int)(((tc > 3) ? 28 : 0) * sc);
                 tech_start_y = bby + (int)(58 * sc);
             }
-            int tech_grid_w = tech_cols * tech_btn_w + tech_gap * (tech_cols - 1);
-            int tech_grid_x = compact_tech_grid ? (bx + (tech_available_w - tech_grid_w) / 2) : bx;
-            if(tech_grid_x < bx) tech_grid_x = bx;
+            if(!use_side_tech_grid){
+                int tech_available_w = panel_w - bx - pad;
+                int tech_grid_w = tech_cols * tech_btn_w + tech_gap * (tech_cols - 1);
+                tech_grid_x = compact_tech_grid ? (bx + (tech_available_w - tech_grid_w) / 2) : bx;
+                if(tech_grid_x < bx) tech_grid_x = bx;
+            }
             if(tech_cols < 1) tech_cols = 1;
             for(int ti=0; ti<tc; ti++){
                 TechType tt2 = techs[ti];
@@ -554,7 +726,7 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                     Cost tc2 = tech_cost(tt2);
                     bool age_ok = gs->res[lp].age >= tech_age_required(tt2);
                     bool can = res_can_afford(&gs->res[lp], tc2) && !busy && age_ok;
-                    const char *tbuf = tech_button_label(tt2, compact_tech_grid);
+                    const char *tbuf = tech_button_label(tt2, compact_tech_grid || use_side_tech_grid);
                     if(draw_button(tbuf, tbx, tby, tech_btn_w, tech_btn_h, can)){
                         if(g_net_active){
                             NetPacket pkt={0}; pkt.type=PKT_RESEARCH;
@@ -562,19 +734,34 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                             net_dispatch_packet(gs,&pkt);
                         } else building_start_tech(gs,b,tt2);
                     }
-                    draw_text_centered_in_box(tech_desc(tt2), tbx, tby + tech_btn_h + (int)(2*sc), tech_btn_w,
-                                              compact_tech_grid ? fs9 : fs10, CLITERAL(Color){160,200,255,200});
+                    if(compact_tech_grid && !dense_tech_grid && age_ok){
+                        draw_text_centered_in_box(compact_tech_desc(tt2), tbx,
+                                                  tby + tech_btn_h + (int)(2*sc), tech_btn_w,
+                                                  fs8, CLITERAL(Color){160,200,255,200});
+                    } else if(!compact_tech_grid && !tc_compact_grid){
+                        draw_text_centered_in_box(tech_desc(tt2), tbx,
+                                                  tby + tech_btn_h + (int)(2*sc), tech_btn_w,
+                                                  fs10, CLITERAL(Color){160,200,255,200});
+                    }
                     if(!age_ok){
                         static const char *AGE_NAMES[] = {"Dark Age","Feudal Age","Castle Age","Imperial Age"};
                         draw_text_centered_in_box(AGE_NAMES[tech_age_required(tt2)],
-                                                  tbx, tby + tech_btn_h + (int)(((compact_tech_grid ? 15 : 14) * sc)),
-                                                  tech_btn_w, fs9, CLITERAL(Color){220,140,60,220});
+                                                  tbx,
+                                                  tby + tech_btn_h + (int)(((dense_tech_grid ? 2 :
+                                                                              (compact_tech_grid ? 8 :
+                                                                               (tc_compact_grid ? 12 : 14))) * sc)),
+                                                  tech_btn_w, (dense_tech_grid || tc_compact_grid) ? fs8 : fs9,
+                                                  CLITERAL(Color){220,140,60,220});
                     }
                 } else {
                     if(compact_tech_grid){
                         draw_button(tech_button_label(tt2, true), tbx, tby, tech_btn_w, tech_btn_h, false);
-                        draw_text_centered_in_box("[Done]", tbx, tby + tech_btn_h + (int)(6*sc), tech_btn_w, fs9,
+                        draw_text_centered_in_box("[Done]", tbx,
+                                                  tby + tech_btn_h + (int)((dense_tech_grid ? 2 : 6)*sc),
+                                                  tech_btn_w, dense_tech_grid ? fs8 : fs9,
                                                   CLITERAL(Color){60,180,80,200});
+                    } else if(tc_compact_grid){
+                        draw_button(tech_name(tt2), tbx, tby, tech_btn_w, tech_btn_h, false);
                     } else {
                         draw_text_centered_in_box(tech_name(tt2), tbx, tby + (int)(4*sc), tech_btn_w, fs10,
                                                   CLITERAL(Color){80,220,100,220});
