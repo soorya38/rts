@@ -83,6 +83,10 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_mills[1]                     = load_game_texture("assets/buildings/mill_feudal.png");
     ui->tex_mills[2]                     = load_game_texture("assets/buildings/mill_castle.png");
     ui->tex_mills[3]                     = load_game_texture("assets/buildings/mill_imperial.png");
+    ui->tex_lumber_camps[0]              = load_game_texture("assets/buildings/lumber_camp_dark.png");
+    ui->tex_lumber_camps[1]              = load_game_texture("assets/buildings/lumber_camp_feudal.png");
+    ui->tex_lumber_camps[2]              = load_game_texture("assets/buildings/lumber_camp_castle.png");
+    ui->tex_lumber_camps[3]              = load_game_texture("assets/buildings/lumber_camp_imperial.png");
 }
 
 void ui_state_deinit(UIState *ui) {
@@ -90,6 +94,7 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_town_centers[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_houses[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mills[i]);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_lumber_camps[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
     UnloadTexture(ui->tex_env_tree);
     UnloadTexture(ui->tex_env_gold);
@@ -118,6 +123,32 @@ void ui_center_on_tc(UIState *ui, GameState *gs) {
     }
     Vec2 iso_target = world_to_iso(target_wx, target_wy);
     ui->camera.target = to_rvec2(iso_target);
+}
+
+Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
+    if (!ui) return (Texture2D){0};
+
+    if (age < 0) age = 0;
+    if (age > 3) age = 3;
+
+    Texture2D tex = ui->tex_buildings[type];
+    switch (type) {
+        case BLD_TOWN_CENTER:
+            if (ui->tex_town_centers[age].id != 0) tex = ui->tex_town_centers[age];
+            break;
+        case BLD_HOUSE:
+            if (ui->tex_houses[age].id != 0) tex = ui->tex_houses[age];
+            break;
+        case BLD_MILL:
+            if (ui->tex_mills[age].id != 0) tex = ui->tex_mills[age];
+            break;
+        case BLD_LUMBER_CAMP:
+            if (ui->tex_lumber_camps[age].id != 0) tex = ui->tex_lumber_camps[age];
+            break;
+        default:
+            break;
+    }
+    return tex;
 }
 
 /* Scale factor relative to 720p so all HUD elements are readable on phones */

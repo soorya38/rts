@@ -87,9 +87,9 @@ int main(void){
         EndDrawing();
     }
 
-    CloseWindow();
     net_deinit();
     ui_state_deinit(ui);
+    CloseWindow();
     free(gs);
     free(ui);
     return 0;

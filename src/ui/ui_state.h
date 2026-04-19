@@ -42,6 +42,7 @@ typedef struct {
     Texture2D tex_town_centers[4];
     Texture2D tex_houses[4];
     Texture2D tex_mills[4];
+    Texture2D tex_lumber_camps[4];
     Texture2D tex_units[UNIT_COUNT];
     Texture2D tex_env_tree;
     Texture2D tex_env_gold;
@@ -57,6 +58,7 @@ typedef struct {
 void ui_state_init(UIState *ui, GameState *gs);
 void ui_state_deinit(UIState *ui);
 void ui_center_on_tc(UIState *ui, GameState *gs);
+Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age);
 /* Returns a scale factor relative to 720p so HUD elements are legible on any
    screen size, including high-DPI phones.  Range [1.0, 2.5]. */
 float hud_scale(void);

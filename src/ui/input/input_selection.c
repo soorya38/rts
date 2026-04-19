@@ -32,7 +32,7 @@ void select_unit(GameState *gs, UIState *ui, int uid) {
 }
 
 /* ─── World-hit testers ───────────────────────────────────── */
-static bool building_hit_info(Building *b, UIState *ui, Vector2 wp,
+static bool building_hit_info(GameState *gs, Building *b, UIState *ui, Vector2 wp,
                               int *out_rank, float *out_dist2, float *out_depth_y) {
     float bx = (float)b->tx * TILE_SIZE, by = (float)b->ty * TILE_SIZE;
     float bw = (float)b->tw * TILE_SIZE, bh = (float)b->th * TILE_SIZE;
@@ -43,12 +43,33 @@ static bool building_hit_info(Building *b, UIState *ui, Vector2 wp,
     float footprint_screen_w = bw + bh;
     float hit_w = footprint_screen_w * 0.40f;
     float hit_h = 42.0f + (float)b->th * 6.0f;
-    Texture2D tex = ui ? ui->tex_buildings[b->type] : (Texture2D){0};
+    int age = 0;
+    if (b->player >= 0 && b->player < NUM_PLAYERS) age = gs->res[b->player].age;
+    Texture2D tex = ui_get_building_texture(ui, b->type, age);
 
     if (tex.id != 0) {
-        float base_ratio = 1.25f / 4.0f;
-        float boost = 1.25f;
-        float sc = (float)b->tw * base_ratio * boost;
+        float sc;
+        if (b->type == BLD_TOWN_CENTER) {
+            float scale_x = 315.0f / (float)tex.width;
+            float scale_y = 255.0f / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (b->type == BLD_HOUSE) {
+            float scale_x = 150.0f / (float)tex.width;
+            float scale_y = 157.0f / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (b->type == BLD_MILL) {
+            float scale_x = 145.0f / (float)tex.width;
+            float scale_y = 150.0f / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (b->type == BLD_LUMBER_CAMP) {
+            float scale_x = 165.0f / (float)tex.width;
+            float scale_y = 135.0f / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else {
+            float base_ratio = 1.25f / 4.0f;
+            float boost = 1.25f;
+            sc = (float)b->tw * base_ratio * boost;
+        }
         float tw = tex.width * sc;
         float th = tex.height * sc;
 
@@ -130,7 +151,7 @@ int find_friendly_building_at(GameState *gs, UIState *ui, Vector2 wp) {
         int rank = 0;
         float dist2 = 0.0f;
         float depth_y = 0.0f;
-        if (!building_hit_info(b, ui, wp, &rank, &dist2, &depth_y)) continue;
+        if (!building_hit_info(gs, b, ui, wp, &rank, &dist2, &depth_y)) continue;
         if (best_id < 0 || depth_y > best_depth_y + 1.0f ||
             (fabsf(depth_y - best_depth_y) <= 1.0f &&
              (rank > best_rank || (rank == best_rank && dist2 < best_dist2)))) {
@@ -170,7 +191,7 @@ int find_enemy_building_at(GameState *gs, UIState *ui, Vector2 wp) {
         int rank = 0;
         float dist2 = 0.0f;
         float depth_y = 0.0f;
-        if (!building_hit_info(b, ui, wp, &rank, &dist2, &depth_y)) continue;
+        if (!building_hit_info(gs, b, ui, wp, &rank, &dist2, &depth_y)) continue;
         if (best_id < 0 || depth_y > best_depth_y + 1.0f ||
             (fabsf(depth_y - best_depth_y) <= 1.0f &&
              (rank > best_rank || (rank == best_rank && dist2 < best_dist2)))) {
@@ -196,7 +217,7 @@ int find_unfinished_building_at(GameState *gs, UIState *ui, Vector2 wp) {
         int rank = 0;
         float dist2 = 0.0f;
         float depth_y = 0.0f;
-        if (!building_hit_info(b, ui, wp, &rank, &dist2, &depth_y)) continue;
+        if (!building_hit_info(gs, b, ui, wp, &rank, &dist2, &depth_y)) continue;
         if (best_id < 0 || depth_y > best_depth_y + 1.0f ||
             (fabsf(depth_y - best_depth_y) <= 1.0f &&
              (rank > best_rank || (rank == best_rank && dist2 < best_dist2)))) {
