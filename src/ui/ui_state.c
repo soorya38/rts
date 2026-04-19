@@ -99,6 +99,10 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_markets[1]                   = load_game_texture("assets/buildings/market_feudal.png");
     ui->tex_markets[2]                   = load_game_texture("assets/buildings/market_castle.png");
     ui->tex_markets[3]                   = load_game_texture("assets/buildings/market_imperial.png");
+    ui->tex_mining_camps[0]              = load_game_texture("assets/buildings/mining_camp_dark.png");
+    ui->tex_mining_camps[1]              = load_game_texture("assets/buildings/mining_camp_feudal.png");
+    ui->tex_mining_camps[2]              = load_game_texture("assets/buildings/mining_camp_castle.png");
+    ui->tex_mining_camps[3]              = load_game_texture("assets/buildings/mining_camp_imperial.png");
 }
 
 void ui_state_deinit(UIState *ui) {
@@ -110,6 +114,7 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_barracks[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_blacksmiths[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_markets[i]);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mining_camps[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
     UnloadTexture(ui->tex_env_tree);
     UnloadTexture(ui->tex_env_gold);
@@ -168,6 +173,9 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
             break;
         case BLD_MARKET:
             if (ui->tex_markets[age].id != 0) tex = ui->tex_markets[age];
+            break;
+        case BLD_MINING_CAMP:
+            if (ui->tex_mining_camps[age].id != 0) tex = ui->tex_mining_camps[age];
             break;
         default:
             break;

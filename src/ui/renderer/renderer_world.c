@@ -210,6 +210,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     bool is_barracks = (b->type == BLD_BARRACKS);
     bool is_blacksmith = (b->type == BLD_BLACKSMITH);
     bool is_market = (b->type == BLD_MARKET);
+    bool is_mining_camp = (b->type == BLD_MINING_CAMP);
     if (building_is_walllike(b->type)) {
         draw_wall_piece(gs, b, mc, dc);
     } else if (tex.id != 0) {
@@ -258,6 +259,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             float scale_x = market_target_width / (float)tex.width;
             float scale_y = market_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_mining_camp) {
+            const float mining_target_width = 180.0f;
+            const float mining_target_height = 145.0f;
+            float scale_x = mining_target_width / (float)tex.width;
+            float scale_y = mining_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else {
             /* Scale buildings biased towards footprint size, with a global boost */
             float base_ratio = 1.25f / 4.0f; /* TC as baseline */
@@ -280,6 +287,8 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             y_offset += 18.0f; /* blacksmith sets read better when grounded slightly lower */
         } else if (is_market) {
             y_offset += 18.0f; /* market stalls look best when anchored a little deeper into the footprint */
+        } else if (is_mining_camp) {
+            y_offset += 30.0f; /* mining camps need a stronger drop so the pit and rails sit on the footprint */
         }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
         DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
@@ -544,6 +553,13 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     float s_y = market_target_height / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
                     y_offset += 18.0f;
+                } else if (gs->build_mode.type == BLD_MINING_CAMP) {
+                    const float mining_target_width = 180.0f;
+                    const float mining_target_height = 145.0f;
+                    float s_x = mining_target_width / (float)tex.width;
+                    float s_y = mining_target_height / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 30.0f;
                 } else {
                     float base_ratio = 1.25f / 4.0f;
                     float boost = 1.25f;
