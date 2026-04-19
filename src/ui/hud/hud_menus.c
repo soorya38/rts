@@ -12,6 +12,7 @@
 extern void draw_top_bar(GameState *gs, UIState *ui);
 extern void draw_bottom_panel(GameState *gs, UIState *ui);
 extern void draw_minimap(GameState *gs, UIState *ui);
+extern void draw_age_bar(GameState *gs);
 extern void draw_alert(GameState *gs, UIState *ui);
 extern void draw_end_screen(GameState *gs, UIState *ui);
 extern void draw_menu(GameState *gs, UIState *ui);
@@ -108,6 +109,7 @@ void hud_draw(GameState *gs, UIState *ui){
     draw_top_bar(gs, ui);
     draw_bottom_panel(gs, ui);
     draw_minimap(gs, ui);
+    draw_age_bar(gs);
     if(ui->build_panel_open) draw_build_menu(gs, ui);
     if(gs->build_mode.active) draw_placement_bar(gs, ui);
     draw_alert(gs, ui);

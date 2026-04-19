@@ -492,18 +492,43 @@ void unit_give_dropoff_order(GameState *gs, Unit *u, int tx, int ty){
 void unit_give_attack_order(GameState *gs, Unit *u, int tunit, int tbld){
     u->target_unit=tunit; u->target_bld=tbld;
     u->gather_tx=-1; u->build_id=-1;
+    /* Prime anim_timer so unit_do_attack allows immediate re-pathfinding */
+    u->anim_timer = 1.0f;
+
     int tx,ty;
     if(tunit>=0){
+        /* Pathfind to a tile adjacent to the target unit, not its center */
         Unit *t=&gs->units[tunit];
-        tx=(int)(t->wx/TILE_SIZE); ty=(int)(t->wy/TILE_SIZE);
+        int etx=(int)(t->wx/TILE_SIZE), ety=(int)(t->wy/TILE_SIZE);
+        /* Check adjacent tiles for nearest passable one */
+        int sx=(int)(u->wx/TILE_SIZE), sy=(int)(u->wy/TILE_SIZE);
+        int best_d=99999;
+        tx=etx; ty=ety;  /* fallback: target center */
+        for(int dy=-1;dy<=1;dy++) for(int dx=-1;dx<=1;dx++){
+            int nx=etx+dx, ny=ety+dy;
+            if(nx==etx&&ny==ety) continue;
+            if(!map_in_bounds(nx,ny)||!map_is_passable(gs,nx,ny)) continue;
+            int d=(nx-sx)*(nx-sx)+(ny-sy)*(ny-sy);
+            if(d<best_d){best_d=d;tx=nx;ty=ny;}
+        }
     } else if(tbld>=0){
+        /* Pathfind to nearest passable tile adjacent to the building */
         Building *b=&gs->buildings[tbld];
-        tx=b->tx+b->tw/2; ty=b->ty+b->th/2;
+        int bx,by;
+        find_adjacent_tile(gs,b->tx,b->ty,b->tw,b->th,u->wx,u->wy,&bx,&by);
+        if(bx<0){
+            /* No reachable adjacent tile – still set state so unit_do_attack handles it */
+            u->path_len=0; u->path_idx=0;
+            u->state=US_ATTACKING;
+            return;
+        }
+        tx=bx; ty=by;
     } else { u->state=US_IDLE; return; }
+
     int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
     u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
     u->path_idx=0;
-    u->state=US_MOVING;
+    u->state=(u->path_len>0)?US_MOVING:US_ATTACKING;
 }
 
 void unit_give_build_order(GameState *gs, Unit *u, int bld_id){

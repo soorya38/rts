@@ -5,7 +5,7 @@
 #include "net.h"
 #include <stdio.h>
 
-#define UNIT_PERSONAL_SPACE 10.0f
+#define UNIT_PERSONAL_SPACE 14.0f
 
 static ResType tile_to_res_ai(TileType t){
     switch(t){
@@ -84,7 +84,7 @@ static void resolve_unit_overlap(GameState *gs, Unit *a, Unit *b){
 }
 
 static void unit_apply_separation(GameState *gs){
-    for(int pass=0; pass<2; pass++){
+    for(int pass=0; pass<4; pass++){
         for(int i=0;i<MAX_UNITS;i++){
             Unit *a = &gs->units[i];
             if(!a->active || a->state == US_DEAD || a->state == US_DYING) continue;
@@ -159,7 +159,20 @@ static void unit_do_gather(GameState *gs, Unit *u, float dt){
     /* Must be adjacent */
     int utx=(int)(u->wx/TILE_SIZE),uty=(int)(u->wy/TILE_SIZE);
     if(abs(utx-u->gather_tx)>1||abs(uty-u->gather_ty)>1){
-        unit_give_gather_order(gs,u,u->gather_tx,u->gather_ty); return;
+        /* Save gather target before the call (it may be preserved) */
+        int gtx = u->gather_tx, gty = u->gather_ty;
+        unit_give_gather_order(gs,u,u->gather_tx,u->gather_ty);
+        /* If we're still stuck in GATHERING with no path, the adjacent tiles
+         * are all blocked. Force idle so the AI reassigns to a free resource. */
+        if(u->state == US_GATHERING && u->path_len == 0){
+            u->gather_tx = -1; u->gather_ty = -1;
+            u->state = US_IDLE;
+        } else if(u->state == US_GATHERING && u->path_idx >= u->path_len){
+            /* Path exhausted but still not adjacent – push idle as well */
+            u->gather_tx = gtx; u->gather_ty = gty; /* keep target for AI */
+            u->state = US_IDLE;
+        }
+        return;
     }
     ResType rt=tile_to_res_ai(t->type);
     if(u->carry_amt>0 && u->carry_type!=rt) u->carry_amt=0;
@@ -395,34 +408,86 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
     else                   dist=dist_to_bld(u,&gs->buildings[u->target_bld]);
 
     if(dist>u->attack_range){
-        if(u->path_idx>=u->path_len){
+        /* Path-retry cooldown: anim_timer doubles as a repathing gate for
+         * military units so we don't call pathfind() every frame when blocked.
+         * Counts up each frame; we only re-pathfind when it crosses 0.4s. */
+        u->anim_timer += dt;
+
+        bool need_repath = (u->path_idx >= u->path_len);   /* path exhausted */
+        bool allow_repath = need_repath && (u->anim_timer >= 0.4f);
+
+        if(allow_repath){
+            u->anim_timer = 0.0f;   /* reset cooldown */
             int tx,ty;
             if(u->target_unit>=0){
                 Unit *t=&gs->units[u->target_unit];
-                tx=(int)(t->wx/TILE_SIZE);ty=(int)(t->wy/TILE_SIZE);
+                /* Pick a surrounding slot based on unit id so attackers spread */
+                int etx=(int)(t->wx/TILE_SIZE), ety=(int)(t->wy/TILE_SIZE);
+                static const int SDX[8]={-1,0,1,-1,1,-1,0,1};
+                static const int SDY[8]={-1,-1,-1,0,0,1,1,1};
+                int slot = u->id % 8;
+                int try_tx = etx + SDX[slot], try_ty = ety + SDY[slot];
+                if(map_in_bounds(try_tx,try_ty) && map_is_passable(gs,try_tx,try_ty)){
+                    tx=try_tx; ty=try_ty;
+                } else {
+                    tx=etx; ty=ety;
+                }
             } else {
                 Building *b=&gs->buildings[u->target_bld];
-                /* Find nearest passable tile adjacent to the building perimeter */
+                /* Find nearest passable tile adjacent to the building perimeter.
+                 * Use id-based offset to spread multiple attackers around the building. */
                 int best_d = 99999, bx=-1, by=-1;
                 int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
+                int skip = u->id % (b->tw * 2 + b->th * 2 + 4);
+                int idx = 0;
                 for(int dy=-1; dy<=b->th; dy++) for(int dx=-1; dx<=b->tw; dx++){
                     int nx=b->tx+dx, ny=b->ty+dy;
-                    /* Skip interior tiles */
                     if(nx>=b->tx&&nx<b->tx+b->tw&&ny>=b->ty&&ny<b->ty+b->th) continue;
                     if(!map_in_bounds(nx,ny)) continue;
                     if(!map_is_passable(gs,nx,ny)) continue;
                     int d=(nx-utx)*(nx-utx)+(ny-uty)*(ny-uty);
-                    if(d<best_d){best_d=d;bx=nx;by=ny;}
+                    int effective_d = (idx == skip) ? -1 : d;
+                    if(effective_d<best_d){best_d=effective_d;bx=nx;by=ny;}
+                    idx++;
                 }
                 if(bx<0){tx=b->tx;ty=b->ty;} else {tx=bx;ty=by;}
             }
             int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
             u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
             u->path_idx=0;
+
+            /* If still blocked after repath, try to attack from current position
+             * with a generous extended range (allies are in the way – melee brawl). */
+            if(u->path_len == 0){
+                float extended_range = u->attack_range + 2.5f;
+                if(dist <= extended_range){
+                    /* Attack from where we are instead of waiting */
+                    u->path_len = 0; u->path_idx = 0;
+                    /* fall through to attack logic below by short-circuiting the range check */
+                    goto do_attack;
+                }
+                /* Completely blocked and far away – try stepping to a random nearby tile */
+                int cx = sx, cy = sy;
+                bool escaped = false;
+                for(int r = 1; r <= 3 && !escaped; r++){
+                    for(int dy2 = -r; dy2 <= r && !escaped; dy2++){
+                        for(int dx2 = -r; dx2 <= r && !escaped; dx2++){
+                            if(abs(dx2)!=r && abs(dy2)!=r) continue;
+                            int nx2 = cx+dx2, ny2 = cy+dy2;
+                            if(!map_is_passable(gs,nx2,ny2)) continue;
+                            u->path_len = pathfind(gs,sx,sy,nx2,ny2,u->path,ASTAR_PATH_CAP);
+                            u->path_idx = 0;
+                            if(u->path_len > 0){ escaped = true; }
+                        }
+                    }
+                }
+            }
         }
         unit_step_path(u,dt);
         return;
     }
+    do_attack:
+    u->anim_timer = 0.0f;   /* reset path-retry cooldown on successful attack range */
     u->path_len=0;u->path_idx=0;
     if(u->attack_timer>0) return;
     u->attack_timer=u->attack_cd;

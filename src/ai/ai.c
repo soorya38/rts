@@ -28,7 +28,7 @@ static int ai_count_queued_units(GameState *gs, UnitType type){
 
 static int ai_dark_age_villager_target(GameState *gs){
     (void)gs;
-    return 13;
+    return 22;   /* aim for ~21-23 pop before advancing to Feudal */
 }
 
 static int ai_feudal_econ_villager_target(GameState *gs){
@@ -64,10 +64,17 @@ static int ai_find_scout(GameState *gs){
     return -1;
 }
 
+/* Find the nearest unexplored tile, biased heavily toward the base area
+ * and resource-rich tiles so the scout covers the immediate surroundings
+ * (own base + nearby resources) before ranging far afield. */
 static bool ai_find_hidden_explore_target(GameState *gs, int scout_tx, int scout_ty,
                                           int *out_tx, int *out_ty){
     int best_score = 0x7fffffff;
     bool found = false;
+
+    /* Get TC position to bias exploration toward own base first */
+    int tcx = MAP_W / 2, tcy = MAP_H / 2;
+    ai_find_tc_center(gs, &tcx, &tcy);
 
     for(int y=0; y<MAP_H; y++){
         for(int x=0; x<MAP_W; x++){
@@ -78,11 +85,23 @@ static bool ai_find_hidden_explore_target(GameState *gs, int scout_tx, int scout
             int move_ty = y;
             if(!map_find_passable_near(gs, x, y, &move_tx, &move_ty)) continue;
 
-            int dist = abs(move_tx - scout_tx) + abs(move_ty - scout_ty);
-            if(dist < 4) continue;
+            int dist_scout = abs(move_tx - scout_tx) + abs(move_ty - scout_ty);
+            if(dist_scout < 4) continue;
 
-            /* Prefer nearer frontier tiles so the scout keeps sweeping outward smoothly. */
-            int score = dist;
+            /* Distance from TC: tiles close to TC get a big bonus so the scout
+             * sweeps around the base and nearby resources before going far. */
+            int dist_tc = abs(x - tcx) + abs(y - tcy);
+
+            /* Bonus for resource tiles – scout wants to find wood/food/gold */
+            int res_bonus = 0;
+            if(t->type == TILE_FOREST || t->type == TILE_BERRIES ||
+               t->type == TILE_GOLD   || t->type == TILE_STONE)
+                res_bonus = -12;  /* negative = lower score = higher priority */
+
+            /* Within 20 tiles of TC: strongly prefer these tiles first */
+            int proximity_bias = (dist_tc <= 20) ? dist_tc * 2 : dist_tc * 5;
+
+            int score = proximity_bias + dist_scout + res_bonus;
             if(score < best_score){
                 best_score = score;
                 *out_tx = move_tx;
@@ -295,9 +314,9 @@ static int ai_count_siege(GameState *gs){
 static bool ai_should_save_for_age(const PlayerRes *pr){
     if(pr->advancing || pr->age >= 3) return false;
     switch(pr->age){
-        case 0: return pr->amount[RES_FOOD] >= 425;
-        case 1: return pr->amount[RES_FOOD] >= 700 || pr->amount[RES_WOOD] >= 160;
-        case 2: return pr->amount[RES_FOOD] >= 700 || pr->amount[RES_GOLD] >= 500;
+        case 0: return pr->amount[RES_FOOD] >= 320;   /* saving for 400F Feudal */
+        case 1: return pr->amount[RES_FOOD] >= 400 || pr->amount[RES_WOOD] >= 80;
+        case 2: return pr->amount[RES_FOOD] >= 480 || pr->amount[RES_GOLD] >= 300;
         default: return false;
     }
 }
@@ -308,12 +327,15 @@ static bool ai_is_early_feudal_econ_focus(GameState *gs){
     return ai_total_unit_count(gs, UNIT_VILLAGER) < ai_feudal_econ_villager_target(gs);
 }
 
+/* Dark Age worker distribution – more food+wood for the longer econ build,
+ * delay gold/stone until we have a comfortable worker base. */
 static void ai_dark_age_targets(GameState *gs, int desired[RES_COUNT]){
     int villagers = ai_count_units(gs, UNIT_VILLAGER);
-    desired[RES_FOOD] = clampi(villagers, 0, 4);
-    desired[RES_WOOD] = clampi(villagers - 4, 0, 3);
-    desired[RES_GOLD] = clampi(villagers - 7, 0, 3);
-    desired[RES_STONE] = clampi(villagers - 10, 0, 3);
+    /* Ramp food workers fast (berries then farms), wood workers second */
+    desired[RES_FOOD]  = clampi(villagers,       0, 8);
+    desired[RES_WOOD]  = clampi(villagers - 4,   0, 8);
+    desired[RES_GOLD]  = clampi(villagers - 14,  0, 3);
+    desired[RES_STONE] = clampi(villagers - 18,  0, 2);
 }
 
 static void ai_auto_assign_villagers(GameState *gs){
@@ -359,8 +381,22 @@ static void ai_auto_assign_villagers(GameState *gs){
     for(int i=0; i<MAX_UNITS; i++){
         Unit *u = &gs->units[i];
         if(!u->active || u->player != AI || u->type != UNIT_VILLAGER) continue;
+
+        /* Detect stuck gatherers: in GATHERING state but far from their target.
+         * This happens when all adjacent tiles were blocked in unit_do_gather.
+         * Force idle here so we can reassign them below. */
+        if(u->state == US_GATHERING && u->gather_tx >= 0){
+            int utx2 = (int)(u->wx / TILE_SIZE);
+            int uty2 = (int)(u->wy / TILE_SIZE);
+            if(abs(utx2 - u->gather_tx) > 2 || abs(uty2 - u->gather_ty) > 2){
+                u->gather_tx = -1; u->gather_ty = -1;
+                u->state = US_IDLE;
+            }
+        }
+
         if(u->state != US_IDLE) continue;
 
+        /* Pick the most under-served resource type */
         int best_rt = RES_FOOD;
         int best_need = -999;
         for(int rt=0; rt<RES_COUNT; rt++){
@@ -371,14 +407,28 @@ static void ai_auto_assign_villagers(GameState *gs){
             }
         }
 
-        if(!ai_send_villager_gather(gs, i, (ResType)best_rt) &&
-           !ai_send_villager_gather(gs, i, RES_FOOD) &&
-           !ai_send_villager_gather(gs, i, RES_WOOD) &&
-           !ai_send_villager_gather(gs, i, RES_GOLD)){
-            ai_send_villager_gather(gs, i, RES_STONE);
-        } else {
+        /* Try resources in priority order: best → food → wood → gold → stone.
+         * Track which one actually succeeded so current[] is updated correctly. */
+        static const ResType fallback_order[] = {RES_FOOD, RES_WOOD, RES_GOLD, RES_STONE};
+        bool assigned = false;
+
+        /* Try the preferred resource first */
+        if(ai_send_villager_gather(gs, i, (ResType)best_rt)){
             current[best_rt]++;
+            assigned = true;
+        } else {
+            /* Fallback: try each standard resource in order */
+            for(int fi = 0; fi < (int)(sizeof(fallback_order)/sizeof(fallback_order[0])); fi++){
+                ResType rt2 = fallback_order[fi];
+                if(rt2 == (ResType)best_rt) continue; /* already tried */
+                if(ai_send_villager_gather(gs, i, rt2)){
+                    current[rt2]++;
+                    assigned = true;
+                    break;
+                }
+            }
         }
+        (void)assigned; /* suppress unused-variable warning */
     }
 }
 
@@ -408,7 +458,12 @@ static void ai_manage_scout_exploration(GameState *gs){
     if(scout_id < 0) return;
 
     Unit *scout = &gs->units[scout_id];
-    if(scout->state != US_IDLE) return;
+
+    /* Trigger a new move when the scout becomes idle OR when its current
+     * path is fully consumed (so it never stands still at a waypoint). */
+    bool needs_move = (scout->state == US_IDLE) ||
+                      (scout->state == US_MOVING && scout->path_idx >= scout->path_len);
+    if(!needs_move) return;
 
     int tx, ty;
     int scout_tx = (int)(scout->wx / TILE_SIZE);
@@ -478,8 +533,13 @@ static void ai_manage_housing(GameState *gs){
     PlayerRes *pr = &gs->res[AI];
     int free_pop = pr->pop_cap - (pr->population + ai_count_total_queued_population(gs));
     int pending_houses = ai_count_buildings(gs, BLD_HOUSE, false) - ai_count_buildings(gs, BLD_HOUSE, true);
-    int threshold = (pr->age == 0) ? 2 : 4;
-    if(free_pop <= threshold && pending_houses < 2 && pr->amount[RES_WOOD] >= 25)
+    /* Just-in-time housing: build when headroom drops below threshold.
+     * Larger headroom so we never stall villager training waiting for a house.
+     * Dark Age: trigger at 4 free pop so we stay comfortably ahead.  Feudal+: 4. */
+    int threshold = 4;
+    /* Allow 2 pending houses always – prevents pop-cap deadlock */
+    int max_pending = 2;
+    if(free_pop <= threshold && pending_houses < max_pending && pr->amount[RES_WOOD] >= 25)
         ai_try_build(gs, BLD_HOUSE);
 }
 
@@ -489,15 +549,24 @@ static void ai_manage_economy_buildings(GameState *gs){
     bool early_feudal_econ = ai_is_early_feudal_econ_focus(gs);
     bool berries_exhausted = ai_count_tiles_with_resource(gs, TILE_BERRIES) == 0;
 
-    if(pr->age == 0 && ai_count_buildings(gs, BLD_MILL, false) < 1 && pr->amount[RES_WOOD] >= 100)
-        ai_try_build_near_resource(gs, BLD_MILL, RES_FOOD);
+    /* Dark Age economy order:
+     *   1. Lumber Camp (wood is needed for every building)  – build ASAP
+     *   2. Mill (food economy near berries/farms)           – second priority
+     *   3. Mining Camp (gold workers)                       – after LC is up
+     */
     if(pr->age == 0 &&
-       ai_count_buildings(gs, BLD_MILL, false) > 0 &&
        ai_count_buildings(gs, BLD_LUMBER_CAMP, false) < 1 &&
        pr->amount[RES_WOOD] >= 100)
         ai_try_build_near_resource(gs, BLD_LUMBER_CAMP, RES_WOOD);
+
     if(pr->age == 0 &&
-       villagers >= 8 &&
+       ai_count_buildings(gs, BLD_LUMBER_CAMP, false) > 0 &&
+       ai_count_buildings(gs, BLD_MILL, false) < 1 &&
+       pr->amount[RES_WOOD] >= 100)
+        ai_try_build_near_resource(gs, BLD_MILL, RES_FOOD);
+
+    if(pr->age == 0 &&
+       villagers >= 10 &&
        ai_count_buildings(gs, BLD_LUMBER_CAMP, true) > 0 &&
        ai_count_buildings(gs, BLD_MINING_CAMP, false) < 1 &&
        pr->amount[RES_WOOD] >= 100)
@@ -527,11 +596,13 @@ static void ai_manage_military_buildings(GameState *gs){
     int villagers = ai_count_units(gs, UNIT_VILLAGER);
     bool early_feudal_econ = ai_is_early_feudal_econ_focus(gs);
 
+    /* Build Barracks in the Dark Age once Lumber Camp is complete and we have
+     * enough villagers (≥18) — required as prereq to advance to Feudal Age.
+     * This ensures the AI builds it before trying to age-advance. */
     if(ai_count_buildings(gs, BLD_BARRACKS, false) < 1 &&
        pr->amount[RES_WOOD] >= 175 &&
        (pr->age >= 1 ||
-        (villagers >= 14 &&
-         ai_count_buildings(gs, BLD_MILL, true) > 0 &&
+        (villagers >= 18 &&
          ai_count_buildings(gs, BLD_LUMBER_CAMP, true) > 0)))
         ai_try_build(gs, BLD_BARRACKS);
     if(early_feudal_econ) return;
@@ -757,6 +828,73 @@ static void ai_launch_attack(GameState *gs){
     }
 }
 
+/* ─── Rally / idle-unit management ───────────────────────────
+ * Ensures every trained military unit always has something to do:
+ *  - Below attack threshold: move to rally point near Barracks
+ *  - At/above threshold:     immediately attack (don't wait for cooldown)
+ * This runs every AI tick so newly spawned units get orders within 0.5s.
+ */
+static void ai_manage_idle_military(GameState *gs){
+    /* Find a rally tile – prefer Barracks, fall back to Town Center */
+    int rally_tx = -1, rally_ty = -1;
+    int bld_id = building_find(gs, AI, BLD_BARRACKS, true);
+    if(bld_id < 0) bld_id = building_find(gs, AI, BLD_TOWN_CENTER, true);
+    if(bld_id >= 0){
+        Building *bld = &gs->buildings[bld_id];
+        /* Rally 3 tiles to the right of the building */
+        rally_tx = bld->tx + bld->tw + 3;
+        rally_ty = bld->ty + bld->th / 2;
+        if(!map_in_bounds(rally_tx, rally_ty) || !map_is_passable(gs, rally_tx, rally_ty)){
+            int ox, oy;
+            if(map_find_passable_near(gs, rally_tx, rally_ty, &ox, &oy)){
+                rally_tx = ox; rally_ty = oy;
+            }
+        }
+    }
+
+    int enemy_bld = ai_find_enemy_building(gs);
+    PlayerRes *pr = &gs->res[AI];
+    int attack_min = (pr->age == 0) ? 4 : (pr->age == 1) ? 6 : (pr->age == 2) ? 8 : 10;
+    int military = unit_count_military(gs, AI);
+    bool should_attack = (military >= attack_min);
+
+    for(int i = 0; i < MAX_UNITS; i++){
+        Unit *u = &gs->units[i];
+        if(!u->active || u->player != AI) continue;
+        if(u->type == UNIT_VILLAGER || u->type == UNIT_SCOUT || u->type == UNIT_MONK) continue;
+        if(u->state == US_DEAD || u->state == US_DYING) continue;
+
+        /* Only act on units that have nothing to do */
+        bool is_idle = (u->state == US_IDLE);
+        /* Also re-direct a unit that finished its path but has no attack target */
+        bool path_done = (u->state == US_MOVING && u->path_idx >= u->path_len);
+        if(!is_idle && !path_done) continue;
+
+        if(should_attack){
+            /* Immediately engage – find nearest enemy unit or fall back to building */
+            int enemy_unit = -1;
+            float best = 1e30f;
+            for(int j = 0; j < MAX_UNITS; j++){
+                Unit *t = &gs->units[j];
+                if(!t->active || t->player != HU || t->state == US_DEAD) continue;
+                float d = dist2f(u->wx, u->wy, t->wx, t->wy);
+                if(d < best){ best = d; enemy_unit = j; }
+            }
+            if(enemy_unit >= 0)
+                unit_give_attack_order(gs, u, enemy_unit, -1);
+            else if(enemy_bld >= 0)
+                unit_give_attack_order(gs, u, -1, enemy_bld);
+        } else if(rally_tx >= 0){
+            /* Move to rally point to group up */
+            int utx = (int)(u->wx / TILE_SIZE);
+            int uty = (int)(u->wy / TILE_SIZE);
+            /* Only issue move if unit is not already near the rally point */
+            if(abs(utx - rally_tx) > 3 || abs(uty - rally_ty) > 3)
+                unit_give_move_order(gs, u, rally_tx, rally_ty);
+        }
+    }
+}
+
 void ai_update(GameState *gs, float dt){
     gs->ai_timer += dt;
     gs->ai_attack_cd -= dt;
@@ -775,6 +913,7 @@ void ai_update(GameState *gs, float dt){
     ai_manage_military_buildings(gs);
     ai_manage_research(gs);
     ai_manage_training(gs);
+    ai_manage_idle_military(gs);
 
     if(building_find(gs, AI, BLD_BARRACKS, true) < 0 || pr->age == 0)
         gs->ai_phase = AI_BUILD;
@@ -789,18 +928,26 @@ void ai_update(GameState *gs, float dt){
         ai_launch_attack(gs);
     }
 
+    /* Advance to Feudal Age at ~21-23 population:
+     * - Lumber Camp completed (economy foundation)
+     * - Barracks completed (Feudal Age prerequisite)
+     * - ~22 villagers trained  OR  pop-capped and can't grow further
+     * - 400 food saved up */
+    int total_vil = ai_count_units(gs, UNIT_VILLAGER) + ai_count_queued_units(gs, UNIT_VILLAGER);
+    bool vil_ready = (ai_count_units(gs, UNIT_VILLAGER) >= ai_dark_age_villager_target(gs)) ||
+                     (pr->pop_cap <= pr->population + 2 && total_vil >= 18);
     if(pr->age == 0 && !pr->advancing &&
-       ai_count_units(gs, UNIT_VILLAGER) >= ai_dark_age_villager_target(gs) &&
+       vil_ready &&
+       ai_count_buildings(gs, BLD_LUMBER_CAMP, true) > 0 &&
        ai_count_buildings(gs, BLD_BARRACKS, true) > 0 &&
-       pr->amount[RES_FOOD] >= 500)
+       pr->amount[RES_FOOD] >= 400)
         res_try_advance_age(gs, AI);
+    /* Feudal → Castle: 500F + 100W, no strict building prereq (builds happen naturally) */
     else if(pr->age == 1 && !pr->advancing &&
-            pr->amount[RES_FOOD] >= 800 && pr->amount[RES_WOOD] >= 200 &&
-            ai_count_buildings(gs, BLD_BLACKSMITH, true) > 0 &&
-            ai_count_buildings(gs, BLD_MARKET, true) > 0)
+            pr->amount[RES_FOOD] >= 500 && pr->amount[RES_WOOD] >= 100)
         res_try_advance_age(gs, AI);
+    /* Castle → Imperial: 600F + 400G */
     else if(pr->age == 2 && !pr->advancing &&
-            pr->amount[RES_FOOD] >= 1000 && pr->amount[RES_GOLD] >= 800 &&
-            ai_count_buildings(gs, BLD_UNIVERSITY, true) > 0)
+            pr->amount[RES_FOOD] >= 600 && pr->amount[RES_GOLD] >= 400)
         res_try_advance_age(gs, AI);
 }

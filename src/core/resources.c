@@ -25,9 +25,9 @@ void res_add(PlayerRes *pr, ResType rt, int amt){
 
 Cost age_advance_cost(int age){
     switch(age){
-        case 0: return (Cost){500,0,0,0};     /* Dark → Feudal */
-        case 1: return (Cost){800,200,0,0};   /* Feudal → Castle */
-        case 2: return (Cost){1000,0,800,0};  /* Castle → Imperial */
+        case 0: return (Cost){400,  0,   0, 0};  /* Dark → Feudal:    400F          */
+        case 1: return (Cost){500,100,   0, 0};  /* Feudal → Castle:  500F 100W     */
+        case 2: return (Cost){600,  0, 400, 0};  /* Castle → Imperial:600F 400G     */
         default: return (Cost){0,0,0,0};
     }
 }
@@ -40,7 +40,8 @@ bool res_try_advance_age(GameState *gs, int player){
     if(!res_can_afford(pr,c)) return false;
     res_deduct(pr,c);
     pr->advancing    = true;
-    pr->advance_timer= 30.0f - pr->age*5.0f;  /* 30/25/20 seconds */
+    /* Timers: 20s / 15s / 12s  (down from 30/25/20) */
+    pr->advance_timer = 20.0f - pr->age * 4.0f;
     const char *names[]={"Feudal Age","Castle Age","Imperial Age"};
     if(player == net_get_local_player()) game_set_alert(gs, names[pr->age]);
     return true;
@@ -60,14 +61,12 @@ void res_update_age_advance(GameState *gs, float dt){
 
 int pop_cap_from_buildings(GameState *gs, int player){
     int cap=5;  /* Town Center gives 5 if present */
-    int house_count=0;
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
         if(!b->active || !b->complete || b->player!=player) continue;
-        if(b->type==BLD_HOUSE){ cap+=5; house_count++; }
+        if(b->type==BLD_HOUSE){ cap+=5; }
     }
     if(cap>POP_CAP_MAX) cap=POP_CAP_MAX;
-    printf("pop_cap_from_buildings: player=%d houses=%d cap=%d\n", player, house_count, cap);
     return cap;
 }
 

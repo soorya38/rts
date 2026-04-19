@@ -315,6 +315,149 @@ void draw_top_bar(GameState *gs, UIState *ui){
     DrawText(buf,GetScreenWidth()-(int)(48*sc),cy,fs12,CLITERAL(Color){140,130,100,255});
 }
 
+/* ─── Age stat bar (bottom-right, above minimap) ──────────── */
+void draw_age_bar(GameState *gs){
+    /* Each age has a short Roman-numeral badge and a background tint */
+    static const char *age_roman[4] = { "I", "II", "III", "IV" };
+    static const char *age_short[4] = { "Dark", "Feudal", "Castle", "Imperial" };
+    /* Age-specific accent colours (progress fill) */
+    static const Color age_fill[4] = {
+        CLITERAL(Color){ 80,  68,  38, 255},   /* Dark    – dark brown */
+        CLITERAL(Color){ 50, 110,  55, 255},   /* Feudal  – forest green */
+        CLITERAL(Color){ 60,  90, 170, 255},   /* Castle  – slate blue */
+        CLITERAL(Color){160, 120,  25, 255},   /* Imperial – gold */
+    };
+
+    float sc  = hud_scale();
+    int nplayers = gs->num_players;
+    if(nplayers < 1) nplayers = 1;
+    if(nplayers > NUM_PLAYERS) nplayers = NUM_PLAYERS;
+
+    /* Dimensions for each player row */
+    int row_h   = (int)(22 * sc);
+    int row_gap = (int)(3  * sc);
+    int pad_x   = (int)(8  * sc);
+    int pad_y   = (int)(6  * sc);
+    int badge_w = (int)(18 * sc);   /* colored roman-numeral box */
+    int bar_w   = (int)(MINI_SIZE - badge_w - pad_x * 2 - (int)(4*sc));
+    int total_h = nplayers * row_h + (nplayers - 1) * row_gap + pad_y * 2;
+
+    /* Panel sits just above the minimap */
+    int panel_x = MINI_X;
+    int panel_y = MINI_Y - total_h - (int)(6 * sc);
+    int panel_w_full = MINI_SIZE;
+
+    int fs10 = (int)(10 * sc);
+    int fs9  = (int)(9  * sc);
+    int fs8  = (int)(8  * sc);
+
+    /* Background */
+    DrawRectangleRounded(
+        (Rectangle){(float)panel_x, (float)panel_y, (float)panel_w_full, (float)total_h},
+        0.12f, 6, CLITERAL(Color){18, 14, 10, 228}
+    );
+#if RAYLIB_VERSION_MAJOR >= 5 && RAYLIB_VERSION_MINOR >= 5
+    DrawRectangleRoundedLines(
+        (Rectangle){(float)panel_x, (float)panel_y, (float)panel_w_full, (float)total_h},
+        0.12f, 6, C_HUD_LINE
+    );
+#elif RAYLIB_VERSION_MAJOR >= 5
+    DrawRectangleRoundedLines(
+        (Rectangle){(float)panel_x, (float)panel_y, (float)panel_w_full, (float)total_h},
+        0.12f, 6, 1.0f, C_HUD_LINE
+    );
+#else
+    DrawRectangleLinesEx(
+        (Rectangle){(float)panel_x, (float)panel_y, (float)panel_w_full, (float)total_h},
+        1.0f, C_HUD_LINE
+    );
+#endif
+
+    /* Header label */
+    const char *hdr = "Ages";
+    int hdr_tw = MeasureText(hdr, fs8);
+    DrawText(hdr, panel_x + (panel_w_full - hdr_tw) / 2,
+             panel_y + (int)(2*sc), fs8, CLITERAL(Color){160, 148, 110, 200});
+
+    int row_y = panel_y + pad_y;
+
+    for(int p = 0; p < nplayers; p++){
+        PlayerRes *pr = &gs->res[p];
+        int age      = pr->age;
+        bool advancing = pr->advancing;
+        Color pcol   = player_color(p);
+        Color fill   = age_fill[age < 4 ? age : 3];
+
+        int ry = row_y + p * (row_h + row_gap);
+
+        /* Colored player badge on the left (player dot + Roman numeral) */
+        DrawRectangle(panel_x + pad_x, ry, badge_w, row_h,
+                      CLITERAL(Color){pcol.r/4, pcol.g/4, pcol.b/4, 240});
+        DrawRectangleLinesEx(
+            (Rectangle){(float)(panel_x + pad_x), (float)ry,
+                         (float)badge_w, (float)row_h},
+            1.0f, pcol
+        );
+        const char *rom = age_roman[age < 4 ? age : 3];
+        int rom_tw = MeasureText(rom, fs10);
+        DrawText(rom, panel_x + pad_x + (badge_w - rom_tw)/2,
+                 ry + (row_h - fs10)/2, fs10, pcol);
+
+        /* Age progress track */
+        int bar_x = panel_x + pad_x + badge_w + (int)(4*sc);
+        int bar_y = ry + (row_h - (int)(10*sc)) / 2;
+        int bar_th = (int)(10 * sc);
+
+        /* Background track */
+        DrawRectangle(bar_x, bar_y, bar_w, bar_th,
+                      CLITERAL(Color){30, 24, 14, 220});
+
+        /* Filled portion: age / 3 (0 = 0%, 3 = 100%) */
+        float frac = (float)age / 3.0f;
+        if(frac > 1.0f) frac = 1.0f;
+        int filled_w = (int)(bar_w * frac);
+        if(filled_w > 0)
+            DrawRectangle(bar_x, bar_y, filled_w, bar_th, fill);
+
+        /* Segment ticks at 1/3 and 2/3 */
+        for(int tick = 1; tick <= 2; tick++){
+            int tx = bar_x + bar_w * tick / 3;
+            DrawRectangle(tx - 1, bar_y, 1, bar_th,
+                          CLITERAL(Color){80, 65, 40, 200});
+        }
+
+        /* Age name label inside bar */
+        const char *aname = age_short[age < 4 ? age : 3];
+        int aname_w = MeasureText(aname, fs8);
+        Color txt_col = (frac > 0.45f)
+            ? CLITERAL(Color){240, 225, 180, 240}
+            : CLITERAL(Color){180, 165, 120, 220};
+        DrawText(aname, bar_x + (bar_w - aname_w)/2,
+                 bar_y + (bar_th - fs8)/2, fs8, txt_col);
+
+        /* Advancing indicator: pulsing "▶" arrow */
+        if(advancing && age < 3){
+            float pulse = 0.55f + 0.45f * sinf(gs->game_time * 4.0f);
+            Color arrow_col = {
+                220, 200, 80,
+                (unsigned char)(pulse * 255)
+            };
+            int arrow_x = bar_x + filled_w + (int)(3*sc);
+            if(arrow_x + (int)(8*sc) <= bar_x + bar_w)
+                DrawText(">", arrow_x, bar_y + (bar_th - fs9)/2, fs9, arrow_col);
+        }
+
+        /* Player label: "You" for local player, "P1"/"P2" etc. for others */
+        int lp = net_get_local_player();
+        const char *plbl = (p == lp) ? "You" : (p == 0 ? "P1" : p == 1 ? "P2" : p == 2 ? "P3" : "P4");
+        int plbl_w = MeasureText(plbl, fs8);
+        int label_x = panel_x + panel_w_full - pad_x - plbl_w;
+        /* Small player label on the right side of the row */
+        DrawText(plbl, label_x, ry + (row_h - fs8)/2 - (int)(1*sc), fs8,
+                 CLITERAL(Color){pcol.r, pcol.g, pcol.b, 200});
+    }
+}
+
 void draw_bottom_panel(GameState *gs, UIState *ui){
     float sc = hud_scale();
     int by_start = HUD_BOT_Y;
