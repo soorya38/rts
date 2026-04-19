@@ -65,6 +65,10 @@ static bool building_hit_info(GameState *gs, Building *b, UIState *ui, Vector2 w
             float scale_x = 165.0f / (float)tex.width;
             float scale_y = 135.0f / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (b->type == BLD_BARRACKS) {
+            float scale_x = 175.0f / (float)tex.width;
+            float scale_y = 145.0f / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else {
             float base_ratio = 1.25f / 4.0f;
             float boost = 1.25f;

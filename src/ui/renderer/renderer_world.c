@@ -207,10 +207,11 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     bool is_house = (b->type == BLD_HOUSE);
     bool is_mill = (b->type == BLD_MILL);
     bool is_lumber_camp = (b->type == BLD_LUMBER_CAMP);
+    bool is_barracks = (b->type == BLD_BARRACKS);
     if (building_is_walllike(b->type)) {
         draw_wall_piece(gs, b, mc, dc);
     } else if (tex.id != 0) {
-        /* Town Centers and age-variant economy buildings need normalized draw boxes
+        /* Town Centers and age-variant building art need normalized draw boxes
            because the age sprites are much larger source images than the old assets. */
         float sc;
         if (is_town_center) {
@@ -237,6 +238,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             float scale_x = lumber_target_width / (float)tex.width;
             float scale_y = lumber_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_barracks) {
+            const float barracks_target_width = 175.0f;
+            const float barracks_target_height = 145.0f;
+            float scale_x = barracks_target_width / (float)tex.width;
+            float scale_y = barracks_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else {
             /* Scale buildings biased towards footprint size, with a global boost */
             float base_ratio = 1.25f / 4.0f; /* TC as baseline */
@@ -253,6 +260,8 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             y_offset += 34.0f; /* mills need a stronger ground anchor than the raw art box suggests */
         } else if (is_lumber_camp) {
             y_offset += 18.0f; /* lumber camps read best a little lower than their square source art */
+        } else if (is_barracks) {
+            y_offset += 18.0f; /* barracks variants sit better when anchored closer to the footprint */
         }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
         DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
@@ -494,6 +503,13 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     const float lumber_target_height = 135.0f;
                     float s_x = lumber_target_width / (float)tex.width;
                     float s_y = lumber_target_height / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 18.0f;
+                } else if (gs->build_mode.type == BLD_BARRACKS) {
+                    const float barracks_target_width = 175.0f;
+                    const float barracks_target_height = 145.0f;
+                    float s_x = barracks_target_width / (float)tex.width;
+                    float s_y = barracks_target_height / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
                     y_offset += 18.0f;
                 } else {
