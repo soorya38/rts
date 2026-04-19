@@ -18,6 +18,7 @@ extern void draw_end_screen(GameState *gs, UIState *ui);
 extern void draw_menu(GameState *gs, UIState *ui);
 extern void draw_placement_bar(GameState *gs, UIState *ui);
 extern void draw_campaign_panel(GameState *gs, UIState *ui);
+extern void draw_campaign_briefing(GameState *gs, UIState *ui);
 
 static void draw_build_menu(GameState *gs, UIState *ui){
     if(!ui->build_panel_open) return;
@@ -115,6 +116,7 @@ void hud_draw(GameState *gs, UIState *ui){
     if(gs->build_mode.active) draw_placement_bar(gs, ui);
     draw_campaign_panel(gs, ui);
     draw_alert(gs, ui);
+    draw_campaign_briefing(gs, ui);
 
     if(gs->phase==PHASE_PAUSED){
         DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,100});
@@ -123,7 +125,7 @@ void hud_draw(GameState *gs, UIState *ui){
     }
 
     if(gs->mode == GAME_MODE_STANDARD ||
-       (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission >= 4)){
+       (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission >= 5)){
         char dbuf[64];
         const char *ap[]={"Gather","Build","Military","Attack"};
         snprintf(dbuf,sizeof(dbuf),"AI: %s | mil: %d",ap[gs->ai_phase],unit_count_military(gs,1));

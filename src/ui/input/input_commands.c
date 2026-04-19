@@ -304,6 +304,20 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
 /* ─── Master input update ─────────────────────────────────── */
 void input_update(GameState *gs, UIState *ui) {
     float dt = GetFrameTime();
+
+    if (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_briefing_open && gs->phase == PHASE_PLAYING) {
+        bool dismiss = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) ||
+                       IsKeyPressed(KEY_SPACE) || IsMouseButtonPressed(MOUSE_LEFT_BUTTON);
+#if defined(PLATFORM_ANDROID) || defined(ANDROID)
+        dismiss = dismiss || IsGestureDetected(GESTURE_TAP);
+#endif
+        if (dismiss) {
+            gs->campaign_briefing_open = false;
+            game_set_alert(gs, "Mission underway.");
+        }
+        return;
+    }
+
     update_hover(gs, ui);
     update_camera(gs, ui, dt);
 

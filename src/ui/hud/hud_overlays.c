@@ -118,6 +118,29 @@ static int draw_multiline_text(const char *text, int x, int y, int fs, Color col
     return line_count * line_h;
 }
 
+static int draw_multiline_text_centered(const char *text, int cx, int y, int fs, Color color){
+    if(!text || !text[0]) return 0;
+
+    int line_h = fs + 4;
+    int line_count = 0;
+    const char *start = text;
+    while(start && *start){
+        const char *nl = strchr(start, '\n');
+        int len = nl ? (int)(nl - start) : (int)strlen(start);
+        char line[256];
+        if(len >= (int)sizeof(line)) len = (int)sizeof(line) - 1;
+        memcpy(line, start, (size_t)len);
+        line[len] = '\0';
+        int tw = MeasureText(line, fs);
+        DrawText(line, cx - tw / 2, y + line_count * line_h, fs, color);
+        line_count++;
+        if(!nl) break;
+        start = nl + 1;
+    }
+
+    return line_count * line_h;
+}
+
 void draw_alert(GameState *gs, UIState *ui){
     (void)ui;
     if(gs->alert_timer<=0) return;
@@ -141,10 +164,11 @@ void draw_campaign_panel(GameState *gs, UIState *ui){
     int x = 10;
     int y = HUD_TOP_H + 10;
     int w = (int)(430 * sc);
-    int h = (int)(132 * sc);
+    int h = (int)(150 * sc);
     int fs14 = (int)(14 * sc);
     int fs11 = (int)(11 * sc);
     int fs10 = (int)(10 * sc);
+    int fs9 = (int)(9 * sc);
 
     DrawRectangleRounded((Rectangle){(float)x,(float)y,(float)w,(float)h},0.08f,6,
                          CLITERAL(Color){18,14,10,230});
@@ -157,8 +181,50 @@ void draw_campaign_panel(GameState *gs, UIState *ui){
     int objective_y = body_y + story_h + (int)(4 * sc);
     int objective_h = draw_multiline_text(gs->campaign_objective, body_x, objective_y, fs11, C_HUD_TXT);
     int hint_y = objective_y + objective_h + (int)(4 * sc);
-    draw_multiline_text(gs->campaign_hint, body_x, hint_y, fs10,
-                        CLITERAL(Color){170,155,120,235});
+    int hint_h = draw_multiline_text(gs->campaign_hint, body_x, hint_y, fs10,
+                                     CLITERAL(Color){170,155,120,235});
+    int status_y = hint_y + hint_h + (int)(5 * sc);
+    DrawRectangle(x + (int)(8*sc), status_y - (int)(2*sc), w - (int)(16*sc), (int)(16*sc),
+                  CLITERAL(Color){32,26,16,200});
+    DrawText(gs->campaign_status, body_x, status_y, fs9, CLITERAL(Color){210,190,145,235});
+}
+
+void draw_campaign_briefing(GameState *gs, UIState *ui){
+    (void)ui;
+    if(!gs || gs->mode != GAME_MODE_CAMPAIGN || !gs->campaign_briefing_open || gs->phase != PHASE_PLAYING) return;
+
+    float sc = hud_scale();
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
+    int bw = (int)(720 * sc);
+    if(bw > sw - 80) bw = sw - 80;
+    int bh = (int)(350 * sc);
+    if(bh > sh - 80) bh = sh - 80;
+    int bx = sw / 2 - bw / 2;
+    int by = sh / 2 - bh / 2;
+    int fs26 = (int)(26 * sc);
+    int fs16 = (int)(16 * sc);
+    int fs14 = (int)(14 * sc);
+    int fs12 = (int)(12 * sc);
+    int pad = (int)(22 * sc);
+
+    DrawRectangle(0, 0, sw, sh, CLITERAL(Color){0,0,0,165});
+    DrawRectangleRounded((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},0.05f,8,
+                         CLITERAL(Color){20,16,11,245});
+    DrawRectangleLinesEx((Rectangle){(float)bx,(float)by,(float)bw,(float)bh},1.5f,C_HUD_LINE);
+
+    draw_multiline_text_centered(gs->campaign_title, sw / 2, by + pad, fs26, C_AGE);
+    DrawRectangle(bx + pad, by + (int)(58 * sc), bw - pad * 2, 2, CLITERAL(Color){120,100,62,180});
+    draw_multiline_text(gs->campaign_story, bx + pad, by + (int)(74 * sc), fs16,
+                        CLITERAL(Color){208,194,160,240});
+    draw_multiline_text(gs->campaign_briefing, bx + pad, by + (int)(132 * sc), fs14,
+                        CLITERAL(Color){188,175,142,240});
+    draw_multiline_text(gs->campaign_objective, bx + pad, by + (int)(236 * sc), fs14,
+                        CLITERAL(Color){232,220,180,255});
+
+    const char *prompt = "Press [ENTER], [SPACE], or click to begin";
+    DrawText(prompt, sw / 2 - MeasureText(prompt, fs12) / 2, by + bh - pad - fs12,
+             fs12, CLITERAL(Color){160,145,110,240});
 }
 
 void draw_end_screen(GameState *gs, UIState *ui){
@@ -176,8 +242,9 @@ void draw_end_screen(GameState *gs, UIState *ui){
     const char *sub=win?"The enemy town center has fallen!":"Your town center has been destroyed!";
     if(gs->mode == GAME_MODE_CAMPAIGN && win)
         sub = gs->campaign_result[0] ? gs->campaign_result : gs->campaign_story;
-    int sfs=(int)(18*sc), stw=MeasureText(sub,sfs);
-    DrawText(sub,GetScreenWidth()/2-stw/2,GetScreenHeight()/2+10,sfs,CLITERAL(Color){200,185,150,255});
+    int sfs=(int)(18*sc);
+    int sub_h = draw_multiline_text_centered(sub, GetScreenWidth()/2, GetScreenHeight()/2+10, sfs,
+                                             CLITERAL(Color){200,185,150,255});
     const char *hint="Press [R] to restart or [Q] to quit";
     if(gs->mode == GAME_MODE_CAMPAIGN){
         hint = game_campaign_has_next(gs)
@@ -186,7 +253,7 @@ void draw_end_screen(GameState *gs, UIState *ui){
     }
     int hfs=(int)(14*sc);
     DrawText(hint,GetScreenWidth()/2-MeasureText(hint,hfs)/2,
-             GetScreenHeight()/2+50,hfs,CLITERAL(Color){150,135,100,255});
+             GetScreenHeight()/2+24+sub_h,hfs,CLITERAL(Color){150,135,100,255});
 }
 
 void draw_placement_bar(GameState *gs, UIState *ui){

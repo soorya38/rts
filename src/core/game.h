@@ -375,6 +375,11 @@ typedef struct {
     char       campaign_hint[224];
     char       campaign_story[224];
     char       campaign_result[224];
+    char       campaign_briefing[320];
+    char       campaign_status[160];
+    bool       campaign_briefing_open;
+    int        campaign_event_stage;
+    float      campaign_event_timer;
 } GameState;
 
 /* ─── Resource cost table helper ────────────────────────────── */

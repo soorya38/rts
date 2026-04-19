@@ -12,7 +12,7 @@ uint32_t _rng = 12345;
 /* Forward declare the building init helper from building.c */
 void buildings_init_player(GameState *gs,int player,int tc_tx,int tc_ty);
 
-#define CAMPAIGN_MISSION_COUNT 5
+#define CAMPAIGN_MISSION_COUNT 6
 
 static void campaign_set_text(GameState *gs, const char *title,
                               const char *objective, const char *hint,
@@ -22,6 +22,10 @@ static void campaign_set_text(GameState *gs, const char *title,
     snprintf(gs->campaign_hint, sizeof(gs->campaign_hint), "%s", hint ? hint : "");
     snprintf(gs->campaign_story, sizeof(gs->campaign_story), "%s", story ? story : "");
     snprintf(gs->campaign_result, sizeof(gs->campaign_result), "%s", result ? result : "");
+}
+
+static void campaign_set_briefing(GameState *gs, const char *briefing){
+    snprintf(gs->campaign_briefing, sizeof(gs->campaign_briefing), "%s", briefing ? briefing : "");
 }
 
 static bool campaign_place_ready_near_tc(GameState *gs, int player, BldType type,
@@ -74,32 +78,76 @@ static int game_count_player_barracks_troops(GameState *gs, int player){
            game_count_player_units(gs, player, UNIT_SPEARMAN);
 }
 
-static void campaign_spawn_units_near_tc(GameState *gs, int player, UnitType type, int count){
+static bool campaign_find_spawn_tile_near_tc(GameState *gs, int player, int *out_tx, int *out_ty){
     int tc = building_find(gs, player, BLD_TOWN_CENTER, true);
-    if(tc < 0) return;
+    if(tc < 0) return false;
     Building *town = &gs->buildings[tc];
-    for(int i=0; i<count; i++){
-        int tx = -1;
-        int ty = -1;
-        for(int r=1; r<=8 && tx < 0; r++){
-            for(int dy=-r; dy<=r && tx < 0; dy++){
-                for(int dx=-r; dx<=r; dx++){
-                    if(abs(dx) != r && abs(dy) != r) continue;
-                    int cx = town->tx + town->tw / 2 + dx;
-                    int cy = town->ty + town->th / 2 + dy;
-                    if(!map_in_bounds(cx, cy) || !map_is_passable(gs, cx, cy)) continue;
-                    if(unit_tile_occupied(gs, cx, cy)) continue;
-                    tx = cx;
-                    ty = cy;
-                    break;
-                }
+
+    int tx = -1;
+    int ty = -1;
+    for(int r=1; r<=8 && tx < 0; r++){
+        for(int dy=-r; dy<=r && tx < 0; dy++){
+            for(int dx=-r; dx<=r; dx++){
+                if(abs(dx) != r && abs(dy) != r) continue;
+                int cx = town->tx + town->tw / 2 + dx;
+                int cy = town->ty + town->th / 2 + dy;
+                if(!map_in_bounds(cx, cy) || !map_is_passable(gs, cx, cy)) continue;
+                if(unit_tile_occupied(gs, cx, cy)) continue;
+                tx = cx;
+                ty = cy;
+                break;
             }
         }
-        if(tx < 0 || ty < 0) break;
-        float wx = (tx + 0.5f) * TILE_SIZE;
-        float wy = (ty + 0.5f) * TILE_SIZE;
-        unit_spawn(gs, player, type, wx, wy);
     }
+
+    if(tx < 0 || ty < 0) return false;
+    *out_tx = tx;
+    *out_ty = ty;
+    return true;
+}
+
+static int campaign_spawn_unit_near_tc(GameState *gs, int player, UnitType type){
+    int tx = -1;
+    int ty = -1;
+    if(!campaign_find_spawn_tile_near_tc(gs, player, &tx, &ty)) return -1;
+    float wx = (tx + 0.5f) * TILE_SIZE;
+    float wy = (ty + 0.5f) * TILE_SIZE;
+    return unit_spawn(gs, player, type, wx, wy);
+}
+
+static int campaign_find_primary_target(GameState *gs, int player){
+    int target = building_find(gs, player, BLD_TOWN_CENTER, true);
+    if(target >= 0) return target;
+    target = building_find(gs, player, BLD_BARRACKS, true);
+    if(target >= 0) return target;
+    target = building_find(gs, player, BLD_ARCHERY_RANGE, true);
+    if(target >= 0) return target;
+    return -1;
+}
+
+static void campaign_spawn_units_near_tc(GameState *gs, int player, UnitType type, int count){
+    for(int i=0; i<count; i++){
+        if(campaign_spawn_unit_near_tc(gs, player, type) < 0) break;
+    }
+}
+
+static void campaign_spawn_wave(GameState *gs, int attacker, const UnitType *types, int count,
+                                int target_player, const char *alert){
+    int target_bld = campaign_find_primary_target(gs, target_player);
+    for(int i=0; i<count; i++){
+        int uid = campaign_spawn_unit_near_tc(gs, attacker, types[i]);
+        if(uid < 0) continue;
+        if(target_bld >= 0){
+            unit_give_attack_order(gs, &gs->units[uid], -1, target_bld);
+        } else {
+            int target_tc = building_find(gs, target_player, BLD_TOWN_CENTER, true);
+            if(target_tc >= 0){
+                Building *tb = &gs->buildings[target_tc];
+                unit_give_move_order(gs, &gs->units[uid], tb->tx + tb->tw / 2, tb->ty + tb->th / 2);
+            }
+        }
+    }
+    if(alert) game_set_alert(gs, alert);
 }
 
 static void game_setup_random_starts(GameState *gs){
@@ -144,68 +192,132 @@ static void campaign_refresh_text(GameState *gs){
     int enemy_tc = building_find(gs, 1, BLD_TOWN_CENTER, true);
     int enemy_tc_hp = (enemy_tc >= 0) ? gs->buildings[enemy_tc].hp : 0;
     int army = unit_count_military(gs, 0);
+    int enemy_army = unit_count_military(gs, 1);
+    int hold_seconds = (int)(gs->campaign_event_timer > 0.0f ? gs->campaign_event_timer + 0.5f : 0.0f);
+    int reinforcements = (int)(gs->campaign_event_timer > 0.0f ? gs->campaign_event_timer + 0.5f : 0.0f);
 
     switch(gs->campaign_mission){
         case 0:
             campaign_set_text(gs,
-                "Lesson I: First Harvest",
+                "Chapter I: Landfall",
                 "Stock 120 food and 80 wood.\nFood %d/120  Wood %d/80",
                 "Select villagers, then right-click berries or trees.\nUse the scout to reveal nearby land and resources.",
-                "The River Clan reaches Ashfall Vale with one wagon of tools.\nIf the settlers cannot gather before nightfall, the expedition ends.",
-                "The wagons are stocked, and the clan can survive its first night.");
+                "The River Clan reaches Ashfall Vale with one wagon of tools.\nBefore they can dream of walls, they must survive the first cold night.",
+                "The wagons are stocked, the fires are lit, and the expedition survives.");
+            campaign_set_briefing(gs,
+                "Elder Mira has led the River Clan beyond the old kingdom's border.\nThis valley is rich, but nothing here belongs to you yet.\n\n"
+                "Gather enough food and wood to secure a camp before sundown.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
                      "Stock 120 food and 80 wood.\nFood %d/120  Wood %d/80",
                      gs->res[0].amount[RES_FOOD], gs->res[0].amount[RES_WOOD]);
+            snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                     "Status: stores filling  |  Scout the valley for the next camp.");
             break;
         case 1:
             campaign_set_text(gs,
-                "Lesson II: Raise the Hamlet",
+                "Chapter II: A Home In The Vale",
                 "Build 2 Houses, a Mill, and a Lumber Camp.\nReach 6 Villagers.",
                 "Select the Town Center to queue villagers.\nUse [B] with a villager to open the build menu.",
-                "Elder Mira orders the camp turned into a real hamlet.\nHomes, food stores, and timber yards must come before war.",
+                "Elder Mira orders the camp turned into a real hamlet.\nHomes, food stores, and timber yards must come before any war.",
                 "New roofs rise over the camp, and Ashfall Vale becomes a village.");
+            campaign_set_briefing(gs,
+                "The clan can survive a night, but not a season, without proper shelter.\nEvery new villager means more labor, but also more mouths.\n\n"
+                "Raise houses, build drop-off sites, and turn the landing camp into a hamlet.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
                      "Build 2 Houses, a Mill, and a Lumber Camp.\nH%d/2  M%d/1  L%d/1  V%d/6",
                      houses, mill, lumber, villagers);
+            snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                     "Status: hamlet rising  |  Population room %d", gs->res[0].pop_cap - gs->res[0].population);
             break;
         case 2:
             campaign_set_text(gs,
-                "Lesson III: Prepare for Feudal",
+                "Chapter III: Iron In The Hills",
                 "Add a Mining Camp, Barracks, and 2 Farms.\nAdvance to Feudal Age.",
                 "Gold and stone need a Mining Camp drop-off.\nWhen you have 400 food, use the top bar age-up button.",
-                "Scouts return with word of the Ashen Banner beyond the hills.\nThe village needs farms, steel, and a faster age of war.",
-                "The town reaches Feudal Age before the raiders descend.");
+                "Scouts return with word of the Ashen Banner beyond the hills.\nIf the clan stays in the Dark Age, raiders will crush it before winter.",
+                "Ashfall Vale reaches Feudal Age before the raiders can strike in force.");
+            campaign_set_briefing(gs,
+                "A hostile warband called the Ashen Banner has been seen beyond the ridge.\nMira wants iron, farms, and a barracks before their scouts become an army.\n\n"
+                "Secure mining, lay farms, and advance to the Feudal Age.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
                      "Add a Mining Camp, Barracks, and 2 Farms.\nMine%d/1  Barr%d/1  Farm%d/2  Age:%s",
                      mining, barracks, farms, gs->res[0].age >= 1 ? "Feudal" : "Dark");
+            snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                     "Status: frontier arming  |  Food %d  Gold %d", gs->res[0].amount[RES_FOOD], gs->res[0].amount[RES_GOLD]);
             break;
         case 3:
             campaign_set_text(gs,
-                "Lesson IV: Answer the Raid",
+                "Chapter IV: The Broken Watch",
                 "Build an Archery Range, train 2 Archers and 3 Barracks troops.\nDestroy the raider Barracks.",
                 "Barracks train melee units; Archery Ranges train ranged units.\nRight-click enemies to attack, and use [G] to set rally points.",
-                "At dawn a raider outpost appears on the ridge above the valley.\nYou must field a mixed force before the camp strikes first.",
-                "The raider camp burns, but its banners point toward a larger army.");
+                "At dawn a raider outpost appears on the ridge above the valley.\nYou must field a mixed force before the sentries summon the full host.",
+                "The watchtower falls silent, but the Ashen Banner is already marching.");
+            campaign_set_briefing(gs,
+                "Captain Brann rides in with grim news: the enemy has raised a forward watch post.\nIf that camp survives, the valley will be mapped and the clan surrounded.\n\n"
+                "Train a real mixed force and wipe out the raider barracks.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
                      "Build an Archery Range, train 2 Archers and 3 Barracks troops.\nRange%d/1  Arch%d/2  Troops%d/3  Camp:%s",
                      archery, archers, barracks_troops, enemy_barracks > 0 ? "Up" : "Down");
+            if(gs->campaign_event_stage == 0){
+                snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                         "Status: raiders gathering  |  First attack in %ds", hold_seconds);
+            } else {
+                snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                         "Status: skirmish joined  |  Enemy army %d", enemy_army);
+            }
             break;
         case 4:
+            campaign_set_text(gs,
+                "Chapter V: Hold The Ford",
+                "Hold Ashfall Vale for %ds.\nKeep the Town Center alive through 3 attack waves.",
+                "Use rally points and grouped armies to defend.\nKeep villagers working so you can replace losses during the assault.",
+                "The enemy host reaches the river crossing before dawn.\nMira orders the bridges held while the clan prepares a counterstroke.",
+                "The ford holds. The Ashen Banner is bloodied and exposed.");
+            campaign_set_briefing(gs,
+                "The Ashen Banner launches a full assault on the river crossing.\nThis mission is about defense: keep your economy alive while surviving repeated waves.\n\n"
+                "Hold the Town Center until the attack breaks.");
+            snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
+                     "Hold Ashfall Vale for %ds.\nWaves launched %d/3  Enemy army %d",
+                     hold_seconds, gs->campaign_event_stage, enemy_army);
+            if(gs->campaign_event_stage < 3){
+                int next_wave = 0;
+                if(gs->campaign_event_stage == 0) next_wave = hold_seconds - 120;
+                else if(gs->campaign_event_stage == 1) next_wave = hold_seconds - 75;
+                else next_wave = hold_seconds - 30;
+                if(next_wave < 0) next_wave = 0;
+                snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                         "Status: hold the line  |  Next wave in %ds", next_wave);
+            } else {
+                snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                         "Status: final pressure  |  Endure for %ds more", hold_seconds);
+            }
+            break;
+        case 5:
         default:
             campaign_set_text(gs,
-                "Finale: Break the Siege",
+                "Chapter VI: Break The Ashen Banner",
                 "Destroy the enemy Town Center.\nEnemy TC %d HP  Army %d",
                 "Keep villagers gathering while reinforcements train.\nAttack in groups and keep ranged units behind your front line.",
-                "The Ashen Banner marches on Ashfall Vale for a final siege.\nWin here and the valley becomes the River Clan's first stronghold.",
-                "Ashfall Vale stands. The River Clan has won its first war.");
+                "With the ford secured, the River Clan marches on the enemy camp.\nWin here and Ashfall Vale becomes more than a refuge: it becomes a kingdom's beginning.",
+                "The Ashen Banner breaks. Ashfall Vale is won, and the River Clan finally has a home.");
+            campaign_set_briefing(gs,
+                "The enemy assault failed. Now Brann wants to end the war before the Ashen Banner can regroup.\nThis is the final mission: keep the economy running, build an army, and crush their town center.\n\n"
+                "A relief band will arrive shortly after the battle begins.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
                      "Destroy the enemy Town Center.\nEnemy TC %d HP  Army %d",
                      enemy_tc_hp, army);
+            if(gs->campaign_event_stage == 0){
+                snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                         "Status: assault forming  |  Reinforcements in %ds", reinforcements);
+            } else {
+                snprintf(gs->campaign_status, sizeof(gs->campaign_status),
+                         "Status: allied banner joined  |  Enemy army %d", enemy_army);
+            }
             break;
     }
 }
 
-static void game_update_campaign(GameState *gs){
+static void game_update_campaign(GameState *gs, float dt){
     if(!gs || gs->mode != GAME_MODE_CAMPAIGN || gs->phase != PHASE_PLAYING) return;
 
     campaign_refresh_text(gs);
@@ -245,13 +357,52 @@ static void game_update_campaign(GameState *gs){
                 game_set_alert(gs, "Mission complete: your town has reached Feudal Age.");
             }
             break;
-        case 3:
+        case 3: {
+            if(gs->campaign_event_stage == 0){
+                gs->campaign_event_timer -= dt;
+                if(gs->campaign_event_timer <= 0.0f){
+                    static const UnitType RAID[] = { UNIT_MILITIA, UNIT_MILITIA, UNIT_SCOUT };
+                    campaign_spawn_wave(gs, 1, RAID, 3, 0, "Raiders break from the watch post. Hold them off.");
+                    gs->campaign_event_stage = 1;
+                }
+            }
             if(building_find(gs, 0, BLD_ARCHERY_RANGE, true) >= 0 &&
                game_count_player_units(gs, 0, UNIT_ARCHER) >= 2 &&
                game_count_player_barracks_troops(gs, 0) >= 3 &&
                building_find(gs, 1, BLD_BARRACKS, true) < 0){
                 gs->phase = PHASE_VICTORY;
                 game_set_alert(gs, "Mission complete: the raider outpost has fallen.");
+            }
+            break;
+        }
+        case 4:
+            gs->campaign_event_timer -= dt;
+            if(gs->campaign_event_stage == 0 && gs->campaign_event_timer <= 120.0f){
+                static const UnitType WAVE1[] = { UNIT_MILITIA, UNIT_MILITIA, UNIT_ARCHER };
+                campaign_spawn_wave(gs, 1, WAVE1, 3, 0, "Wave I: the enemy tests your line at the ford.");
+                gs->campaign_event_stage = 1;
+            } else if(gs->campaign_event_stage == 1 && gs->campaign_event_timer <= 75.0f){
+                static const UnitType WAVE2[] = { UNIT_MILITIA, UNIT_ARCHER, UNIT_ARCHER, UNIT_SCOUT };
+                campaign_spawn_wave(gs, 1, WAVE2, 4, 0, "Wave II: archers and riders are crossing the river.");
+                gs->campaign_event_stage = 2;
+            } else if(gs->campaign_event_stage == 2 && gs->campaign_event_timer <= 30.0f){
+                static const UnitType WAVE3[] = { UNIT_MILITIA, UNIT_MILITIA, UNIT_ARCHER, UNIT_ARCHER, UNIT_SCOUT };
+                campaign_spawn_wave(gs, 1, WAVE3, 5, 0, "Final wave: the Ashen Banner commits everything to the ford.");
+                gs->campaign_event_stage = 3;
+            }
+            if(gs->campaign_event_timer <= 0.0f){
+                gs->phase = PHASE_VICTORY;
+                game_set_alert(gs, "Mission complete: the ford is yours.");
+            }
+            break;
+        case 5:
+            if(gs->campaign_event_stage == 0){
+                gs->campaign_event_timer -= dt;
+                if(gs->campaign_event_timer <= 0.0f){
+                    static const UnitType RELIEF[] = { UNIT_MILITIA, UNIT_MILITIA, UNIT_ARCHER, UNIT_ARCHER };
+                    campaign_spawn_wave(gs, 0, RELIEF, 4, 1, "Captain Brann arrives with a relief band. Push forward.");
+                    gs->campaign_event_stage = 1;
+                }
             }
             break;
         default:
@@ -273,6 +424,10 @@ static void game_handle_tc_destroyed(GameState *gs, int defeated_player){
     }
     if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 3){
         game_set_alert(gs, "The outpost is crippled. Finish off the raider Barracks.");
+        return;
+    }
+    if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 4){
+        game_set_alert(gs, "The enemy center falls back from the ford, but the battle is not over.");
         return;
     }
     bool any_enemy_tc = false;
@@ -539,6 +694,9 @@ void game_init_campaign(GameState *gs, uint32_t seed, int mission){
     game_init_match(gs, seed, num_players, GAME_MODE_CAMPAIGN);
     gs->campaign_seed = seed;
     gs->campaign_mission = mission;
+    gs->campaign_event_stage = 0;
+    gs->campaign_event_timer = 0.0f;
+    gs->campaign_briefing_open = true;
     game_setup_random_starts(gs);
 
     switch(mission){
@@ -572,6 +730,7 @@ void game_init_campaign(GameState *gs, uint32_t seed, int mission){
             gs->res[0].amount[RES_WOOD] = 320;
             gs->res[0].amount[RES_GOLD] = 220;
             gs->res[0].amount[RES_STONE] = 0;
+            gs->campaign_event_timer = 60.0f;
             gs->res[1].amount[RES_FOOD] = 0;
             gs->res[1].amount[RES_WOOD] = 0;
             gs->res[1].amount[RES_GOLD] = 0;
@@ -590,16 +749,50 @@ void game_init_campaign(GameState *gs, uint32_t seed, int mission){
             campaign_spawn_units_near_tc(gs, 1, UNIT_MILITIA, 3);
             break;
         case 4:
+            gs->res[0].age = 1;
+            gs->res[1].age = 1;
+            gs->campaign_event_timer = 150.0f;
+            gs->res[0].amount[RES_FOOD] = 420;
+            gs->res[0].amount[RES_WOOD] = 420;
+            gs->res[0].amount[RES_GOLD] = 220;
+            gs->res[0].amount[RES_STONE] = 125;
+            gs->res[1].amount[RES_FOOD] = 100;
+            gs->res[1].amount[RES_WOOD] = 180;
+            gs->res[1].amount[RES_GOLD] = 180;
+            gs->res[1].amount[RES_STONE] = 100;
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MILL, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_LUMBER_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_MINING_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_BARRACKS, 5, 16);
+            campaign_place_ready_near_tc(gs, 0, BLD_ARCHERY_RANGE, 5, 16);
+            campaign_place_ready_near_tc(gs, 0, BLD_WATCH_TOWER, 5, 16);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_place_ready_near_tc(gs, 0, BLD_FARM, 4, 14);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_VILLAGER, 5);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_MILITIA, 2);
+            campaign_spawn_units_near_tc(gs, 0, UNIT_ARCHER, 2);
+            campaign_place_ready_near_tc(gs, 1, BLD_HOUSE, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_MILL, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_LUMBER_CAMP, 4, 14);
+            campaign_place_ready_near_tc(gs, 1, BLD_BARRACKS, 5, 16);
+            campaign_place_ready_near_tc(gs, 1, BLD_ARCHERY_RANGE, 5, 16);
+            campaign_spawn_units_near_tc(gs, 1, UNIT_MILITIA, 2);
+            campaign_spawn_units_near_tc(gs, 1, UNIT_ARCHER, 1);
+            break;
+        case 5:
         default:
             gs->res[0].age = 1;
             gs->res[1].age = 1;
+            gs->campaign_event_timer = 75.0f;
             gs->res[0].amount[RES_FOOD] = 650;
             gs->res[0].amount[RES_WOOD] = 480;
             gs->res[0].amount[RES_GOLD] = 320;
             gs->res[0].amount[RES_STONE] = 80;
-            gs->res[1].amount[RES_FOOD] = 180;
-            gs->res[1].amount[RES_WOOD] = 260;
-            gs->res[1].amount[RES_GOLD] = 180;
+            gs->res[1].amount[RES_FOOD] = 260;
+            gs->res[1].amount[RES_WOOD] = 360;
+            gs->res[1].amount[RES_GOLD] = 240;
             gs->res[1].amount[RES_STONE] = 125;
             campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
             campaign_place_ready_near_tc(gs, 0, BLD_HOUSE, 4, 14);
@@ -621,6 +814,7 @@ void game_init_campaign(GameState *gs, uint32_t seed, int mission){
             campaign_place_ready_near_tc(gs, 1, BLD_LUMBER_CAMP, 4, 14);
             campaign_place_ready_near_tc(gs, 1, BLD_BARRACKS, 5, 16);
             campaign_place_ready_near_tc(gs, 1, BLD_ARCHERY_RANGE, 5, 16);
+            campaign_place_ready_near_tc(gs, 1, BLD_BLACKSMITH, 5, 16);
             campaign_place_ready_near_tc(gs, 1, BLD_WATCH_TOWER, 5, 16);
             campaign_spawn_units_near_tc(gs, 1, UNIT_MILITIA, 3);
             campaign_spawn_units_near_tc(gs, 1, UNIT_ARCHER, 2);
@@ -759,6 +953,8 @@ void game_update(GameState *gs, float dt){
     /* Alert countdown */
     if(gs->alert_timer>0) gs->alert_timer-=dt;
 
+    if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_briefing_open) return;
+
     /* Update pop caps */
     for (int i = 0; i < gs->num_players; i++) {
         if (gs->mode == GAME_MODE_SANDBOX) {
@@ -783,12 +979,12 @@ void game_update(GameState *gs, float dt){
 
     /* AI - only in singleplayer */
     if (!g_net_active && gs->mode != GAME_MODE_SANDBOX &&
-        !(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission < 4)) {
+        !(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission < 5)) {
         ai_update(gs,dt);
     }
 
     if (gs->mode == GAME_MODE_CAMPAIGN) {
-        game_update_campaign(gs);
+        game_update_campaign(gs, dt);
     }
 
     /* Fog of war */
