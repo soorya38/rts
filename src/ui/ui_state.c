@@ -79,12 +79,17 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_houses[1]                    = load_game_texture("assets/buildings/house_feudal.png");
     ui->tex_houses[2]                    = load_game_texture("assets/buildings/house_castle.png");
     ui->tex_houses[3]                    = load_game_texture("assets/buildings/house_imperial.png");
+    ui->tex_mills[0]                     = load_game_texture("assets/buildings/mill_dark.png");
+    ui->tex_mills[1]                     = load_game_texture("assets/buildings/mill_feudal.png");
+    ui->tex_mills[2]                     = load_game_texture("assets/buildings/mill_castle.png");
+    ui->tex_mills[3]                     = load_game_texture("assets/buildings/mill_imperial.png");
 }
 
 void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < BLD_COUNT; i++) UnloadTexture(ui->tex_buildings[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_town_centers[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_houses[i]);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mills[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
     UnloadTexture(ui->tex_env_tree);
     UnloadTexture(ui->tex_env_gold);

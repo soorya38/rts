@@ -199,6 +199,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     Texture2D tex = ui->tex_buildings[b->type];
     bool is_town_center = (b->type == BLD_TOWN_CENTER);
     bool is_house = (b->type == BLD_HOUSE);
+    bool is_mill = (b->type == BLD_MILL);
     int age = 0;
     if (b->player >= 0 && b->player < NUM_PLAYERS) {
         age = gs->res[b->player].age;
@@ -209,12 +210,14 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
         if (ui->tex_town_centers[age].id != 0) tex = ui->tex_town_centers[age];
     } else if (b->type == BLD_HOUSE) {
         if (ui->tex_houses[age].id != 0) tex = ui->tex_houses[age];
+    } else if (b->type == BLD_MILL) {
+        if (ui->tex_mills[age].id != 0) tex = ui->tex_mills[age];
     }
     if (building_is_walllike(b->type)) {
         draw_wall_piece(gs, b, mc, dc);
     } else if (tex.id != 0) {
-        /* Town Centers and houses need their own normalized draw boxes because
-           the age sprites are much larger source images than the old assets. */
+        /* Town Centers, houses, and mills need their own normalized draw boxes
+           because the age sprites are much larger source images than the old assets. */
         float sc;
         if (is_town_center) {
             const float tc_target_width = 315.0f;
@@ -228,6 +231,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             float scale_x = house_target_width / (float)tex.width;
             float scale_y = house_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_mill) {
+            const float mill_target_width = 145.0f;
+            const float mill_target_height = 150.0f;
+            float scale_x = mill_target_width / (float)tex.width;
+            float scale_y = mill_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else {
             /* Scale buildings biased towards footprint size, with a global boost */
             float base_ratio = 1.25f / 4.0f; /* TC as baseline */
@@ -240,6 +249,8 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
         float y_offset = h * 0.4f;
         if (is_house) {
             y_offset += 30.0f; /* push the sprite down to sit on the ground */
+        } else if (is_mill) {
+            y_offset += 34.0f; /* mills need a stronger ground anchor than the raw art box suggests */
         }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
         DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
@@ -467,6 +478,13 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     float s_x = 315.0f / (float)tex.width;
                     float s_y = 255.0f / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
+                } else if (gs->build_mode.type == BLD_MILL) {
+                    const float mill_target_width = 145.0f;
+                    const float mill_target_height = 150.0f;
+                    float s_x = mill_target_width / (float)tex.width;
+                    float s_y = mill_target_height / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 34.0f;
                 } else {
                     float base_ratio = 1.25f / 4.0f;
                     float boost = 1.25f;
