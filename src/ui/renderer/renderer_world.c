@@ -198,26 +198,35 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
 
     Texture2D tex = ui->tex_buildings[b->type];
     bool is_town_center = (b->type == BLD_TOWN_CENTER);
+    bool is_house = (b->type == BLD_HOUSE);
+    int age = 0;
+    if (b->player >= 0 && b->player < NUM_PLAYERS) {
+        age = gs->res[b->player].age;
+    }
+    if (age < 0) age = 0;
+    if (age > 3) age = 3;
     if (b->type == BLD_TOWN_CENTER) {
-        int age = 0;
-        if (b->player >= 0 && b->player < NUM_PLAYERS) {
-            age = gs->res[b->player].age;
-        }
-        if (age < 0) age = 0;
-        if (age > 3) age = 3;
         if (ui->tex_town_centers[age].id != 0) tex = ui->tex_town_centers[age];
+    } else if (b->type == BLD_HOUSE) {
+        if (ui->tex_houses[age].id != 0) tex = ui->tex_houses[age];
     }
     if (building_is_walllike(b->type)) {
         draw_wall_piece(gs, b, mc, dc);
     } else if (tex.id != 0) {
-        /* Town Centers need their own normalized draw box because the new age
-           sprites are much larger source images than the other building art. */
+        /* Town Centers and houses need their own normalized draw boxes because
+           the age sprites are much larger source images than the old assets. */
         float sc;
         if (is_town_center) {
             const float tc_target_width = 315.0f;
             const float tc_target_height = 255.0f;
             float scale_x = tc_target_width / (float)tex.width;
             float scale_y = tc_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_house) {
+            const float house_target_width = 150.0f;
+            const float house_target_height = 157.0f;
+            float scale_x = house_target_width / (float)tex.width;
+            float scale_y = house_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
         } else {
             /* Scale buildings biased towards footprint size, with a global boost */
@@ -228,8 +237,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
         
         float tw = tex.width * sc;
         float th = tex.height * sc;
+        float y_offset = h * 0.4f;
+        if (is_house) {
+            y_offset += 30.0f; /* push the sprite down to sit on the ground */
+        }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
-        DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + h*0.4f}, 0.0f, sc, WHITE);
+        DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
     } else {
         draw_iso_box(px+2, py+2, w-4, h-4, 15, CLITERAL(Color){140,120,90,255}, dc, dc);
     }
@@ -444,16 +457,28 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
         if(!building_is_walllike(gs->build_mode.type)){
             Texture2D tex = ui->tex_buildings[gs->build_mode.type];
             if(tex.id != 0){
-                float base_ratio = 1.25f / 4.0f;
-                float boost = 1.25f;
-                float sc = (float)tw * base_ratio * boost;
+                float sc, y_offset = h * 0.4f;
+                if (gs->build_mode.type == BLD_HOUSE) {
+                    float s_x = 150.0f / (float)tex.width;
+                    float s_y = 157.0f / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 30.0f;
+                } else if (gs->build_mode.type == BLD_TOWN_CENTER) {
+                    float s_x = 315.0f / (float)tex.width;
+                    float s_y = 255.0f / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                } else {
+                    float base_ratio = 1.25f / 4.0f;
+                    float boost = 1.25f;
+                    sc = (float)tw * base_ratio * boost;
+                }
                 float tex_w = tex.width * sc;
                 float tex_h = tex.height * sc;
                 Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
                 Color tint = valid
                     ? CLITERAL(Color){180, 255, 200, 165}
                     : CLITERAL(Color){255, 170, 170, 165};
-                DrawTextureEx(tex, (Vector2){bc.x - tex_w/2.0f, bc.y - tex_h + h*0.4f}, 0.0f, sc, tint);
+                DrawTextureEx(tex, (Vector2){bc.x - tex_w/2.0f, bc.y - tex_h + y_offset}, 0.0f, sc, tint);
             }
         }
 
