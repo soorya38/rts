@@ -1,6 +1,51 @@
 #include "ui_state.h"
+#include <stdio.h>
 #include <string.h>
 #include "net.h"
+
+static const char *asset_path_without_prefix(const char *path) {
+    return (path && strncmp(path, "assets/", 7) == 0) ? path + 7 : NULL;
+}
+
+static Texture2D load_game_texture(const char *path) {
+    Texture2D tex = {0};
+    if (!path || !path[0]) return tex;
+
+    tex = LoadTexture(path);
+    if (tex.id != 0) return tex;
+
+    const char *trimmed = asset_path_without_prefix(path);
+    if (trimmed) {
+        tex = LoadTexture(trimmed);
+        if (tex.id != 0) return tex;
+    }
+
+    const char *app_dir = GetApplicationDirectory();
+    if (app_dir && app_dir[0]) {
+        char full_path[1024];
+
+        snprintf(full_path, sizeof(full_path), "%s%s", app_dir, path);
+        tex = LoadTexture(full_path);
+        if (tex.id != 0) return tex;
+
+        snprintf(full_path, sizeof(full_path), "%s../%s", app_dir, path);
+        tex = LoadTexture(full_path);
+        if (tex.id != 0) return tex;
+
+        if (trimmed) {
+            snprintf(full_path, sizeof(full_path), "%s%s", app_dir, trimmed);
+            tex = LoadTexture(full_path);
+            if (tex.id != 0) return tex;
+
+            snprintf(full_path, sizeof(full_path), "%s../%s", app_dir, trimmed);
+            tex = LoadTexture(full_path);
+            if (tex.id != 0) return tex;
+        }
+    }
+
+    TraceLog(LOG_WARNING, "RTS >> failed to load texture: %s", path);
+    return tex;
+}
 
 void ui_state_init(UIState *ui, GameState *gs) {
     memset(ui, 0, sizeof(UIState));
@@ -24,35 +69,35 @@ void ui_state_init(UIState *ui, GameState *gs) {
 
     ui_center_on_tc(ui, gs);
 
-    ui->tex_buildings[BLD_TOWN_CENTER]   = LoadTexture("assets/buildings/town_center.png");
-    ui->tex_buildings[BLD_HOUSE]         = LoadTexture("assets/buildings/house.png");
-    ui->tex_buildings[BLD_BARRACKS]      = LoadTexture("assets/buildings/barracks.png");
-    ui->tex_buildings[BLD_ARCHERY_RANGE] = LoadTexture("assets/buildings/archery_range.png");
-    ui->tex_buildings[BLD_STABLE]        = LoadTexture("assets/buildings/stable.png");
-    ui->tex_buildings[BLD_MILL]          = LoadTexture("assets/buildings/mill.png");
-    ui->tex_buildings[BLD_LUMBER_CAMP]   = LoadTexture("assets/buildings/lumber_camp.png");
-    ui->tex_buildings[BLD_MINING_CAMP]   = LoadTexture("assets/buildings/mining_camp.png");
-    ui->tex_buildings[BLD_BLACKSMITH]    = LoadTexture("assets/buildings/blacksmith.png");
-    ui->tex_buildings[BLD_MARKET]        = LoadTexture("assets/buildings/market.png");
-    ui->tex_buildings[BLD_FARM]          = LoadTexture("assets/buildings/farm.png");
+    ui->tex_buildings[BLD_TOWN_CENTER]   = load_game_texture("assets/buildings/town_center.png");
+    ui->tex_buildings[BLD_HOUSE]         = load_game_texture("assets/buildings/house.png");
+    ui->tex_buildings[BLD_BARRACKS]      = load_game_texture("assets/buildings/barracks.png");
+    ui->tex_buildings[BLD_ARCHERY_RANGE] = load_game_texture("assets/buildings/archery_range.png");
+    ui->tex_buildings[BLD_STABLE]        = load_game_texture("assets/buildings/stable.png");
+    ui->tex_buildings[BLD_MILL]          = load_game_texture("assets/buildings/mill.png");
+    ui->tex_buildings[BLD_LUMBER_CAMP]   = load_game_texture("assets/buildings/lumber_camp.png");
+    ui->tex_buildings[BLD_MINING_CAMP]   = load_game_texture("assets/buildings/mining_camp.png");
+    ui->tex_buildings[BLD_BLACKSMITH]    = load_game_texture("assets/buildings/blacksmith.png");
+    ui->tex_buildings[BLD_MARKET]        = load_game_texture("assets/buildings/market.png");
+    ui->tex_buildings[BLD_FARM]          = load_game_texture("assets/buildings/farm.png");
 
-    ui->tex_units[UNIT_VILLAGER]         = LoadTexture("assets/units/villager_f.png");
-    ui->tex_units[UNIT_SCOUT]            = LoadTexture("assets/units/scout.png");
-    ui->tex_units[UNIT_MILITIA]          = LoadTexture("assets/units/militia.png");
-    ui->tex_units[UNIT_MAN_AT_ARMS]      = LoadTexture("assets/units/man_at_arms.png");
-    ui->tex_units[UNIT_ARCHER]           = LoadTexture("assets/units/archer.png");
-    ui->tex_units[UNIT_KNIGHT]           = LoadTexture("assets/units/knight.png");
+    ui->tex_units[UNIT_VILLAGER]         = load_game_texture("assets/units/villager_f.png");
+    ui->tex_units[UNIT_SCOUT]            = load_game_texture("assets/units/scout.png");
+    ui->tex_units[UNIT_MILITIA]          = load_game_texture("assets/units/militia.png");
+    ui->tex_units[UNIT_MAN_AT_ARMS]      = load_game_texture("assets/units/man_at_arms.png");
+    ui->tex_units[UNIT_ARCHER]           = load_game_texture("assets/units/archer.png");
+    ui->tex_units[UNIT_KNIGHT]           = load_game_texture("assets/units/knight.png");
 
-    ui->tex_env_tree                     = LoadTexture("assets/env/tree.png");
-    ui->tex_env_gold                     = LoadTexture("assets/env/gold_mine.png");
-    ui->tex_env_stone                    = LoadTexture("assets/env/stone_mine.png");
-    ui->tex_env_berries                  = LoadTexture("assets/env/berry_bush.png");
+    ui->tex_env_tree                     = load_game_texture("assets/env/tree.png");
+    ui->tex_env_gold                     = load_game_texture("assets/env/gold_mine.png");
+    ui->tex_env_stone                    = load_game_texture("assets/env/stone_mine.png");
+    ui->tex_env_berries                  = load_game_texture("assets/env/berry_bush.png");
 
-    ui->tex_ui_food                      = LoadTexture("assets/ui/food.png");
-    ui->tex_ui_wood                      = LoadTexture("assets/ui/wood.png");
-    ui->tex_ui_gold                      = LoadTexture("assets/ui/gold.png");
-    ui->tex_ui_stone                     = LoadTexture("assets/ui/stone.png");
-    ui->tex_ui_pop                       = LoadTexture("assets/ui/population.png");
+    ui->tex_ui_food                      = load_game_texture("assets/ui/food.png");
+    ui->tex_ui_wood                      = load_game_texture("assets/ui/wood.png");
+    ui->tex_ui_gold                      = load_game_texture("assets/ui/gold.png");
+    ui->tex_ui_stone                     = load_game_texture("assets/ui/stone.png");
+    ui->tex_ui_pop                       = load_game_texture("assets/ui/population.png");
 }
 
 void ui_state_deinit(UIState *ui) {
