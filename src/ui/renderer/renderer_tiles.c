@@ -26,8 +26,6 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
     Tile *t=&gs->map[y][x];
     float px=(float)(x*TILE_SIZE), py=(float)(y*TILE_SIZE);
     float s=TILE_SIZE;
-    Vector2 cp = to_rvec2(world_to_iso(px + s * 0.5f, py + s * 0.5f));
-
     switch(t->type){
         case TILE_GRASS:
             draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
@@ -49,37 +47,31 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
 
         case TILE_FOREST: {
             draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
-            float sc = 0.45f;
-            float tw = ui->tex_env_tree.width * sc;
-            float th = ui->tex_env_tree.height * sc;
-            DrawTextureEx(ui->tex_env_tree, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
+            draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,
+                         C_FOREST_L, C_FOREST_D, C_FOREST_D);
             break;
         }
 
         case TILE_GOLD: {
             draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
-            float sc = 0.35f;
-            float tw = ui->tex_env_gold.width * sc;
-            float th = ui->tex_env_gold.height * sc;
-            DrawTextureEx(ui->tex_env_gold, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
+            draw_iso_box(px + 5, py + 5, s - 10, s - 10, 14,
+                         C_GOLD_HI, C_GOLD_ORE, C_GOLD_TILE);
             break;
         }
 
         case TILE_STONE: {
             draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
-            float sc = 0.35f;
-            float tw = ui->tex_env_stone.width * sc;
-            float th = ui->tex_env_stone.height * sc;
-            DrawTextureEx(ui->tex_env_stone, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
+            draw_iso_box(px + 5, py + 5, s - 10, s - 10, 14,
+                         CLITERAL(Color){190, 186, 176, 255},
+                         C_STONE_O, C_STONE_T);
             break;
         }
 
         case TILE_BERRIES: {
             draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
-            float sc = 0.35f;
-            float tw = ui->tex_env_berries.width * sc;
-            float th = ui->tex_env_berries.height * sc;
-            DrawTextureEx(ui->tex_env_berries, (Vector2){cp.x - tw/2.0f, cp.y - th + s * 0.5f}, 0.0f, sc, WHITE);
+            draw_iso_box(px + 7, py + 7, s - 14, s - 14, 10,
+                         CLITERAL(Color){120, 160, 75, 255},
+                         C_BERRY_T, C_BERRY_F);
             break;
         }
 

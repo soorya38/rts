@@ -69,39 +69,17 @@ void ui_state_init(UIState *ui, GameState *gs) {
 
     ui_center_on_tc(ui, gs);
 
-    ui->tex_buildings[BLD_TOWN_CENTER]   = load_game_texture("assets/buildings/town_center.png");
-    ui->tex_buildings[BLD_HOUSE]         = load_game_texture("assets/buildings/house.png");
-    ui->tex_buildings[BLD_BARRACKS]      = load_game_texture("assets/buildings/barracks.png");
-    ui->tex_buildings[BLD_ARCHERY_RANGE] = load_game_texture("assets/buildings/archery_range.png");
-    ui->tex_buildings[BLD_STABLE]        = load_game_texture("assets/buildings/stable.png");
-    ui->tex_buildings[BLD_MILL]          = load_game_texture("assets/buildings/mill.png");
-    ui->tex_buildings[BLD_LUMBER_CAMP]   = load_game_texture("assets/buildings/lumber_camp.png");
-    ui->tex_buildings[BLD_MINING_CAMP]   = load_game_texture("assets/buildings/mining_camp.png");
-    ui->tex_buildings[BLD_BLACKSMITH]    = load_game_texture("assets/buildings/blacksmith.png");
-    ui->tex_buildings[BLD_MARKET]        = load_game_texture("assets/buildings/market.png");
-    ui->tex_buildings[BLD_FARM]          = load_game_texture("assets/buildings/farm.png");
-
-    ui->tex_units[UNIT_VILLAGER]         = load_game_texture("assets/units/villager_f.png");
-    ui->tex_units[UNIT_SCOUT]            = load_game_texture("assets/units/scout.png");
-    ui->tex_units[UNIT_MILITIA]          = load_game_texture("assets/units/militia.png");
-    ui->tex_units[UNIT_MAN_AT_ARMS]      = load_game_texture("assets/units/man_at_arms.png");
-    ui->tex_units[UNIT_ARCHER]           = load_game_texture("assets/units/archer.png");
-    ui->tex_units[UNIT_KNIGHT]           = load_game_texture("assets/units/knight.png");
-
-    ui->tex_env_tree                     = load_game_texture("assets/env/tree.png");
-    ui->tex_env_gold                     = load_game_texture("assets/env/gold_mine.png");
-    ui->tex_env_stone                    = load_game_texture("assets/env/stone_mine.png");
-    ui->tex_env_berries                  = load_game_texture("assets/env/berry_bush.png");
-
-    ui->tex_ui_food                      = load_game_texture("assets/ui/food.png");
-    ui->tex_ui_wood                      = load_game_texture("assets/ui/wood.png");
-    ui->tex_ui_gold                      = load_game_texture("assets/ui/gold.png");
-    ui->tex_ui_stone                     = load_game_texture("assets/ui/stone.png");
-    ui->tex_ui_pop                       = load_game_texture("assets/ui/population.png");
+    /* Keep the box-only renderer everywhere else, but allow age-specific
+       town center art. */
+    ui->tex_town_centers[0]              = load_game_texture("assets/buildings/town_center_dark.png");
+    ui->tex_town_centers[1]              = load_game_texture("assets/buildings/town_center_feudal.png");
+    ui->tex_town_centers[2]              = load_game_texture("assets/buildings/town_center_castle.png");
+    ui->tex_town_centers[3]              = load_game_texture("assets/buildings/town_center_imperial.png");
 }
 
 void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < BLD_COUNT; i++) UnloadTexture(ui->tex_buildings[i]);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_town_centers[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
     UnloadTexture(ui->tex_env_tree);
     UnloadTexture(ui->tex_env_gold);

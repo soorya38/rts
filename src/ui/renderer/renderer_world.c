@@ -197,13 +197,34 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     draw_shadow(px + w * 0.5f, py + h * 0.5f, w * 0.9f, h * 0.9f);
 
     Texture2D tex = ui->tex_buildings[b->type];
+    bool is_town_center = (b->type == BLD_TOWN_CENTER);
+    if (b->type == BLD_TOWN_CENTER) {
+        int age = 0;
+        if (b->player >= 0 && b->player < NUM_PLAYERS) {
+            age = gs->res[b->player].age;
+        }
+        if (age < 0) age = 0;
+        if (age > 3) age = 3;
+        if (ui->tex_town_centers[age].id != 0) tex = ui->tex_town_centers[age];
+    }
     if (building_is_walllike(b->type)) {
         draw_wall_piece(gs, b, mc, dc);
     } else if (tex.id != 0) {
-        /* Scale buildings biased towards footprint size, with a global boost */
-        float base_ratio = 1.25f / 4.0f; /* TC as baseline */
-        float boost = 1.25f;            /* Scale boost for 'premium' look */
-        float sc = (float)b->tw * base_ratio * boost;
+        /* Town Centers need their own normalized draw box because the new age
+           sprites are much larger source images than the other building art. */
+        float sc;
+        if (is_town_center) {
+            const float tc_target_width = 315.0f;
+            const float tc_target_height = 255.0f;
+            float scale_x = tc_target_width / (float)tex.width;
+            float scale_y = tc_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else {
+            /* Scale buildings biased towards footprint size, with a global boost */
+            float base_ratio = 1.25f / 4.0f; /* TC as baseline */
+            float boost = 1.25f;            /* Scale boost for 'premium' look */
+            sc = (float)b->tw * base_ratio * boost;
+        }
         
         float tw = tex.width * sc;
         float th = tex.height * sc;
@@ -263,34 +284,15 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
 
     float px = p.x, py = p.y - 10;
 
-    Texture2D utex = ui->tex_units[u->type];
-    if (utex.id != 0) {
-        float sc = 0.18f * size_mult;
-        float tw = utex.width * sc;
-        float th = utex.height * sc;
-        DrawTextureEx(utex, (Vector2){px - tw/2.0f, py - th + 12 * size_mult}, 0.0f, sc, WHITE);
-    } else {
-        /* Fallback primitive drawing */
-        if (u->type == UNIT_BATTERING_RAM) {
-            DrawRectangle((int)(px-10),(int)(py-6),20,12,mc);
-            DrawRectangle((int)(px-14),(int)(py-3),28,6,dc);
-        } else if (u->type == UNIT_MANGONEL) {
-            DrawRectangle((int)(px-8),(int)(py-5),16,10,mc);
-            DrawCircle((int)px,(int)(py-8),5,CLITERAL(Color){150,140,120,255});
-        } else if (u->type == UNIT_SCORPION) {
-            DrawRectangle((int)(px-9),(int)(py-4),18,8,mc);
-            DrawLine((int)px,(int)(py-8),(int)(px+10),(int)(py-14),CLITERAL(Color){200,190,150,255});
-        } else if (u->type == UNIT_BOMBARD_CANNON) {
-            DrawCircle((int)(px-8),(int)(py+3),4,dc);
-            DrawCircle((int)(px+8),(int)(py+3),4,dc);
-            DrawRectangle((int)(px-11),(int)(py-2),22,7,mc);
-            DrawRectangle((int)(px-2),(int)(py-10),14,4,CLITERAL(Color){190,180,165,255});
-            DrawCircle((int)(px-5),(int)(py-4),3,CLITERAL(Color){90,80,72,255});
-        } else {
-            DrawRectangle((int)(px-4),(int)(py-3),8,8,mc);
-            DrawCircle((int)px,(int)(py-7),5,CLITERAL(Color){220,185,145,255});
-        }
-    }
+    (void)ui;
+    (void)px;
+    (void)py;
+    float box_w = 8.0f * size_mult;
+    float box_h = 8.0f * size_mult;
+    float box_z = 10.0f * size_mult;
+    draw_iso_box(wx - box_w * 0.5f, wy - box_h * 0.5f, box_w, box_h, box_z,
+                 CLITERAL(Color){mc.r, mc.g, mc.b, (unsigned char)alpha},
+                 dc, dc);
 
     if(u->type==UNIT_VILLAGER && u->carry_amt>0){
         Color rc;
@@ -301,7 +303,8 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
             case RES_STONE: rc=CLITERAL(Color){170,160,150,255};break;
             default:        rc=WHITE; break;
         }
-        DrawCircle((int)(px+6),(int)(py-12),4,rc);
+        Vector2 carry = to_rvec2(world_to_iso(wx + 8.0f * size_mult, wy - 2.0f * size_mult));
+        DrawRectangle((int)(carry.x - 3), (int)(carry.y - 10), 6, 6, rc);
     }
     draw_hp_bar(wx,wy,18,u->hp,u->max_hp,25);
 }
