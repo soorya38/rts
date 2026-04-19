@@ -405,7 +405,7 @@ void handle_left_up(GameState *gs, UIState *ui) {
                 ui->sel_tile_x = -1; ui->sel_tile_y = -1;
             }
         }
-    } else if (fb >= 0 && (!gs->buildings[fb].complete || !has_villagers)) {
+    } else if (fb >= 0 && !has_villagers) {
         clear_selection(gs, ui);
         ui->sel_building = fb;
         gs->buildings[fb].selected = true;
@@ -480,7 +480,7 @@ void handle_tap(GameState *gs, UIState *ui) {
                 ui->sel_tile_x = -1; ui->sel_tile_y = -1;
             }
         }
-    } else if (fb >= 0 && (!gs->buildings[fb].complete || !has_villagers)) {
+    } else if (fb >= 0 && !has_villagers) {
         clear_selection(gs, ui);
         ui->sel_building = fb;
         gs->buildings[fb].selected = true;
