@@ -71,7 +71,7 @@ bool unit_uses_projectiles(UnitType type){
 }
 
 bool building_uses_projectiles(BldType type){
-    return type == BLD_WATCH_TOWER;
+    return type == BLD_WATCH_TOWER || type == BLD_TOWN_CENTER;
 }
 
 void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,

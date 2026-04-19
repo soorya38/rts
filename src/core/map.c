@@ -200,6 +200,11 @@ void map_init(GameState *gs, int *start_x, int *start_y, int num_players){
         } else {
             chosen_quads[0] = 1; chosen_quads[1] = 2;
         }
+        if((rng_next() & 1u) != 0u){
+            int tmp = chosen_quads[0];
+            chosen_quads[0] = chosen_quads[1];
+            chosen_quads[1] = tmp;
+        }
     } else if(num_players == 3){
         int quads[4] = {0, 1, 2, 3};
         for(int i=3; i>0; i--){
