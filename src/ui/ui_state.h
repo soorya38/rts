@@ -47,6 +47,7 @@ typedef struct {
     Texture2D tex_blacksmiths[4];
     Texture2D tex_markets[4];
     Texture2D tex_mining_camps[4];
+    Texture2D tex_watch_towers[4];
     Texture2D tex_units[UNIT_COUNT];
     Texture2D tex_env_tree;
     Texture2D tex_env_gold;
