@@ -208,6 +208,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     bool is_mill = (b->type == BLD_MILL);
     bool is_lumber_camp = (b->type == BLD_LUMBER_CAMP);
     bool is_barracks = (b->type == BLD_BARRACKS);
+    bool is_archery_range = (b->type == BLD_ARCHERY_RANGE);
     bool is_blacksmith = (b->type == BLD_BLACKSMITH);
     bool is_market = (b->type == BLD_MARKET);
     bool is_mining_camp = (b->type == BLD_MINING_CAMP);
@@ -247,6 +248,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             const float barracks_target_height = 145.0f;
             float scale_x = barracks_target_width / (float)tex.width;
             float scale_y = barracks_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_archery_range) {
+            const float archery_target_width = 180.0f;
+            const float archery_target_height = 175.0f;
+            float scale_x = archery_target_width / (float)tex.width;
+            float scale_y = archery_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
         } else if (is_blacksmith) {
             const float blacksmith_target_width = 170.0f;
@@ -290,6 +297,8 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             y_offset += 18.0f; /* lumber camps read best a little lower than their square source art */
         } else if (is_barracks) {
             y_offset += 18.0f; /* barracks variants sit better when anchored closer to the footprint */
+        } else if (is_archery_range) {
+            y_offset += 20.0f; /* archery ranges need a little extra drop to keep the targets grounded */
         } else if (is_blacksmith) {
             y_offset += 18.0f; /* blacksmith sets read better when grounded slightly lower */
         } else if (is_market) {
@@ -548,6 +557,13 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     float s_y = barracks_target_height / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
                     y_offset += 18.0f;
+                } else if (gs->build_mode.type == BLD_ARCHERY_RANGE) {
+                    const float archery_target_width = 180.0f;
+                    const float archery_target_height = 175.0f;
+                    float s_x = archery_target_width / (float)tex.width;
+                    float s_y = archery_target_height / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 20.0f;
                 } else if (gs->build_mode.type == BLD_BLACKSMITH) {
                     const float blacksmith_target_width = 170.0f;
                     const float blacksmith_target_height = 150.0f;

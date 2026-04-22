@@ -22,13 +22,30 @@
 #define C_WATER     CLITERAL(Color){38, 100, 185, 255}
 #define C_WATER2    CLITERAL(Color){28,  80, 155, 255}
 
+static void draw_grass_base(UIState *ui, uint8_t variant, float px, float py, float s){
+    Texture2D tex = ui ? ui->tex_land_grass[variant % 4] : (Texture2D){0};
+    if (tex.id == 0) {
+        draw_iso_quad(px, py, s, s, GRASS_COLS[variant % 4]);
+        return;
+    }
+
+    /* The extracted land art includes the tile thickness, so we draw it a bit
+       wider than the logical diamond and anchor it near the bottom edge. */
+    float target_w = s * 2.1f;
+    float target_h = ((float)tex.height / (float)tex.width) * target_w;
+    Vector2 bc = to_rvec2(world_to_iso(px + s * 0.5f, py + s * 0.5f));
+    Rectangle src = (Rectangle){0.0f, 0.0f, (float)tex.width, (float)tex.height};
+    Rectangle dst = (Rectangle){bc.x - target_w * 0.5f, bc.y - target_h + s * 0.92f, target_w, target_h};
+    DrawTexturePro(tex, src, dst, (Vector2){0}, 0.0f, WHITE);
+}
+
 void draw_tile(GameState *gs, UIState *ui, int x, int y){
     Tile *t=&gs->map[y][x];
     float px=(float)(x*TILE_SIZE), py=(float)(y*TILE_SIZE);
     float s=TILE_SIZE;
     switch(t->type){
         case TILE_GRASS:
-            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            draw_grass_base(ui, t->variant, px, py, s);
             break;
 
         case TILE_WATER: {
@@ -46,21 +63,21 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
         }
 
         case TILE_FOREST: {
-            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            draw_grass_base(ui, t->variant, px, py, s);
             draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,
                          C_FOREST_L, C_FOREST_D, C_FOREST_D);
             break;
         }
 
         case TILE_GOLD: {
-            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            draw_grass_base(ui, t->variant, px, py, s);
             draw_iso_box(px + 5, py + 5, s - 10, s - 10, 14,
                          C_GOLD_HI, C_GOLD_ORE, C_GOLD_TILE);
             break;
         }
 
         case TILE_STONE: {
-            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            draw_grass_base(ui, t->variant, px, py, s);
             draw_iso_box(px + 5, py + 5, s - 10, s - 10, 14,
                          CLITERAL(Color){190, 186, 176, 255},
                          C_STONE_O, C_STONE_T);
@@ -68,7 +85,7 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
         }
 
         case TILE_BERRIES: {
-            draw_iso_quad(px, py, s, s, GRASS_COLS[t->variant]);
+            draw_grass_base(ui, t->variant, px, py, s);
             draw_iso_box(px + 7, py + 7, s - 14, s - 14, 10,
                          CLITERAL(Color){120, 160, 75, 255},
                          C_BERRY_T, C_BERRY_F);
@@ -82,7 +99,7 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
             break;
 
         default:
-            draw_iso_quad(px, py, s, s, GRASS_COLS[0]);
+            draw_grass_base(ui, 0, px, py, s);
             break;
     }
 
