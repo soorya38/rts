@@ -206,6 +206,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     Texture2D tex = ui_get_building_texture(ui, b->type, age);
     bool is_town_center = (b->type == BLD_TOWN_CENTER);
     bool is_house = (b->type == BLD_HOUSE);
+    if (is_house) tex = ui_get_house_texture(ui, b->variant);
     bool is_mill = (b->type == BLD_MILL);
     bool is_lumber_camp = (b->type == BLD_LUMBER_CAMP);
     bool is_barracks = (b->type == BLD_BARRACKS);

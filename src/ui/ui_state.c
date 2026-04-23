@@ -47,6 +47,45 @@ static Texture2D load_game_texture(const char *path) {
     return tex;
 }
 
+static void load_house_variant_textures(UIState *ui) {
+    if (!ui) return;
+
+    Image atlas = LoadImage("assets/buildings/house_variants_atlas.png");
+    if (atlas.data == NULL) {
+        atlas = LoadImage("buildings/house_variants_atlas.png");
+    }
+
+    if (atlas.data != NULL) {
+        const int cols = 4;
+        const int rows = 4;
+        const int frame_w = atlas.width / cols;
+        const int frame_h = atlas.height / rows;
+        int idx = 0;
+
+        for (int row = 0; row < rows && idx < HOUSE_VARIANT_COUNT; row++) {
+            for (int col = 0; col < cols && idx < HOUSE_VARIANT_COUNT; col++, idx++) {
+                Rectangle frame = {
+                    (float)(col * frame_w),
+                    (float)(row * frame_h),
+                    (float)frame_w,
+                    (float)frame_h
+                };
+                Image sub = ImageFromImage(atlas, frame);
+                ui->tex_houses[idx] = LoadTextureFromImage(sub);
+                UnloadImage(sub);
+            }
+        }
+        UnloadImage(atlas);
+    }
+
+    if (ui->tex_houses[0].id != 0) return;
+
+    ui->tex_houses[0] = load_game_texture("assets/buildings/house_dark.png");
+    ui->tex_houses[1] = load_game_texture("assets/buildings/house_feudal.png");
+    ui->tex_houses[2] = load_game_texture("assets/buildings/house_castle.png");
+    ui->tex_houses[3] = load_game_texture("assets/buildings/house_imperial.png");
+}
+
 void ui_state_init(UIState *ui, GameState *gs) {
     memset(ui, 0, sizeof(UIState));
 
@@ -75,10 +114,7 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_town_centers[1]              = load_game_texture("assets/buildings/town_center_feudal.png");
     ui->tex_town_centers[2]              = load_game_texture("assets/buildings/town_center_castle.png");
     ui->tex_town_centers[3]              = load_game_texture("assets/buildings/town_center_imperial.png");
-    ui->tex_houses[0]                    = load_game_texture("assets/buildings/house_dark.png");
-    ui->tex_houses[1]                    = load_game_texture("assets/buildings/house_feudal.png");
-    ui->tex_houses[2]                    = load_game_texture("assets/buildings/house_castle.png");
-    ui->tex_houses[3]                    = load_game_texture("assets/buildings/house_imperial.png");
+    load_house_variant_textures(ui);
     ui->tex_mills[0]                     = load_game_texture("assets/buildings/mill_dark.png");
     ui->tex_mills[1]                     = load_game_texture("assets/buildings/mill_feudal.png");
     ui->tex_mills[2]                     = load_game_texture("assets/buildings/mill_castle.png");
@@ -128,7 +164,7 @@ void ui_state_init(UIState *ui, GameState *gs) {
 void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < BLD_COUNT; i++) UnloadTexture(ui->tex_buildings[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_town_centers[i]);
-    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_houses[i]);
+    for (int i = 0; i < HOUSE_VARIANT_COUNT; i++) UnloadTexture(ui->tex_houses[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mills[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_lumber_camps[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_barracks[i]);
@@ -182,7 +218,7 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
             if (ui->tex_town_centers[age].id != 0) tex = ui->tex_town_centers[age];
             break;
         case BLD_HOUSE:
-            if (ui->tex_houses[age].id != 0) tex = ui->tex_houses[age];
+            if (ui->tex_houses[0].id != 0) tex = ui->tex_houses[0];
             break;
         case BLD_MILL:
             if (ui->tex_mills[age].id != 0) tex = ui->tex_mills[age];
@@ -218,6 +254,17 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
             break;
     }
     return tex;
+}
+
+Texture2D ui_get_house_texture(const UIState *ui, uint8_t variant) {
+    if (!ui) return (Texture2D){0};
+
+    Texture2D tex = ui->tex_houses[variant % HOUSE_VARIANT_COUNT];
+    if (tex.id != 0) return tex;
+    for (int i = 0; i < HOUSE_VARIANT_COUNT; i++) {
+        if (ui->tex_houses[i].id != 0) return ui->tex_houses[i];
+    }
+    return (Texture2D){0};
 }
 
 /* Scale factor relative to 720p so all HUD elements are readable on phones */

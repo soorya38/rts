@@ -4,6 +4,12 @@
 #include "game.h"
 #include <stdio.h>
 
+static uint8_t building_choose_variant(int slot, int player, BldType type, int tx, int ty){
+    if(type != BLD_HOUSE) return 0;
+    unsigned int seed = (unsigned int)(slot * 37 + player * 53 + tx * 97 + ty * 131 + 17);
+    return (uint8_t)(seed % HOUSE_VARIANT_COUNT);
+}
+
 static void building_apply_combat_stats(Building *b){
     b->attack_dmg = 0;
     b->attack_range = 0.0f;
@@ -129,6 +135,7 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty){
     b->id           = slot;
     b->player       = player;
     b->type         = type;
+    b->variant      = building_choose_variant(slot, player, type, tx, ty);
     b->tx           = tx; b->ty=ty;
     b->tw           = w;  b->th=h;
     b->max_hp       = building_max_hp(type);
@@ -212,6 +219,7 @@ int building_place_ready(GameState *gs,int player,BldType type,int tx,int ty){
         if(b->active) continue;
         memset(b,0,sizeof(Building));
         b->active=true; b->id=i; b->player=player; b->type=type;
+        b->variant=building_choose_variant(i, player, type, tx, ty);
         b->tx=tx; b->ty=ty; b->tw=w; b->th=h;
         b->max_hp=building_max_hp(type);
         b->hp=b->max_hp;

@@ -524,6 +524,72 @@ static void place_gameplay(GameState *gs, int num_players, int *start_x, int *st
     }
 }
 
+static void place_neutral_city_buildings(GameState *gs) {
+    int neutral_player = 3; /* Uncontrollable neutral player */
+    /* Iterate with a step to leave alleyways between buildings */
+    for (int ty = 8; ty < MAP_H - 8; ty += 4) {
+        for (int tx = 8; tx < MAP_W - 8; tx += 4) {
+            /* 60% chance to try placing a building in this block */
+            if ((rng_next() % 100) < 60) {
+                BldType type = BLD_HOUSE;
+                int rnd = rng_next() % 100;
+                if (rnd < 15) type = BLD_MARKET;
+                else if (rnd < 25) type = BLD_BLACKSMITH;
+                else if (rnd < 35) type = BLD_MONASTERY;
+                else if (rnd < 45) type = BLD_WATCH_TOWER;
+                
+                int w = building_tw(type);
+                int h = building_th(type);
+                
+                if (!map_is_buildable(gs, tx, ty, w, h)) {
+                    /* Fallback to house if larger building doesn't fit */
+                    type = BLD_HOUSE;
+                    w = building_tw(type);
+                    h = building_th(type);
+                }
+                
+                if (map_is_buildable(gs, tx, ty, w, h)) {
+                    /* Ensure we don't build too close to player TCs (keep a 20-tile radius clear) */
+                    bool too_close = false;
+                    for (int i = 0; i < gs->bld_count; i++) {
+                        if (gs->buildings[i].active && gs->buildings[i].type == BLD_TOWN_CENTER) {
+                            int dx = gs->buildings[i].tx - tx;
+                            int dy = gs->buildings[i].ty - ty;
+                            if (dx*dx + dy*dy < 20*20) {
+                                too_close = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (too_close) continue;
+                    
+                    /* Place the neutral building */
+                    int slot = -1;
+                    for (int i=0; i<MAX_BUILDINGS; i++) {
+                        if (!gs->buildings[i].active) { slot = i; break; }
+                    }
+                    if (slot >= 0) {
+                        Building *b = &gs->buildings[slot];
+                        memset(b, 0, sizeof(Building));
+                        b->active = true;
+                        b->id = slot;
+                        b->player = neutral_player;
+                        b->type = type;
+                        b->tx = tx; b->ty = ty;
+                        b->tw = w; b->th = h;
+                        b->max_hp = building_max_hp(type);
+                        b->hp = b->max_hp;
+                        b->construction = 1.0f;
+                        b->complete = true;
+                        map_place_building(gs, tx, ty, w, h, slot);
+                        if(slot >= gs->bld_count) gs->bld_count = slot + 1;
+                    }
+                }
+            }
+        }
+    }
+}
+
 /* ─── Download OSM tile grid matching the bbox ─────────────── */
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -648,6 +714,7 @@ bool osm_generate_map(GameState *gs, const char *location_name,
         rasterize(gs, data);
 
     place_gameplay(gs, num_players, start_x, start_y);
+    place_neutral_city_buildings(gs);
     free(data);
 
     printf("OSM MapGen: Map generation complete for '%s'\n", location_name);

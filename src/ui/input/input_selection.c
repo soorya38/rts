@@ -46,6 +46,7 @@ static bool building_hit_info(GameState *gs, Building *b, UIState *ui, Vector2 w
     int age = 0;
     if (b->player >= 0 && b->player < NUM_PLAYERS) age = gs->res[b->player].age;
     Texture2D tex = ui_get_building_texture(ui, b->type, age);
+    if (b->type == BLD_HOUSE) tex = ui_get_house_texture(ui, b->variant);
 
     if (tex.id != 0) {
         float sc;

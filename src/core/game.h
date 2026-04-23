@@ -24,6 +24,7 @@ typedef struct { float x, y; } Vec2;
 #define ASTAR_PATH_CAP  300         /* max A* path nodes (avoids conflict with Windows MAX_PATH) */
 #define NUM_PLAYERS     4
 #define POP_CAP_MAX     200
+#define HOUSE_VARIANT_COUNT 16
 
 /* ─── Priority queue (min-heap) used by A* ─────────────────── */
 #define PQ_CAP 8192
@@ -294,6 +295,7 @@ typedef struct {
     float    attack_range;
     float    attack_cd;
     float    attack_timer;
+    uint8_t  variant;           /* visual variant for buildings that support it */
 } Building;
 
 /* ─── Build mode ghost ───────────────────────────────────────── */
