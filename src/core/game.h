@@ -103,6 +103,8 @@ typedef enum {
     TILE_STONE,
     TILE_BERRIES,
     TILE_FARM,
+    TILE_DESERT,        /* sandy/arid terrain (passable, no resources) */
+    TILE_ROAD,          /* packed earth/cobble (passable, slightly faster movement) */
 } TileType;
 
 typedef enum {
@@ -499,6 +501,7 @@ void game_campaign_restart(GameState *gs);
 void game_campaign_advance(GameState *gs);
 bool game_campaign_has_next(const GameState *gs);
 void game_init_sandbox(GameState *gs, uint32_t seed);
+void game_init_osm(GameState *gs, uint32_t seed, const char *location);
 void game_update(GameState *gs,float dt);
 void game_set_alert(GameState *gs,const char *msg);
 void game_sandbox_add_resources(GameState *gs, int player, int amount);

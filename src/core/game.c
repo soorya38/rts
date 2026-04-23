@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <time.h>
 #include "net.h"
+#include "osm_mapgen.h"
 
 uint32_t _rng = 12345;
 
@@ -935,6 +936,50 @@ void game_init_sandbox(GameState *gs, uint32_t seed){
     game_init_match(gs, seed, 2, GAME_MODE_SANDBOX);
     sandbox_setup_bases(gs);
     game_set_alert(gs, "Sandbox ready: economy, combat, tech, and building tests are all live.");
+}
+
+void game_init_osm(GameState *gs, uint32_t seed, const char *location){
+    _rng = seed;
+    memset(gs, 0, sizeof(GameState));
+    gs->mode = GAME_MODE_SANDBOX;
+    gs->phase = PHASE_PLAYING;
+    gs->num_players = 2;
+
+    for(int i = 0; i < gs->num_players; i++){
+        gs->res[i].amount[RES_FOOD] = 500;
+        gs->res[i].amount[RES_WOOD] = 500;
+        gs->res[i].amount[RES_GOLD] = 200;
+        gs->res[i].amount[RES_STONE] = 200;
+        gs->res[i].pop_cap = POP_CAP_MAX;
+    }
+
+    for(int i = 0; i < MAX_BUILDINGS; i++) gs->buildings[i].active = false;
+    for(int i = 0; i < MAX_UNITS; i++) gs->units[i].active = false;
+
+    int sx[4], sy[4];
+    bool ok = osm_generate_map(gs, location, gs->num_players, sx, sy);
+
+    if (!ok) {
+        /* Fallback to standard map */
+        map_init(gs, sx, sy, gs->num_players);
+        game_set_alert(gs, "OSM fetch failed — using random map.");
+    } else {
+        char msg[128];
+        snprintf(msg, sizeof(msg), "Map generated from: %s", location);
+        game_set_alert(gs, msg);
+    }
+
+    /* Place TCs and starting units */
+    for (int p = 0; p < gs->num_players; p++) {
+        buildings_init_player(gs, p, sx[p] - 1, sy[p] - 1);
+        float wx = (sx[p] + 0.5f) * TILE_SIZE;
+        float wy = (sy[p] + 2.5f) * TILE_SIZE;
+        for (int v = 0; v < 3; v++)
+            unit_spawn(gs, p, UNIT_VILLAGER, wx + (v-1)*20.0f, wy + 20.0f);
+        unit_spawn(gs, p, UNIT_SCOUT, wx + 40.0f, wy + 40.0f);
+    }
+
+    map_update_fog(gs);
 }
 
 /* ─── Game init (defaults to menu) ─────────────────────────── */

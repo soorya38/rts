@@ -98,6 +98,37 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
                 draw_iso_quad(px+2, py+4+row*9, s-4, 2, C_FARM_S);
             break;
 
+        case TILE_DESERT: {
+            /* Sandy terrain with subtle variation */
+            Color sand_cols[4] = {
+                CLITERAL(Color){194, 168, 118, 255},
+                CLITERAL(Color){188, 160, 112, 255},
+                CLITERAL(Color){200, 174, 124, 255},
+                CLITERAL(Color){182, 155, 108, 255}
+            };
+            draw_iso_quad(px, py, s, s, sand_cols[t->variant % 4]);
+            /* Occasional wind-ripple effect */
+            if ((x + y) % 5 == 0) {
+                draw_iso_quad(px + 4, py + s*0.3f, s - 8, 1.5f,
+                              CLITERAL(Color){210, 188, 140, 120});
+                draw_iso_quad(px + 6, py + s*0.6f, s - 12, 1.5f,
+                              CLITERAL(Color){175, 150, 100, 100});
+            }
+            break;
+        }
+
+        case TILE_ROAD: {
+            /* Packed earth/cobblestone road */
+            draw_grass_base(ui, t->variant, px, py, s);
+            Color road_main = CLITERAL(Color){125, 105, 75, 255};
+            Color road_edge = CLITERAL(Color){105, 88, 62, 255};
+            draw_iso_quad(px + 4, py + 4, s - 8, s - 8, road_main);
+            /* Edge markings for depth */
+            draw_iso_quad(px + 3, py + 3, s - 6, 2, road_edge);
+            draw_iso_quad(px + 3, py + s - 5, s - 6, 2, road_edge);
+            break;
+        }
+
         default:
             draw_grass_base(ui, 0, px, py, s);
             break;

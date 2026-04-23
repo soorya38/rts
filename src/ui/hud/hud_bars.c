@@ -8,6 +8,7 @@
 #include <string.h>
 #include "net.h"
 #include "renderer.h"
+#include <time.h>
 
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
@@ -233,6 +234,59 @@ static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_s
 
     DrawText("Hotkeys: F1 resources  F2 age  F3 ally  F4 enemy  F5 restore",
              row1_x, hint_y, fs10, CLITERAL(Color){130,120,90,210});
+
+    /* ── OSM Map Generator ── */
+    int osm_y = hint_y + (int)(16 * sc);
+    DrawText("GENERATE MAP FROM LOCATION", row1_x, osm_y, fs10, CLITERAL(Color){180,160,110,255});
+    osm_y += (int)(14 * sc);
+
+    /* Location text box */
+    int box_w = bw * 2 + gap;
+    int box_h = bh;
+    {
+        Vector2 mp2 = GetMousePosition();
+        bool hover2 = mp2.x >= row1_x && mp2.x <= row1_x+box_w && mp2.y >= osm_y && mp2.y <= osm_y+box_h;
+        if (!hover2 && GetTouchPointCount() > 0) {
+            Vector2 tp = GetTouchPosition(0);
+            hover2 = tp.x >= row1_x && tp.x <= row1_x+box_w && tp.y >= osm_y && tp.y <= osm_y+box_h;
+        }
+        bool click2 = hover2 && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsGestureDetected(GESTURE_TAP));
+        if (click2) ui->osm_location_active = true;
+        if ((IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsGestureDetected(GESTURE_TAP)) && !hover2)
+            ui->osm_location_active = false;
+
+        if (ui->osm_location_active) {
+            int ch;
+            while ((ch = GetCharPressed()) > 0) {
+                int len2 = (int)strlen(ui->osm_location);
+                if (len2 < 126) { ui->osm_location[len2] = (char)ch; ui->osm_location[len2+1] = '\0'; }
+            }
+            if (IsKeyPressed(KEY_BACKSPACE)) {
+                int len2 = (int)strlen(ui->osm_location);
+                if (len2 > 0) ui->osm_location[len2-1] = '\0';
+            }
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER))
+                ui->osm_location_active = false;
+        }
+
+        Color bg2 = ui->osm_location_active ? CLITERAL(Color){40,32,16,255} : CLITERAL(Color){22,17,10,220};
+        Color brd2 = ui->osm_location_active ? CLITERAL(Color){220,170,60,255} : CLITERAL(Color){100,82,42,200};
+        DrawRectangle(row1_x, osm_y, box_w, box_h, bg2);
+        DrawRectangleLinesEx((Rectangle){(float)row1_x,(float)osm_y,(float)box_w,(float)box_h}, 1.5f, brd2);
+        const char *disp = ui->osm_location[0] ? ui->osm_location : "Type location (e.g. Constantinople)";
+        Color tc2 = ui->osm_location[0] ? CLITERAL(Color){230,210,160,255} : CLITERAL(Color){100,90,60,220};
+        DrawText(disp, row1_x+6, osm_y+(box_h-fs10)/2, fs10, tc2);
+        if (ui->osm_location_active && ((int)(GetTime()*2) % 2 == 0)) {
+            int tw2 = MeasureText(ui->osm_location[0] ? ui->osm_location : "", fs10);
+            DrawRectangle(row1_x+6+tw2+2, osm_y+(box_h-fs10)/2, 2, fs10, CLITERAL(Color){230,210,160,255});
+        }
+    }
+    osm_y += box_h + gap;
+
+    /* Generate button */
+    if (draw_button("Generate Map", row1_x, osm_y, bw, bh, ui->osm_location[0] != '\0')) {
+        game_init_osm(gs, (uint32_t)time(NULL), ui->osm_location);
+    }
 }
 
 void draw_top_bar(GameState *gs, UIState *ui){

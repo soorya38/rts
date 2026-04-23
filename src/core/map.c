@@ -16,6 +16,7 @@ bool map_is_passable(GameState *gs,int x,int y){
     if(t->type == TILE_GOLD)    return false;
     if(t->type == TILE_STONE)   return false;
     if(t->type == TILE_BERRIES) return false;
+    /* TILE_DESERT and TILE_ROAD are passable */
     /* Buildings – farms are passable so villagers can gather; others block */
     if(t->building_id >= 0){
         Building *b = &gs->buildings[t->building_id];
@@ -34,6 +35,7 @@ bool map_is_buildable(GameState *gs,int x,int y,int w,int h){
         if(t->type==TILE_GOLD)    return false;
         if(t->type==TILE_STONE)   return false;
         if(t->type==TILE_BERRIES) return false;
+        /* TILE_DESERT and TILE_ROAD are buildable */
         if(t->building_id>=0)     return false;
     }
     return true;

@@ -5,6 +5,7 @@ TARGET  = rts
 # Detect Homebrew prefix (Apple Silicon first, then Intel)
 BREW_PREFIX := $(shell /opt/homebrew/bin/brew --prefix 2>/dev/null || /usr/local/bin/brew --prefix 2>/dev/null)
 RAYLIB_PREFIX := $(shell $(BREW_PREFIX)/bin/brew --prefix raylib 2>/dev/null)
+CURL_PREFIX   := $(shell $(BREW_PREFIX)/bin/brew --prefix curl 2>/dev/null)
 
 ifeq ($(RAYLIB_PREFIX),)
 $(error Raylib not found. Run: brew install raylib)
@@ -16,6 +17,7 @@ OBJS    := $(patsubst src/%.c, build/%.o, $(SRCS))
 DEPS    := $(OBJS:.o=.d)
 
 INCLUDES = -I$(RAYLIB_PREFIX)/include \
+           -I$(CURL_PREFIX)/include \
            -Isrc \
            -Isrc/core \
            -Isrc/core/unit \
@@ -27,6 +29,7 @@ INCLUDES = -I$(RAYLIB_PREFIX)/include \
            -Isrc/core/enet
 
 LIBS     = -L$(RAYLIB_PREFIX)/lib -lraylib \
+           -L$(CURL_PREFIX)/lib -lcurl \
            -framework OpenGL -framework Cocoa -framework IOKit \
            -framework CoreFoundation -framework CoreVideo \
            -framework CoreAudio -framework AudioToolbox

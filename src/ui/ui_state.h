@@ -37,6 +37,10 @@ typedef struct {
     char  net_ip[64];      /* IP address the client will connect to */
     bool  net_ip_active;   /* IP text-box has keyboard focus */
 
+    /* OSM map generator */
+    char  osm_location[128];   /* location name for OSM map gen */
+    bool  osm_location_active; /* location text-box has keyboard focus */
+
     /* Assets */
     Texture2D tex_buildings[BLD_COUNT];
     Texture2D tex_town_centers[4];
