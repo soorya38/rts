@@ -526,17 +526,20 @@ static void place_gameplay(GameState *gs, int num_players, int *start_x, int *st
 
 static void place_neutral_city_buildings(GameState *gs) {
     int neutral_player = 3; /* Uncontrollable neutral player */
-    /* Iterate with a step to leave alleyways between buildings */
-    for (int ty = 8; ty < MAP_H - 8; ty += 4) {
-        for (int tx = 8; tx < MAP_W - 8; tx += 4) {
-            /* 60% chance to try placing a building in this block */
-            if ((rng_next() % 100) < 60) {
+    /* Upgrade neutral player to Castle Age so their markets/blacksmiths look grander */
+    gs->res[neutral_player].age = 2;
+
+    /* Iterate with a tighter step (+= 2) to pack buildings very closely, resembling dense ancient cities */
+    for (int ty = 6; ty < MAP_H - 6; ty += 2) {
+        for (int tx = 6; tx < MAP_W - 6; tx += 2) {
+            /* 75% chance to try placing a building in this spot */
+            if ((rng_next() % 100) < 75) {
                 BldType type = BLD_HOUSE;
                 int rnd = rng_next() % 100;
-                if (rnd < 15) type = BLD_MARKET;
-                else if (rnd < 25) type = BLD_BLACKSMITH;
-                else if (rnd < 35) type = BLD_MONASTERY;
-                else if (rnd < 45) type = BLD_WATCH_TOWER;
+                if (rnd < 10) type = BLD_MARKET;
+                else if (rnd < 20) type = BLD_BLACKSMITH;
+                else if (rnd < 30) type = BLD_MONASTERY;
+                else if (rnd < 40) type = BLD_WATCH_TOWER;
                 
                 int w = building_tw(type);
                 int h = building_th(type);
@@ -549,19 +552,30 @@ static void place_neutral_city_buildings(GameState *gs) {
                 }
                 
                 if (map_is_buildable(gs, tx, ty, w, h)) {
-                    /* Ensure we don't build too close to player TCs (keep a 20-tile radius clear) */
+                    /* Ensure we don't build too close to player TCs (keep a 25-tile radius clear) */
                     bool too_close = false;
                     for (int i = 0; i < gs->bld_count; i++) {
                         if (gs->buildings[i].active && gs->buildings[i].type == BLD_TOWN_CENTER) {
                             int dx = gs->buildings[i].tx - tx;
                             int dy = gs->buildings[i].ty - ty;
-                            if (dx*dx + dy*dy < 20*20) {
+                            if (dx*dx + dy*dy < 25*25) {
                                 too_close = true;
                                 break;
                             }
                         }
                     }
                     if (too_close) continue;
+
+                    /* Ensure the footprint doesn't overlap roads */
+                    bool over_road = false;
+                    for (int dy = 0; dy < h; dy++) {
+                        for (int dx = 0; dx < w; dx++) {
+                            if (gs->map[ty+dy][tx+dx].type == TILE_ROAD) {
+                                over_road = true;
+                            }
+                        }
+                    }
+                    if (over_road) continue;
                     
                     /* Place the neutral building */
                     int slot = -1;
@@ -581,6 +595,12 @@ static void place_neutral_city_buildings(GameState *gs) {
                         b->hp = b->max_hp;
                         b->construction = 1.0f;
                         b->complete = true;
+                        /* Randomize visual variant for houses (4 Tamil variants) */
+                        if (type == BLD_HOUSE) {
+                            b->variant = rng_next() % 4;
+                        } else {
+                            b->variant = 0;
+                        }
                         map_place_building(gs, tx, ty, w, h, slot);
                         if(slot >= gs->bld_count) gs->bld_count = slot + 1;
                     }

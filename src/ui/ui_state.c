@@ -50,40 +50,17 @@ static Texture2D load_game_texture(const char *path) {
 static void load_house_variant_textures(UIState *ui) {
     if (!ui) return;
 
-    Image atlas = LoadImage("assets/buildings/house_variants_atlas.png");
-    if (atlas.data == NULL) {
-        atlas = LoadImage("buildings/house_variants_atlas.png");
-    }
-
-    if (atlas.data != NULL) {
-        const int cols = 4;
-        const int rows = 4;
-        const int frame_w = atlas.width / cols;
-        const int frame_h = atlas.height / rows;
-        int idx = 0;
-
-        for (int row = 0; row < rows && idx < HOUSE_VARIANT_COUNT; row++) {
-            for (int col = 0; col < cols && idx < HOUSE_VARIANT_COUNT; col++, idx++) {
-                Rectangle frame = {
-                    (float)(col * frame_w),
-                    (float)(row * frame_h),
-                    (float)frame_w,
-                    (float)frame_h
-                };
-                Image sub = ImageFromImage(atlas, frame);
-                ui->tex_houses[idx] = LoadTextureFromImage(sub);
-                UnloadImage(sub);
-            }
-        }
-        UnloadImage(atlas);
-    }
-
-    if (ui->tex_houses[0].id != 0) return;
-
-    ui->tex_houses[0] = load_game_texture("assets/buildings/house_dark.png");
-    ui->tex_houses[1] = load_game_texture("assets/buildings/house_feudal.png");
-    ui->tex_houses[2] = load_game_texture("assets/buildings/house_castle.png");
-    ui->tex_houses[3] = load_game_texture("assets/buildings/house_imperial.png");
+    /* Load the 4 new Tamil cultured house variants */
+    ui->tex_houses[0] = load_game_texture("assets/buildings/tamil_house_0.png");
+    ui->tex_houses[1] = load_game_texture("assets/buildings/tamil_house_1.png");
+    ui->tex_houses[2] = load_game_texture("assets/buildings/tamil_house_2.png");
+    ui->tex_houses[3] = load_game_texture("assets/buildings/tamil_house_3.png");
+    
+    /* Fallbacks if the above fail */
+    if (ui->tex_houses[0].id == 0) ui->tex_houses[0] = load_game_texture("assets/buildings/house_dark.png");
+    if (ui->tex_houses[1].id == 0) ui->tex_houses[1] = load_game_texture("assets/buildings/house_feudal.png");
+    if (ui->tex_houses[2].id == 0) ui->tex_houses[2] = load_game_texture("assets/buildings/house_castle.png");
+    if (ui->tex_houses[3].id == 0) ui->tex_houses[3] = load_game_texture("assets/buildings/house_imperial.png");
 }
 
 void ui_state_init(UIState *ui, GameState *gs) {
@@ -137,11 +114,11 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_stables[3]                   = load_game_texture("assets/buildings/stable_imperial.png");
     ui->tex_blacksmiths[0]               = load_game_texture("assets/buildings/blacksmith_dark.png");
     ui->tex_blacksmiths[1]               = load_game_texture("assets/buildings/blacksmith_feudal.png");
-    ui->tex_blacksmiths[2]               = load_game_texture("assets/buildings/blacksmith_castle.png");
+    ui->tex_blacksmiths[2]               = load_game_texture("assets/buildings/tamil_blacksmith.png");
     ui->tex_blacksmiths[3]               = load_game_texture("assets/buildings/blacksmith_imperial.png");
     ui->tex_markets[0]                   = load_game_texture("assets/buildings/market_dark.png");
     ui->tex_markets[1]                   = load_game_texture("assets/buildings/market_feudal.png");
-    ui->tex_markets[2]                   = load_game_texture("assets/buildings/market_castle.png");
+    ui->tex_markets[2]                   = load_game_texture("assets/buildings/tamil_market.png");
     ui->tex_markets[3]                   = load_game_texture("assets/buildings/market_imperial.png");
     ui->tex_mining_camps[0]              = load_game_texture("assets/buildings/mining_camp_dark.png");
     ui->tex_mining_camps[1]              = load_game_texture("assets/buildings/mining_camp_feudal.png");
@@ -149,11 +126,11 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_mining_camps[3]              = load_game_texture("assets/buildings/mining_camp_imperial.png");
     ui->tex_watch_towers[0]              = load_game_texture("assets/buildings/watch_tower_dark.png");
     ui->tex_watch_towers[1]              = load_game_texture("assets/buildings/watch_tower_feudal.png");
-    ui->tex_watch_towers[2]              = load_game_texture("assets/buildings/watch_tower_castle.png");
+    ui->tex_watch_towers[2]              = load_game_texture("assets/buildings/tamil_watch_tower.png");
     ui->tex_watch_towers[3]              = load_game_texture("assets/buildings/watch_tower_imperial.png");
     ui->tex_monasteries[0]               = load_game_texture("assets/buildings/monastery_dark.png");
     ui->tex_monasteries[1]               = load_game_texture("assets/buildings/monastery_feudal.png");
-    ui->tex_monasteries[2]               = load_game_texture("assets/buildings/monastery_castle.png");
+    ui->tex_monasteries[2]               = load_game_texture("assets/buildings/tamil_monastery.png");
     ui->tex_monasteries[3]               = load_game_texture("assets/buildings/monastery_imperial.png");
     ui->tex_land_grass[0]                = load_game_texture("assets/ui/land_grass_0.png");
     ui->tex_land_grass[1]                = load_game_texture("assets/ui/land_grass_1.png");
