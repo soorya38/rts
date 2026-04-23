@@ -64,8 +64,23 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
 
         case TILE_FOREST: {
             draw_grass_base(ui, t->variant, px, py, s);
-            draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,
-                         C_FOREST_L, C_FOREST_D, C_FOREST_D);
+            int tree_idx = (x * 3 + y * 7 + t->variant) % 4;
+            Texture2D tex = ui->tex_env_trees[tree_idx];
+            if (tex.id != 0) {
+                float tw = tex.width;
+                float th = tex.height;
+                float scale = (s * 1.5f) / tw;
+                float dw = tw * scale;
+                float dh = th * scale;
+                float dx = px + s * 0.5f - dw * 0.5f;
+                float dy = py + s - dh;
+                Rectangle src = {0, 0, tw, th};
+                Rectangle dst = {dx, dy, dw, dh};
+                DrawTexturePro(tex, src, dst, (Vector2){0,0}, 0.0f, WHITE);
+            } else {
+                draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,
+                             C_FOREST_L, C_FOREST_D, C_FOREST_D);
+            }
             break;
         }
 

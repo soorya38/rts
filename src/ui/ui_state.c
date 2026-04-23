@@ -136,6 +136,11 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_land_grass[1]                = load_game_texture("assets/ui/land_grass_1.png");
     ui->tex_land_grass[2]                = load_game_texture("assets/ui/land_grass_2.png");
     ui->tex_land_grass[3]                = load_game_texture("assets/ui/land_grass_3.png");
+    
+    ui->tex_env_trees[0]                 = load_game_texture("assets/buildings/tamil_tree_0.png");
+    ui->tex_env_trees[1]                 = load_game_texture("assets/buildings/tamil_tree_1.png");
+    ui->tex_env_trees[2]                 = load_game_texture("assets/buildings/tamil_tree_2.png");
+    ui->tex_env_trees[3]                 = load_game_texture("assets/buildings/tamil_tree_3.png");
 }
 
 void ui_state_deinit(UIState *ui) {
@@ -154,7 +159,7 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_monasteries[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_land_grass[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
-    UnloadTexture(ui->tex_env_tree);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_env_trees[i]);
     UnloadTexture(ui->tex_env_gold);
     UnloadTexture(ui->tex_env_stone);
     UnloadTexture(ui->tex_env_berries);

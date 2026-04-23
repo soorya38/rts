@@ -57,7 +57,7 @@ typedef struct {
     Texture2D tex_monasteries[4];
     Texture2D tex_land_grass[4];
     Texture2D tex_units[UNIT_COUNT];
-    Texture2D tex_env_tree;
+    Texture2D tex_env_trees[4];
     Texture2D tex_env_gold;
     Texture2D tex_env_stone;
     Texture2D tex_env_berries;
