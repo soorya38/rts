@@ -285,6 +285,15 @@ static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_s
 
     /* Generate button */
     if (draw_button("Generate Map", row1_x, osm_y, bw, bh, ui->osm_location[0] != '\0')) {
+        /* Unload previous OSM tile textures */
+        if (ui->osm_tiles_loaded > 0) {
+            for (int r = 0; r < 4; r++)
+                for (int c = 0; c < 4; c++)
+                    if (ui->tex_osm_tiles[r][c].id != 0)
+                        UnloadTexture(ui->tex_osm_tiles[r][c]);
+            ui->osm_tiles_loaded = 0;
+            memset(ui->tex_osm_tiles, 0, sizeof(ui->tex_osm_tiles));
+        }
         game_init_osm(gs, (uint32_t)time(NULL), ui->osm_location);
     }
 }

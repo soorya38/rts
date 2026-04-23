@@ -524,6 +524,84 @@ static void place_gameplay(GameState *gs, int num_players, int *start_x, int *st
     }
 }
 
+/* ─── Download OSM tile grid matching the bbox ─────────────── */
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
+/* Convert lat/lon to tile coordinates at given zoom */
+static int lon_to_tile_x(double lon, int z) {
+    return (int)((lon + 180.0) / 360.0 * (1 << z));
+}
+static int lat_to_tile_y(double lat, int z) {
+    double r = lat * M_PI / 180.0;
+    return (int)((1.0 - log(tan(r) + 1.0/cos(r)) / M_PI) / 2.0 * (1 << z));
+}
+
+static bool download_single_tile(int z, int tx, int ty, const char *path) {
+    char url[256];
+    snprintf(url, sizeof(url),
+        "https://tile.openstreetmap.org/%d/%d/%d.png", z, tx, ty);
+    CURL *c = curl_easy_init();
+    if (!c) return false;
+    FILE *fp = fopen(path, "wb");
+    if (!fp) { curl_easy_cleanup(c); return false; }
+    curl_easy_setopt(c, CURLOPT_URL, url);
+    curl_easy_setopt(c, CURLOPT_WRITEDATA, fp);
+    curl_easy_setopt(c, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(c, CURLOPT_USERAGENT, "RTS-MapGen/1.0");
+    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
+    CURLcode res = curl_easy_perform(c);
+    curl_easy_cleanup(c);
+    fclose(fp);
+    if (res != CURLE_OK) { remove(path); return false; }
+    return true;
+}
+
+static bool download_osm_bbox_tiles(GameState *gs, BBox *bbox) {
+    /* Choose zoom level: try to fit the bbox in 2-4 tiles per axis */
+    int zoom = 15;
+    int x0, y0, x1, y1;
+
+    /* Adjust zoom so the bbox fits in at most 4 tiles per axis */
+    for (zoom = 16; zoom >= 12; zoom--) {
+        x0 = lon_to_tile_x(bbox->west, zoom);
+        x1 = lon_to_tile_x(bbox->east, zoom);
+        y0 = lat_to_tile_y(bbox->north, zoom); /* north = smaller Y */
+        y1 = lat_to_tile_y(bbox->south, zoom); /* south = larger Y */
+        int cols = x1 - x0 + 1;
+        int rows = y1 - y0 + 1;
+        if (cols <= 4 && rows <= 4) break;
+    }
+
+    int cols = x1 - x0 + 1;
+    int rows = y1 - y0 + 1;
+    if (cols < 1) cols = 1;
+    if (rows < 1) rows = 1;
+    if (cols > 4) cols = 4; /* safety cap */
+    if (rows > 4) rows = 4;
+
+    gs->osm_tile_z = zoom;
+    gs->osm_tile_x0 = x0;
+    gs->osm_tile_y0 = y0;
+    gs->osm_tile_cols = cols;
+    gs->osm_tile_rows = rows;
+
+    printf("OSM MapGen: Downloading %dx%d tile grid at zoom %d (tiles %d,%d to %d,%d)...\n",
+           cols, rows, zoom, x0, y0, x0+cols-1, y0+rows-1);
+
+    bool any_ok = false;
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            char path[64];
+            snprintf(path, sizeof(path), "osm_tile_%d_%d.png", c, r);
+            if (download_single_tile(zoom, x0 + c, y0 + r, path))
+                any_ok = true;
+        }
+    }
+    return any_ok;
+}
+
 /* ─── Public API ───────────────────────────────────────────── */
 bool osm_generate_map(GameState *gs, const char *location_name,
                       int num_players, int *start_x, int *start_y) {
@@ -551,6 +629,15 @@ bool osm_generate_map(GameState *gs, const char *location_name,
     if (!data) { curl_global_cleanup(); return false; }
 
     bool ok = fetch_features(&bbox, data);
+
+    /* Download OSM tile grid matching the exact bbox */
+    gs->osm_map_available = download_osm_bbox_tiles(gs, &bbox);
+    gs->osm_bbox_west = bbox.west;
+    gs->osm_bbox_east = bbox.east;
+    gs->osm_bbox_north = bbox.north;
+    gs->osm_bbox_south = bbox.south;
+    snprintf(gs->osm_location_name, sizeof(gs->osm_location_name), "%s", location_name);
+
     curl_global_cleanup();
 
     if (!ok || data->way_count == 0) {

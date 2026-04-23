@@ -106,23 +106,164 @@ static void draw_build_menu(GameState *gs, UIState *ui){
 
 /* ─── TAB Map Overview ─────────────────────────────────────── */
 static void draw_map_overview(GameState *gs, UIState *ui) {
-    (void)ui;
     int sw = GetScreenWidth(), sh = GetScreenHeight();
+    float sc = hud_scale();
+    int fs16 = (int)(16 * sc);
+    int fs12 = (int)(12 * sc);
+    int fs11 = (int)(11 * sc);
+    int fs10 = (int)(10 * sc);
+
     /* Dim background */
-    DrawRectangle(0, 0, sw, sh, CLITERAL(Color){0, 0, 0, 180});
+    DrawRectangle(0, 0, sw, sh, CLITERAL(Color){0, 0, 0, 200});
 
-    /* Map dimensions */
-    int pad = 40;
-    int map_size = (sw < sh ? sw : sh) - pad * 2;
-    if (map_size > 600) map_size = 600;
-    int ox = (sw - map_size) / 2;
-    int oy = (sh - map_size) / 2;
-    float tile_px = (float)map_size / MAP_W;
+    /* Lazy-load the OSM tile grid */
+    bool have_osm = gs->osm_map_available;
+    if (have_osm && ui->osm_tiles_loaded == 0) {
+        int loaded = 0;
+        for (int r = 0; r < gs->osm_tile_rows && r < 4; r++) {
+            for (int c = 0; c < gs->osm_tile_cols && c < 4; c++) {
+                char path[64];
+                snprintf(path, sizeof(path), "osm_tile_%d_%d.png", c, r);
+                if (FileExists(path)) {
+                    ui->tex_osm_tiles[r][c] = LoadTexture(path);
+                    if (ui->tex_osm_tiles[r][c].id != 0) loaded++;
+                }
+            }
+        }
+        ui->osm_tiles_loaded = loaded;
+        if (loaded == 0) have_osm = false;
+        printf("DEBUG: lazy load complete. loaded=%d, have_osm=%d\n", loaded, have_osm);
+    }
 
-    /* Background */
-    DrawRectangle(ox - 2, oy - 2, map_size + 4, map_size + 4, CLITERAL(Color){30, 24, 14, 255});
-    DrawRectangleLinesEx((Rectangle){(float)(ox-2), (float)(oy-2),
-                         (float)(map_size+4), (float)(map_size+4)}, 2.0f,
+    /* Layout: two panels side-by-side if OSM available, else single centered */
+    int pad = (int)(30 * sc);
+    int gap = (int)(20 * sc);
+    int panel_size;
+    int left_x, right_x, panels_y;
+
+    if (have_osm && ui->osm_tiles_loaded > 0) {
+        /* Two panels side-by-side */
+        int avail_w = sw - pad * 2 - gap;
+        int avail_h = sh - pad * 2 - (int)(60 * sc);
+        panel_size = (avail_w / 2 < avail_h) ? avail_w / 2 : avail_h;
+        if (panel_size > 500) panel_size = 500;
+        int total_w = panel_size * 2 + gap;
+        left_x = (sw - total_w) / 2;
+        right_x = left_x + panel_size + gap;
+        panels_y = (sh - panel_size) / 2 + (int)(10 * sc);
+    } else {
+        /* Single panel centered */
+        int avail = (sw < sh ? sw : sh) - pad * 2;
+        panel_size = avail < 550 ? avail : 550;
+        left_x = -1;
+        right_x = (sw - panel_size) / 2;
+        panels_y = (sh - panel_size) / 2 + (int)(10 * sc);
+    }
+
+    /* ── Left panel: OSM real-world map (tile grid) ── */
+    if (have_osm && ui->osm_tiles_loaded > 0 && left_x >= 0) {
+        int cols = gs->osm_tile_cols;
+        int rows = gs->osm_tile_rows;
+
+        /* Border */
+        DrawRectangle(left_x - 3, panels_y - 3, panel_size + 6, panel_size + 6,
+                      CLITERAL(Color){30, 50, 80, 255});
+        DrawRectangleLinesEx((Rectangle){(float)(left_x-3), (float)(panels_y-3),
+                             (float)(panel_size+6), (float)(panel_size+6)}, 2.0f,
+                             CLITERAL(Color){80, 140, 220, 255});
+
+        /* Calculate exact fractional tile coordinates for the bbox */
+        double z = gs->osm_tile_z;
+        double tx0_exact = (gs->osm_bbox_west + 180.0) / 360.0 * (1 << (int)z);
+        double tx1_exact = (gs->osm_bbox_east + 180.0) / 360.0 * (1 << (int)z);
+        double r_north = gs->osm_bbox_north * 3.14159265358979323846 / 180.0;
+        double ty0_exact = (1.0 - log(tan(r_north) + 1.0/cos(r_north)) / 3.14159265358979323846) / 2.0 * (1 << (int)z);
+        double r_south = gs->osm_bbox_south * 3.14159265358979323846 / 180.0;
+        double ty1_exact = (1.0 - log(tan(r_south) + 1.0/cos(r_south)) / 3.14159265358979323846) / 2.0 * (1 << (int)z);
+
+        double exact_cols = tx1_exact - tx0_exact;
+        double exact_rows = ty1_exact - ty0_exact;
+
+        /* Prevent division by zero */
+        if (exact_cols > 0.0001 && exact_rows > 0.0001) {
+            /* We want the bbox (tx0_exact to tx1_exact, ty0_exact to ty1_exact) to perfectly fill panel_size */
+            double scale_x = panel_size / exact_cols;
+            double scale_y = panel_size / exact_rows;
+
+            Rectangle panel_rect = {(float)left_x, (float)panels_y, (float)panel_size, (float)panel_size};
+
+            for (int r = 0; r < rows && r < 4; r++) {
+                for (int c = 0; c < cols && c < 4; c++) {
+                    if (ui->tex_osm_tiles[r][c].id == 0) continue;
+                    
+                    /* The tile's integer coordinates are gs->osm_tile_x0 + c */
+                    double tile_x = gs->osm_tile_x0 + c;
+                    double tile_y = gs->osm_tile_y0 + r;
+
+                    /* Calculate where this full tile would be drawn relative to the bbox top-left */
+                    double draw_x = left_x + (tile_x - tx0_exact) * scale_x;
+                    double draw_y = panels_y + (tile_y - ty0_exact) * scale_y;
+
+                    Rectangle full_dst = {
+                        (float)draw_x,
+                        (float)draw_y,
+                        (float)scale_x,
+                        (float)scale_y};
+                        
+                    /* Intersect full_dst with panel_rect */
+                    float cx1 = (full_dst.x > panel_rect.x) ? full_dst.x : panel_rect.x;
+                    float cy1 = (full_dst.y > panel_rect.y) ? full_dst.y : panel_rect.y;
+                    float cx2 = (full_dst.x + full_dst.width < panel_rect.x + panel_rect.width) ? (full_dst.x + full_dst.width) : (panel_rect.x + panel_rect.width);
+                    float cy2 = (full_dst.y + full_dst.height < panel_rect.y + panel_rect.height) ? (full_dst.y + full_dst.height) : (panel_rect.y + panel_rect.height);
+
+                    if (cx2 > cx1 && cy2 > cy1) {
+                        Rectangle dst = {cx1, cy1, cx2 - cx1, cy2 - cy1};
+                        
+                        /* Calculate corresponding src rectangle */
+                        float src_scale_x = (float)ui->tex_osm_tiles[r][c].width / full_dst.width;
+                        float src_scale_y = (float)ui->tex_osm_tiles[r][c].height / full_dst.height;
+                        
+                        Rectangle src = {
+                            (dst.x - full_dst.x) * src_scale_x,
+                            (dst.y - full_dst.y) * src_scale_y,
+                            dst.width * src_scale_x,
+                            dst.height * src_scale_y
+                        };
+
+                        DrawTexturePro(ui->tex_osm_tiles[r][c], src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+                    }
+                }
+            }
+        }
+
+        /* Label */
+        const char *osm_label = "OPENSTREETMAP";
+        int lw = MeasureText(osm_label, fs12);
+        DrawText(osm_label, left_x + (panel_size - lw) / 2, panels_y - (int)(22 * sc),
+                 fs12, CLITERAL(Color){80, 160, 255, 255});
+
+        /* Location name */
+        if (gs->osm_location_name[0]) {
+            int nw = MeasureText(gs->osm_location_name, fs10);
+            DrawText(gs->osm_location_name, left_x + (panel_size - nw) / 2,
+                     panels_y + panel_size + (int)(6 * sc), fs10,
+                     CLITERAL(Color){140, 180, 230, 220});
+        }
+
+        /* Attribution */
+        const char *attr = "\xC2\xA9 OpenStreetMap contributors";
+        DrawText(attr, left_x, panels_y + panel_size + (int)(20 * sc), fs10,
+                 CLITERAL(Color){100, 100, 120, 180});
+    }
+
+    /* ── Right panel: Game map ── */
+    float tile_px = (float)panel_size / MAP_W;
+
+    /* Border */
+    DrawRectangle(right_x - 3, panels_y - 3, panel_size + 6, panel_size + 6,
+                  CLITERAL(Color){30, 24, 14, 255});
+    DrawRectangleLinesEx((Rectangle){(float)(right_x-3), (float)(panels_y-3),
+                         (float)(panel_size+6), (float)(panel_size+6)}, 2.0f,
                          CLITERAL(Color){160, 140, 80, 255});
 
     /* Draw tiles */
@@ -140,7 +281,7 @@ static void draw_map_overview(GameState *gs, UIState *ui) {
                 case TILE_ROAD:    c = CLITERAL(Color){125, 105, 75, 255}; break;
                 default:           c = CLITERAL(Color){75, 120, 45, 255}; break;
             }
-            DrawRectangle(ox + (int)(x * tile_px), oy + (int)(y * tile_px),
+            DrawRectangle(right_x + (int)(x * tile_px), panels_y + (int)(y * tile_px),
                           (int)(tile_px + 1), (int)(tile_px + 1), c);
         }
     }
@@ -151,40 +292,34 @@ static void draw_map_overview(GameState *gs, UIState *ui) {
         if (!b->active) continue;
         Color bc = player_color(b->player);
         bc.a = 220;
-        int bx = ox + (int)(b->tx * tile_px);
-        int by = oy + (int)(b->ty * tile_px);
+        int bx = right_x + (int)(b->tx * tile_px);
+        int by = panels_y + (int)(b->ty * tile_px);
         int bw2 = (int)(b->tw * tile_px + 1);
         int bh2 = (int)(b->th * tile_px + 1);
         DrawRectangle(bx, by, bw2, bh2, bc);
-        DrawRectangleLinesEx((Rectangle){(float)bx, (float)by, (float)bw2, (float)bh2},
-                             1.0f, CLITERAL(Color){255, 255, 255, 100});
     }
 
-    /* Draw units as small dots */
+    /* Draw units as dots */
     for (int i = 0; i < MAX_UNITS; i++) {
         Unit *u = &gs->units[i];
         if (!u->active || u->state == US_DEAD) continue;
         Color uc = player_color(u->player);
-        int ux2 = ox + (int)((u->wx / TILE_SIZE) * tile_px);
-        int uy2 = oy + (int)((u->wy / TILE_SIZE) * tile_px);
+        int ux2 = right_x + (int)((u->wx / TILE_SIZE) * tile_px);
+        int uy2 = panels_y + (int)((u->wy / TILE_SIZE) * tile_px);
         int dot = (int)(tile_px * 0.6f);
         if (dot < 2) dot = 2;
         DrawRectangle(ux2 - dot/2, uy2 - dot/2, dot, dot, uc);
     }
 
-    /* Title */
-    float sc = hud_scale();
-    int fs16 = (int)(16 * sc);
-    int fs11 = (int)(11 * sc);
-    const char *title = "MAP OVERVIEW";
-    int tw2 = MeasureText(title, fs16);
-    DrawText(title, (sw - tw2) / 2, oy - (int)(30 * sc), fs16,
-             CLITERAL(Color){220, 200, 140, 255});
+    /* Game map label */
+    const char *game_label = "GAME MAP";
+    int glw = MeasureText(game_label, fs12);
+    DrawText(game_label, right_x + (panel_size - glw) / 2, panels_y - (int)(22 * sc),
+             fs12, CLITERAL(Color){220, 200, 140, 255});
 
-    /* Legend */
-    int lx = ox + map_size + (int)(16 * sc);
-    int ly = oy;
-    int lh = (int)(16 * sc);
+    /* Legend below game map */
+    int leg_y = panels_y + panel_size + (int)(6 * sc);
+    int leg_x = right_x;
     struct { Color c; const char *name; } legend[] = {
         {CLITERAL(Color){75, 120, 45, 255}, "Grass"},
         {CLITERAL(Color){38, 100, 185, 255}, "Water"},
@@ -193,21 +328,28 @@ static void draw_map_overview(GameState *gs, UIState *ui) {
         {CLITERAL(Color){125, 105, 75, 255}, "Road"},
         {CLITERAL(Color){220, 185, 30, 255}, "Gold"},
         {CLITERAL(Color){155, 148, 138, 255}, "Stone"},
-        {CLITERAL(Color){190, 40, 40, 255}, "Berries"},
     };
-    int lcount = (int)(sizeof(legend) / sizeof(legend[0]));
-    if (lx + 100 < sw) { /* Only draw if room */
-        for (int i = 0; i < lcount; i++) {
-            DrawRectangle(lx, ly + i * lh, (int)(10 * sc), (int)(10 * sc), legend[i].c);
-            DrawText(legend[i].name, lx + (int)(14 * sc), ly + i * lh, fs11,
-                     CLITERAL(Color){200, 185, 140, 230});
-        }
+    int lcount = 7;
+    int leg_col_w = panel_size / 4;
+    for (int i = 0; i < lcount; i++) {
+        int col = i % 4, row = i / 4;
+        int lx = leg_x + col * leg_col_w;
+        int ly = leg_y + row * (int)(14 * sc);
+        DrawRectangle(lx, ly + 1, (int)(8 * sc), (int)(8 * sc), legend[i].c);
+        DrawText(legend[i].name, lx + (int)(11 * sc), ly, fs10,
+                 CLITERAL(Color){200, 185, 140, 220});
     }
+
+    /* Title */
+    const char *title = "MAP OVERVIEW";
+    int tw2 = MeasureText(title, fs16);
+    DrawText(title, (sw - tw2) / 2, panels_y - (int)(48 * sc), fs16,
+             CLITERAL(Color){220, 200, 140, 255});
 
     /* Hint */
     const char *hint = "Hold [TAB] to view  |  Release to return";
     int hw = MeasureText(hint, fs11);
-    DrawText(hint, (sw - hw) / 2, oy + map_size + (int)(10 * sc), fs11,
+    DrawText(hint, (sw - hw) / 2, panels_y + panel_size + (int)(34 * sc), fs11,
              CLITERAL(Color){130, 120, 90, 220});
 }
 

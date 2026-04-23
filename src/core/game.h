@@ -382,6 +382,14 @@ typedef struct {
     bool       campaign_briefing_open;
     int        campaign_event_stage;
     float      campaign_event_timer;
+
+    /* OSM map generator metadata */
+    bool       osm_map_available;
+    char       osm_location_name[128];
+    int        osm_tile_z;             /* zoom level */
+    int        osm_tile_x0, osm_tile_y0; /* top-left tile coords */
+    int        osm_tile_cols, osm_tile_rows; /* grid size */
+    double     osm_bbox_west, osm_bbox_east, osm_bbox_north, osm_bbox_south;
 } GameState;
 
 /* ─── Resource cost table helper ────────────────────────────── */

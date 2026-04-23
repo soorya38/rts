@@ -66,6 +66,10 @@ typedef struct {
     Texture2D tex_ui_gold;
     Texture2D tex_ui_stone;
     Texture2D tex_ui_pop;
+
+    /* OSM map overlay */
+    Texture2D tex_osm_tiles[4][4]; /* [row][col] */
+    int       osm_tiles_loaded;    /* count of loaded tiles, 0 = not loaded */
 } UIState;
 
 void ui_state_init(UIState *ui, GameState *gs);
