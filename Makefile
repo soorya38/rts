@@ -13,6 +13,7 @@ endif
 # Recursively find all .c files in src/
 SRCS    := $(shell find src -name '*.c')
 OBJS    := $(patsubst src/%.c, build/%.o, $(SRCS))
+DEPS    := $(OBJS:.o=.d)
 
 INCLUDES = -I$(RAYLIB_PREFIX)/include \
            -Isrc \
@@ -37,7 +38,7 @@ $(TARGET): $(OBJS)
 
 build/%.o: src/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(INCLUDES) -c -o $@ $<
+	$(CC) $(CFLAGS) -MMD -MP $(INCLUDES) -c -o $@ $<
 
 run: $(TARGET)
 	./$(TARGET)
@@ -70,3 +71,5 @@ android-logs:
 android-deploy: android-clean android-install android-logs
 
 .PHONY: all run clean install-deps android android-clean android-install android-logs android-deploy
+
+-include $(DEPS)

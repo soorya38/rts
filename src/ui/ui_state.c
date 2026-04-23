@@ -111,6 +111,10 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_watch_towers[1]              = load_game_texture("assets/buildings/watch_tower_feudal.png");
     ui->tex_watch_towers[2]              = load_game_texture("assets/buildings/watch_tower_castle.png");
     ui->tex_watch_towers[3]              = load_game_texture("assets/buildings/watch_tower_imperial.png");
+    ui->tex_monasteries[0]               = load_game_texture("assets/buildings/monastery_dark.png");
+    ui->tex_monasteries[1]               = load_game_texture("assets/buildings/monastery_feudal.png");
+    ui->tex_monasteries[2]               = load_game_texture("assets/buildings/monastery_castle.png");
+    ui->tex_monasteries[3]               = load_game_texture("assets/buildings/monastery_imperial.png");
     ui->tex_land_grass[0]                = load_game_texture("assets/ui/land_grass_0.png");
     ui->tex_land_grass[1]                = load_game_texture("assets/ui/land_grass_1.png");
     ui->tex_land_grass[2]                = load_game_texture("assets/ui/land_grass_2.png");
@@ -129,6 +133,7 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_markets[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mining_camps[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_watch_towers[i]);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_monasteries[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_land_grass[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
     UnloadTexture(ui->tex_env_tree);
@@ -197,6 +202,9 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
             break;
         case BLD_WATCH_TOWER:
             if (ui->tex_watch_towers[age].id != 0) tex = ui->tex_watch_towers[age];
+            break;
+        case BLD_MONASTERY:
+            if (ui->tex_monasteries[age].id != 0) tex = ui->tex_monasteries[age];
             break;
         default:
             break;
