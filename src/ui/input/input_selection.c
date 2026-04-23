@@ -73,6 +73,10 @@ static bool building_hit_info(GameState *gs, Building *b, UIState *ui, Vector2 w
             float scale_x = 180.0f / (float)tex.width;
             float scale_y = 175.0f / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (b->type == BLD_STABLE) {
+            float scale_x = 210.0f / (float)tex.width;
+            float scale_y = 160.0f / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else if (b->type == BLD_BLACKSMITH) {
             float scale_x = 170.0f / (float)tex.width;
             float scale_y = 150.0f / (float)tex.height;

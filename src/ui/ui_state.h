@@ -45,6 +45,7 @@ typedef struct {
     Texture2D tex_lumber_camps[4];
     Texture2D tex_barracks[4];
     Texture2D tex_archery_ranges[4];
+    Texture2D tex_stables[4];
     Texture2D tex_blacksmiths[4];
     Texture2D tex_markets[4];
     Texture2D tex_mining_camps[4];

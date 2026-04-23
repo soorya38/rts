@@ -95,6 +95,10 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_archery_ranges[1]            = load_game_texture("assets/buildings/archery_range_feudal.png");
     ui->tex_archery_ranges[2]            = load_game_texture("assets/buildings/archery_range_castle.png");
     ui->tex_archery_ranges[3]            = load_game_texture("assets/buildings/archery_range_imperial.png");
+    ui->tex_stables[0]                   = load_game_texture("assets/buildings/stable_dark.png");
+    ui->tex_stables[1]                   = load_game_texture("assets/buildings/stable_feudal.png");
+    ui->tex_stables[2]                   = load_game_texture("assets/buildings/stable_castle.png");
+    ui->tex_stables[3]                   = load_game_texture("assets/buildings/stable_imperial.png");
     ui->tex_blacksmiths[0]               = load_game_texture("assets/buildings/blacksmith_dark.png");
     ui->tex_blacksmiths[1]               = load_game_texture("assets/buildings/blacksmith_feudal.png");
     ui->tex_blacksmiths[2]               = load_game_texture("assets/buildings/blacksmith_castle.png");
@@ -129,6 +133,7 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_lumber_camps[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_barracks[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_archery_ranges[i]);
+    for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_stables[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_blacksmiths[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_markets[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mining_camps[i]);
@@ -190,6 +195,9 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
             break;
         case BLD_ARCHERY_RANGE:
             if (ui->tex_archery_ranges[age].id != 0) tex = ui->tex_archery_ranges[age];
+            break;
+        case BLD_STABLE:
+            if (ui->tex_stables[age].id != 0) tex = ui->tex_stables[age];
             break;
         case BLD_BLACKSMITH:
             if (ui->tex_blacksmiths[age].id != 0) tex = ui->tex_blacksmiths[age];
