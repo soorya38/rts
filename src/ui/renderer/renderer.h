@@ -8,6 +8,7 @@
 /* Iso primitives (renderer_fx.c) */
 void draw_iso_quad(float bx, float by, float bw, float bh, Color c);
 void draw_iso_box(float bx, float by, float bw, float bh, float h, Color top, Color left, Color right);
+void draw_iso_box_outline(float bx, float by, float bw, float bh, float h, Color c);
 void draw_hp_bar(float wx, float wy, float w, int hp, int max_hp, float above);
 void draw_construction(float px, float py, float w, float h, float prog, Color mc);
 void draw_shadow(float wx, float wy, float rw, float rh);

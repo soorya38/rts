@@ -7,6 +7,7 @@
 #include "net.h"
 #include "hud_common.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 /* Forward declarations of functions in other renderer files */
 extern void draw_tile(GameState *gs, UIState *ui, int x, int y);
@@ -650,18 +651,68 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
 }
 
 /* ─── Master render ───────────────────────────────────────── */
+typedef struct {
+    int type; // 0 = building, 1 = unit
+    int id;
+    float depth;
+} RenderEntity;
+
+static int compare_entities(const void *a, const void *b) {
+    const RenderEntity *ea = (const RenderEntity *)a;
+    const RenderEntity *eb = (const RenderEntity *)b;
+    if (ea->depth < eb->depth) return -1;
+    if (ea->depth > eb->depth) return 1;
+    return 0;
+}
+
+static bool is_unit_obscured(GameState *gs, Unit *u) {
+    Vector2 up = to_rvec2(world_to_iso(u->wx, u->wy));
+    float u_depth = (u->wx / (float)TILE_SIZE) + (u->wy / (float)TILE_SIZE);
+
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *b = &gs->buildings[i];
+        if (!b->active) continue;
+        float b_depth = (b->tx + b->tw / 2.0f) + (b->ty + b->th / 2.0f);
+        
+        // If building is behind the unit, it can't obscure it
+        if (b_depth < u_depth) continue; 
+        
+        float px = b->tx * TILE_SIZE, py = b->ty * TILE_SIZE;
+        float w = b->tw * TILE_SIZE, h = b->th * TILE_SIZE;
+        Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
+        
+        // Rough visual screen bounds for the building's texture
+        float screen_w = (b->tw + b->th) * 32.0f; 
+        float screen_h = screen_w * 0.5f + 100.0f;
+        Rectangle rect = { bc.x - screen_w * 0.5f, bc.y - screen_h + 16.0f, screen_w, screen_h };
+        
+        if (CheckCollisionPointRec((Vector2){up.x, up.y - 10.0f}, rect)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void renderer_draw_world(GameState *gs, UIState *ui){
     int lp = net_get_local_player();
     for(int y=0;y<MAP_H;y++)
         for(int x=0;x<MAP_W;x++)
             if(gs->map[y][x].fog[lp]!=FOG_HIDDEN) draw_tile(gs, ui, x, y);
 
+    // Collect all renderable entities for depth sorting
+    RenderEntity *entities = malloc(sizeof(RenderEntity) * (MAX_BUILDINGS + MAX_UNITS));
+    int entity_count = 0;
+
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
         if(!b->active) continue;
         int bx=b->tx+b->tw/2, by=b->ty+b->th/2;
         if(gs->map[clampi(by,0,MAP_H-1)][clampi(bx,0,MAP_W-1)].fog[lp]==FOG_HIDDEN) continue;
-        draw_building(gs, ui, b);
+        
+        entities[entity_count].type = 0;
+        entities[entity_count].id = i;
+        entities[entity_count].depth = (b->tx + b->tw / 2.0f) + (b->ty + b->th / 2.0f);
+        entity_count++;
     }
 
     for(int i=0;i<MAX_UNITS;i++){
@@ -671,8 +722,52 @@ void renderer_draw_world(GameState *gs, UIState *ui){
         if(!map_in_bounds(utx,uty)) continue;
         FogState fs=gs->map[uty][utx].fog[lp];
         if(u->player!=lp && fs!=FOG_VISIBLE) continue;
-        draw_unit(gs, ui, u, gs->game_time);
+        
+        entities[entity_count].type = 1;
+        entities[entity_count].id = i;
+        entities[entity_count].depth = (u->wx / (float)TILE_SIZE) + (u->wy / (float)TILE_SIZE);
+        entity_count++;
     }
+
+    // Sort back-to-front
+    qsort(entities, entity_count, sizeof(RenderEntity), compare_entities);
+
+    // Draw entities
+    for(int i=0; i<entity_count; i++){
+        if(entities[i].type == 0){
+            draw_building(gs, ui, &gs->buildings[entities[i].id]);
+        } else {
+            draw_unit(gs, ui, &gs->units[entities[i].id], gs->game_time);
+        }
+    }
+
+    // Draw outlines for obscured units
+    for(int i=0;i<MAX_UNITS;i++){
+        Unit *u=&gs->units[i];
+        if(!u->active||u->state==US_DEAD) continue;
+        int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
+        if(!map_in_bounds(utx,uty)) continue;
+        FogState fs=gs->map[uty][utx].fog[lp];
+        if(u->player!=lp && fs!=FOG_VISIBLE) continue;
+        
+        if (is_unit_obscured(gs, u)) {
+            float size_mult = 1.0f;
+            if (u->type == UNIT_SCOUT) size_mult = 1.4f;
+            else if (u->type == UNIT_BATTERING_RAM) size_mult = 1.8f;
+            else if (u->type == UNIT_MANGONEL) size_mult = 1.6f;
+            else if (u->type == UNIT_SCORPION) size_mult = 1.5f;
+            else if (u->type == UNIT_BOMBARD_CANNON) size_mult = 1.7f;
+
+            float box_w = 8.0f * size_mult;
+            float box_h = 8.0f * size_mult;
+            float box_z = 10.0f * size_mult;
+            
+            Color oc = player_color_alpha(u->player, 180); 
+            draw_iso_box_outline(u->wx - box_w * 0.5f, u->wy - box_h * 0.5f, box_w, box_h, box_z, oc);
+        }
+    }
+
+    free(entities);
 
     draw_projectiles(gs);
     draw_selected_rally_point(gs, ui);

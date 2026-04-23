@@ -85,8 +85,35 @@ void draw_iso_box(float bx, float by, float bw, float bh, float h, Color top, Co
     DrawTriangle(p3, t2, t3, right);
     DrawTriangle(p4, p3, t4, left);
     DrawTriangle(t4, p3, t3, left);
+    DrawTriangle(t4, p3, t3, left);
     DrawTriangle(t1, t4, t2, top);
     DrawTriangle(t4, t3, t2, top);
+}
+
+void draw_iso_box_outline(float bx, float by, float bw, float bh, float h, Color c) {
+    Vector2 p1 = to_rvec2(world_to_iso(bx, by));
+    Vector2 p2 = to_rvec2(world_to_iso(bx + bw, by));
+    Vector2 p3 = to_rvec2(world_to_iso(bx + bw, by + bh));
+    Vector2 p4 = to_rvec2(world_to_iso(bx, by + bh));
+    Vector2 t1 = {p1.x, p1.y - h};
+    Vector2 t2 = {p2.x, p2.y - h};
+    Vector2 t3 = {p3.x, p3.y - h};
+    Vector2 t4 = {p4.x, p4.y - h};
+    
+    DrawLineEx(t1, t2, 1.5f, c);
+    DrawLineEx(t2, t3, 1.5f, c);
+    DrawLineEx(t3, t4, 1.5f, c);
+    DrawLineEx(t4, t1, 1.5f, c);
+    
+    DrawLineEx(p1, t1, 1.5f, c);
+    DrawLineEx(p2, t2, 1.5f, c);
+    DrawLineEx(p3, t3, 1.5f, c);
+    DrawLineEx(p4, t4, 1.5f, c);
+    
+    DrawLineEx(p1, p2, 1.5f, c);
+    DrawLineEx(p2, p3, 1.5f, c);
+    DrawLineEx(p3, p4, 1.5f, c);
+    DrawLineEx(p4, p1, 1.5f, c);
 }
 
 void draw_hp_bar(float wx, float wy, float w, int hp, int max_hp, float above){

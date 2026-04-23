@@ -607,71 +607,159 @@ static void sandbox_setup_bases(GameState *gs){
 
     sandbox_clear_map(gs);
 
-    sandbox_paint_patch(gs, 9, 15, 2, TILE_FOREST, 180);
-    sandbox_paint_patch(gs, 17, 15, 1, TILE_BERRIES, 500);
-    sandbox_paint_patch(gs, 8, 43, 1, TILE_GOLD, 900);
-    sandbox_paint_patch(gs, 18, 44, 1, TILE_STONE, 800);
-    sandbox_paint_patch(gs, 11, 50, 2, TILE_FOREST, 180);
+    // Resources P0
+    sandbox_paint_patch(gs, 10, 10, 3, TILE_FOREST, 200);
+    sandbox_paint_patch(gs, 16, 10, 2, TILE_BERRIES, 500);
+    sandbox_paint_patch(gs, 12, 48, 2, TILE_GOLD, 900);
+    sandbox_paint_patch(gs, 24, 48, 2, TILE_STONE, 800);
 
-    sandbox_paint_patch(gs, 55, 15, 2, TILE_FOREST, 180);
-    sandbox_paint_patch(gs, 47, 15, 1, TILE_BERRIES, 500);
-    sandbox_paint_patch(gs, 56, 43, 1, TILE_GOLD, 900);
-    sandbox_paint_patch(gs, 46, 44, 1, TILE_STONE, 800);
+    // Resources P1
+    sandbox_paint_patch(gs, 55, 10, 3, TILE_FOREST, 200);
+    sandbox_paint_patch(gs, 48, 10, 2, TILE_BERRIES, 500);
+    sandbox_paint_patch(gs, 52, 48, 2, TILE_GOLD, 900);
+    sandbox_paint_patch(gs, 40, 48, 2, TILE_STONE, 800);
 
-    building_place_ready(gs, 0, BLD_TOWN_CENTER,   8, 28);
-    building_place_ready(gs, 0, BLD_HOUSE,         6, 22);
-    building_place_ready(gs, 0, BLD_HOUSE,         6, 36);
-    building_place_ready(gs, 0, BLD_MILL,         14, 18);
-    building_place_ready(gs, 0, BLD_LUMBER_CAMP,  14, 24);
-    building_place_ready(gs, 0, BLD_MINING_CAMP,  14, 38);
-    building_place_ready(gs, 0, BLD_FARM,         12, 32);
-    building_place_ready(gs, 0, BLD_BARRACKS,     20, 18);
-    building_place_ready(gs, 0, BLD_ARCHERY_RANGE,24, 18);
-    building_place_ready(gs, 0, BLD_STABLE,       28, 18);
-    building_place_ready(gs, 0, BLD_BLACKSMITH,   20, 37);
-    building_place_ready(gs, 0, BLD_MARKET,       24, 37);
-    building_place_ready(gs, 0, BLD_MONASTERY,    28, 37);
-    building_place_ready(gs, 0, BLD_SIEGE_WORKSHOP, 32, 37);
-    building_place_ready(gs, 0, BLD_UNIVERSITY,   32, 18);
-    building_place_ready(gs, 0, BLD_WATCH_TOWER,  18, 30);
+    // --- Player 0 Ancient City ---
+    // City Walls (P0)
+    for (int x = 8; x <= 30; x++) {
+        if (x >= 18 && x <= 20) continue; // Gap for gates
+        building_place_ready(gs, 0, BLD_WALL, x, 16);
+        building_place_ready(gs, 0, BLD_WALL, x, 40);
+    }
+    for (int y = 17; y <= 39; y++) {
+        if (y >= 27 && y <= 29) continue; // Gap for gates
+        building_place_ready(gs, 0, BLD_WALL, 8, y);
+        building_place_ready(gs, 0, BLD_WALL, 30, y);
+    }
+    // Corner Towers
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 7, 15);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 31, 15);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 7, 41);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 31, 41);
+    // Gate Towers
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 16, 15);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 21, 15);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 16, 41);
+    building_place_ready(gs, 0, BLD_WATCH_TOWER, 21, 41);
 
-    building_place_ready(gs, 1, BLD_TOWN_CENTER,   48, 28);
-    building_place_ready(gs, 1, BLD_HOUSE,         54, 22);
-    building_place_ready(gs, 1, BLD_HOUSE,         54, 36);
-    building_place_ready(gs, 1, BLD_MILL,          50, 18);
-    building_place_ready(gs, 1, BLD_FARM,          50, 34);
-    building_place_ready(gs, 1, BLD_BARRACKS,      40, 18);
-    building_place_ready(gs, 1, BLD_ARCHERY_RANGE, 44, 18);
-    building_place_ready(gs, 1, BLD_UNIVERSITY,    48, 18);
-    building_place_ready(gs, 1, BLD_STABLE,        40, 37);
-    building_place_ready(gs, 1, BLD_MARKET,        44, 37);
-    building_place_ready(gs, 1, BLD_SIEGE_WORKSHOP, 36, 37);
-    building_place_ready(gs, 1, BLD_WATCH_TOWER,   46, 30);
+    // Core City Layout
+    building_place_ready(gs, 0, BLD_TOWN_CENTER,   18, 27);
+    building_place_ready(gs, 0, BLD_MARKET,        14, 27);
+    building_place_ready(gs, 0, BLD_MONASTERY,     23, 27);
+    building_place_ready(gs, 0, BLD_UNIVERSITY,    23, 32);
+    building_place_ready(gs, 0, BLD_BLACKSMITH,    14, 32);
 
-    gs->res[0].amount[RES_FOOD]  = 5000;
-    gs->res[0].amount[RES_WOOD]  = 5000;
-    gs->res[0].amount[RES_GOLD]  = 5000;
-    gs->res[0].amount[RES_STONE] = 5000;
-    gs->res[1].amount[RES_FOOD]  = 3000;
-    gs->res[1].amount[RES_WOOD]  = 3000;
-    gs->res[1].amount[RES_GOLD]  = 3000;
-    gs->res[1].amount[RES_STONE] = 3000;
+    // Residential Blocks
+    building_place_ready(gs, 0, BLD_HOUSE,         11, 20);
+    building_place_ready(gs, 0, BLD_HOUSE,         14, 20);
+    building_place_ready(gs, 0, BLD_HOUSE,         17, 20);
+    building_place_ready(gs, 0, BLD_HOUSE,         20, 20);
+    building_place_ready(gs, 0, BLD_HOUSE,         23, 20);
+    building_place_ready(gs, 0, BLD_HOUSE,         26, 20);
+
+    building_place_ready(gs, 0, BLD_HOUSE,         11, 23);
+    building_place_ready(gs, 0, BLD_HOUSE,         26, 23);
+    building_place_ready(gs, 0, BLD_HOUSE,         11, 27);
+    building_place_ready(gs, 0, BLD_HOUSE,         26, 27);
+    building_place_ready(gs, 0, BLD_HOUSE,         11, 32);
+    building_place_ready(gs, 0, BLD_HOUSE,         26, 32);
+
+    // Military District
+    building_place_ready(gs, 0, BLD_BARRACKS,      11, 36);
+    building_place_ready(gs, 0, BLD_ARCHERY_RANGE, 16, 36);
+    building_place_ready(gs, 0, BLD_STABLE,        21, 36);
+    building_place_ready(gs, 0, BLD_SIEGE_WORKSHOP,26, 36);
+
+    // Economy
+    building_place_ready(gs, 0, BLD_LUMBER_CAMP,  10, 14);
+    building_place_ready(gs, 0, BLD_MILL,         16, 12);
+    building_place_ready(gs, 0, BLD_FARM,         14, 10);
+    building_place_ready(gs, 0, BLD_FARM,         18, 10);
+    building_place_ready(gs, 0, BLD_FARM,         16, 8);
+    building_place_ready(gs, 0, BLD_MINING_CAMP,  12, 45);
+    building_place_ready(gs, 0, BLD_MINING_CAMP,  24, 45);
+
+
+    // --- Player 1 Ancient City ---
+    for (int x = 38; x <= 60; x++) {
+        if (x >= 48 && x <= 50) continue; // Gap for gates
+        building_place_ready(gs, 1, BLD_WALL, x, 16);
+        building_place_ready(gs, 1, BLD_WALL, x, 40);
+    }
+    for (int y = 17; y <= 39; y++) {
+        if (y >= 27 && y <= 29) continue; // Gap for gates
+        building_place_ready(gs, 1, BLD_WALL, 38, y);
+        building_place_ready(gs, 1, BLD_WALL, 60, y);
+    }
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 37, 15);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 61, 15);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 37, 41);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 61, 41);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 46, 15);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 51, 15);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 46, 41);
+    building_place_ready(gs, 1, BLD_WATCH_TOWER, 51, 41);
+
+    building_place_ready(gs, 1, BLD_TOWN_CENTER,   48, 27);
+    building_place_ready(gs, 1, BLD_MARKET,        44, 27);
+    building_place_ready(gs, 1, BLD_UNIVERSITY,    53, 27);
+    building_place_ready(gs, 1, BLD_BLACKSMITH,    44, 32);
+    building_place_ready(gs, 1, BLD_MONASTERY,     53, 32);
+
+    building_place_ready(gs, 1, BLD_HOUSE,         41, 20);
+    building_place_ready(gs, 1, BLD_HOUSE,         44, 20);
+    building_place_ready(gs, 1, BLD_HOUSE,         47, 20);
+    building_place_ready(gs, 1, BLD_HOUSE,         50, 20);
+    building_place_ready(gs, 1, BLD_HOUSE,         53, 20);
+    building_place_ready(gs, 1, BLD_HOUSE,         56, 20);
+
+    building_place_ready(gs, 1, BLD_HOUSE,         41, 23);
+    building_place_ready(gs, 1, BLD_HOUSE,         56, 23);
+    building_place_ready(gs, 1, BLD_HOUSE,         41, 27);
+    building_place_ready(gs, 1, BLD_HOUSE,         56, 27);
+    building_place_ready(gs, 1, BLD_HOUSE,         41, 32);
+    building_place_ready(gs, 1, BLD_HOUSE,         56, 32);
+
+    building_place_ready(gs, 1, BLD_BARRACKS,      41, 36);
+    building_place_ready(gs, 1, BLD_ARCHERY_RANGE, 46, 36);
+    building_place_ready(gs, 1, BLD_STABLE,        51, 36);
+    building_place_ready(gs, 1, BLD_SIEGE_WORKSHOP,56, 36);
+
+    building_place_ready(gs, 1, BLD_LUMBER_CAMP,  55, 14);
+    building_place_ready(gs, 1, BLD_MILL,         48, 12);
+    building_place_ready(gs, 1, BLD_FARM,         46, 10);
+    building_place_ready(gs, 1, BLD_FARM,         50, 10);
+    building_place_ready(gs, 1, BLD_FARM,         48, 8);
+    building_place_ready(gs, 1, BLD_MINING_CAMP,  52, 45);
+    building_place_ready(gs, 1, BLD_MINING_CAMP,  40, 45);
+
+    gs->res[0].amount[RES_FOOD]  = 50000;
+    gs->res[0].amount[RES_WOOD]  = 50000;
+    gs->res[0].amount[RES_GOLD]  = 50000;
+    gs->res[0].amount[RES_STONE] = 50000;
+    gs->res[1].amount[RES_FOOD]  = 50000;
+    gs->res[1].amount[RES_WOOD]  = 50000;
+    gs->res[1].amount[RES_GOLD]  = 50000;
+    gs->res[1].amount[RES_STONE] = 50000;
 
     for(int p=0;p<gs->num_players;p++){
         gs->res[p].pop_cap = POP_CAP_MAX;
+        gs->res[p].age = 3; // Start in Imperial Age so the cities look glorious
     }
 
-    unit_spawn(gs, 0, UNIT_VILLAGER, (12.5f)*TILE_SIZE, (27.5f)*TILE_SIZE);
-    unit_spawn(gs, 0, UNIT_VILLAGER, (12.5f)*TILE_SIZE, (29.5f)*TILE_SIZE);
-    unit_spawn(gs, 0, UNIT_VILLAGER, (12.5f)*TILE_SIZE, (31.5f)*TILE_SIZE);
-    unit_spawn(gs, 0, UNIT_VILLAGER, (11.5f)*TILE_SIZE, (24.5f)*TILE_SIZE);
-    unit_spawn(gs, 0, UNIT_VILLAGER, (11.5f)*TILE_SIZE, (35.5f)*TILE_SIZE);
-    sandbox_spawn_block(gs, 0, 22, 28, preview_units, (int)(sizeof(preview_units)/sizeof(preview_units[0])));
+    // Spawn some villagers inside P0
+    unit_spawn(gs, 0, UNIT_VILLAGER, (19.5f)*TILE_SIZE, (26.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (19.5f)*TILE_SIZE, (29.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (17.5f)*TILE_SIZE, (31.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (18.5f)*TILE_SIZE, (24.5f)*TILE_SIZE);
+    unit_spawn(gs, 0, UNIT_VILLAGER, (20.5f)*TILE_SIZE, (35.5f)*TILE_SIZE);
+    sandbox_spawn_block(gs, 0, 19, 23, preview_units, (int)(sizeof(preview_units)/sizeof(preview_units[0])));
 
-    unit_spawn(gs, 1, UNIT_VILLAGER, (51.5f)*TILE_SIZE, (27.5f)*TILE_SIZE);
-    unit_spawn(gs, 1, UNIT_VILLAGER, (51.5f)*TILE_SIZE, (29.5f)*TILE_SIZE);
-    unit_spawn(gs, 1, UNIT_VILLAGER, (51.5f)*TILE_SIZE, (31.5f)*TILE_SIZE);
-    sandbox_spawn_block(gs, 1, 42, 28, preview_units, (int)(sizeof(preview_units)/sizeof(preview_units[0])));
+    // Spawn some villagers inside P1
+    unit_spawn(gs, 1, UNIT_VILLAGER, (49.5f)*TILE_SIZE, (26.5f)*TILE_SIZE);
+    unit_spawn(gs, 1, UNIT_VILLAGER, (49.5f)*TILE_SIZE, (29.5f)*TILE_SIZE);
+    unit_spawn(gs, 1, UNIT_VILLAGER, (47.5f)*TILE_SIZE, (31.5f)*TILE_SIZE);
+    sandbox_spawn_block(gs, 1, 49, 23, preview_units, (int)(sizeof(preview_units)/sizeof(preview_units[0])));
 
     map_update_fog(gs);
 }
