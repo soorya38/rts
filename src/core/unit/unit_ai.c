@@ -26,7 +26,16 @@ static void unit_step_path(Unit *u, float dt){
     float twy=wp->y*TILE_SIZE+TILE_SIZE*0.5f;
     float dx=twx-u->wx, dy=twy-u->wy;
     float dist=sqrtf(dx*dx+dy*dy);
-    if(dist<2.0f){u->wx=twx;u->wy=twy;u->path_idx++;return;}
+    
+    float accept_dist = (u->path_idx == u->path_len - 1) ? 2.0f : 14.0f;
+    if(dist < accept_dist){
+        if(u->path_idx == u->path_len - 1 && dist < 2.0f){
+            u->wx=twx; u->wy=twy;
+        }
+        u->path_idx++;
+        return;
+    }
+    
     float spd=u->move_speed*dt;
     if(spd>dist) spd=dist;
     u->facing=atan2f(dy,dx);
@@ -61,10 +70,20 @@ static void resolve_unit_overlap(GameState *gs, Unit *a, Unit *b){
     float push = (UNIT_PERSONAL_SPACE - dist) * 0.5f;
     if(push <= 0.0f) return;
 
-    float anx = a->wx - dx * push;
-    float any = a->wy - dy * push;
-    float bnx = b->wx + dx * push;
-    float bny = b->wy + dy * push;
+    /* Add a slight orthogonal "spin" to the push so they slide off each other faster
+     * when colliding head-on or squeezing through choke points. */
+    float push_dx = dx * push;
+    float push_dy = dy * push;
+    float ortho_x = -dy * push * 0.2f;
+    float ortho_y =  dx * push * 0.2f;
+
+    float a_push_x = push_dx + ortho_x;
+    float a_push_y = push_dy + ortho_y;
+
+    float anx = a->wx - a_push_x;
+    float any = a->wy - a_push_y;
+    float bnx = b->wx + a_push_x;
+    float bny = b->wy + a_push_y;
 
     bool a_ok = unit_can_stand_at(gs, anx, any);
     bool b_ok = unit_can_stand_at(gs, bnx, bny);
