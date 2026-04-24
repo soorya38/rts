@@ -3,8 +3,10 @@
  *=============================================================*/
 #include "game.h"
 #include "osm_mapgen.h"
-#include "cJSON.h"
 #include <stdio.h>
+
+#if defined(RTS_HAS_CURL)
+#include "cJSON.h"
 #include <string.h>
 #include <stdlib.h>
 #include <curl/curl.h>
@@ -744,3 +746,18 @@ bool osm_generate_map(GameState *gs, const char *location_name,
     printf("OSM MapGen: Map generation complete for '%s'\n", location_name);
     return true;
 }
+
+#else
+
+bool osm_generate_map(GameState *gs, const char *location_name,
+                      int num_players, int *start_x, int *start_y) {
+    (void)gs;
+    (void)location_name;
+    (void)num_players;
+    (void)start_x;
+    (void)start_y;
+    printf("OSM MapGen: disabled in this build (RTS_HAS_CURL not set)\n");
+    return false;
+}
+
+#endif

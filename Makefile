@@ -1,5 +1,6 @@
 CC      = gcc
 CFLAGS  = -std=c11 -Wall -Wextra -O2 -g
+DEFINES = -DRTS_HAS_CURL=1
 TARGET  = rts
 
 # Detect Homebrew prefix (Apple Silicon first, then Intel)
@@ -37,11 +38,11 @@ LIBS     = -L$(RAYLIB_PREFIX)/lib -lraylib \
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $^ $(LIBS)
+	$(CC) $(CFLAGS) $(DEFINES) -o $@ $^ $(LIBS)
 
 build/%.o: src/%.c
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -MMD -MP $(INCLUDES) -c -o $@ $<
+	$(CC) $(CFLAGS) $(DEFINES) -MMD -MP $(INCLUDES) -c -o $@ $<
 
 run: $(TARGET)
 	./$(TARGET)
