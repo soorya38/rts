@@ -275,6 +275,81 @@ static bool point_near_way(Way *w, double lat, double lon, double threshold) {
     return false;
 }
 
+typedef struct {
+    int x;
+    int y;
+    int score;
+} ForestCandidate;
+
+static bool tile_can_be_forest_filled(TileType t) {
+    return t == TILE_GRASS || t == TILE_DESERT || t == TILE_ROAD;
+}
+
+static int count_forest_neighbors(GameState *gs, int x, int y) {
+    int count = 0;
+    for (int dy = -2; dy <= 2; dy++) {
+        for (int dx = -2; dx <= 2; dx++) {
+            if (dx == 0 && dy == 0) continue;
+            int nx = x + dx;
+            int ny = y + dy;
+            if (map_in_bounds(nx, ny) && gs->map[ny][nx].type == TILE_FOREST)
+                count++;
+        }
+    }
+    return count;
+}
+
+static int compare_forest_candidates(const void *a, const void *b) {
+    const ForestCandidate *ca = (const ForestCandidate *)a;
+    const ForestCandidate *cb = (const ForestCandidate *)b;
+    return cb->score - ca->score;
+}
+
+static void fill_forest_cover(GameState *gs, int target_percent) {
+    ForestCandidate candidates[MAP_W * MAP_H];
+    int candidate_count = 0;
+    int current_forest = 0;
+    int coverable_tiles = 0;
+
+    for (int y = 0; y < MAP_H; y++) {
+        for (int x = 0; x < MAP_W; x++) {
+            TileType t = gs->map[y][x].type;
+            if (t == TILE_FOREST) {
+                current_forest++;
+                coverable_tiles++;
+                continue;
+            }
+            if (!tile_can_be_forest_filled(t)) continue;
+
+            coverable_tiles++;
+            int neighbors = count_forest_neighbors(gs, x, y);
+            unsigned hash = (unsigned)(x * 73856093u ^ y * 19349663u);
+            candidates[candidate_count++] = (ForestCandidate){
+                .x = x,
+                .y = y,
+                .score = neighbors * 1000 + (int)(hash % 1000u),
+            };
+        }
+    }
+
+    if (coverable_tiles == 0) return;
+
+    int target_forest = (coverable_tiles * target_percent + 50) / 100;
+    if (current_forest >= target_forest) return;
+
+    qsort(candidates, (size_t)candidate_count, sizeof(candidates[0]), compare_forest_candidates);
+
+    int needed = target_forest - current_forest;
+    if (needed > candidate_count) needed = candidate_count;
+
+    for (int i = 0; i < needed; i++) {
+        int x = candidates[i].x;
+        int y = candidates[i].y;
+        gs->map[y][x].type = TILE_FOREST;
+        gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
+    }
+}
+
 static void rasterize(GameState *gs, OsmData *data) {
     BBox *bb = &data->bbox;
     double tile_w = (bb->east - bb->west) / MAP_W;
@@ -306,13 +381,12 @@ static void rasterize(GameState *gs, OsmData *data) {
                         pri = 5;
                         if (hit && pri > priority) { best = TILE_FOREST; priority = pri; }
                         break;
-                    case 2: /* road → scatter sparse trees along roads */
+                    case 2: /* road */
                         hit = point_near_way(way, lat, lon, road_thresh);
-                        pri = 3; /* low priority so forest polygons win */
-                        /* Only place trees on ~25% of road tiles for natural scatter */
+                        pri = 3;
                         if (hit && pri > priority) {
-                            unsigned h = (unsigned)(x * 2654435761u + y * 40503u);
-                            if ((h % 100) < 25) { best = TILE_FOREST; priority = pri; }
+                            best = TILE_ROAD;
+                            priority = pri;
                         }
                         break;
                     case 3: /* river */
@@ -361,6 +435,9 @@ static void rasterize(GameState *gs, OsmData *data) {
             }
         }
     }
+
+    /* Cover roughly 60% of open land with trees instead of limiting tree placement to roads. */
+    fill_forest_cover(gs, 60);
 
     /* Ensure at least 40% passable */
     int passable = 0;
