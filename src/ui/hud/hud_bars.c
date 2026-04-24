@@ -243,6 +243,8 @@ static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_s
     /* Location text box */
     int box_w = bw * 2 + gap;
     int box_h = bh;
+    int gen_btn_x = row1_x + box_w + gap;
+    int gen_btn_y = osm_y;
     {
         Vector2 mp2 = GetMousePosition();
         bool hover2 = mp2.x >= row1_x && mp2.x <= row1_x+box_w && mp2.y >= osm_y && mp2.y <= osm_y+box_h;
@@ -281,10 +283,9 @@ static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_s
             DrawRectangle(row1_x+6+tw2+2, osm_y+(box_h-fs10)/2, 2, fs10, CLITERAL(Color){230,210,160,255});
         }
     }
-    osm_y += box_h + gap;
 
     /* Generate button */
-    if (draw_button("Generate Map", row1_x, osm_y, bw, bh, ui->osm_location[0] != '\0')) {
+    if (draw_button("Generate Map", gen_btn_x, gen_btn_y, bw, bh, ui->osm_location[0] != '\0')) {
         /* Unload previous OSM tile textures */
         if (ui->osm_tiles_loaded > 0) {
             for (int r = 0; r < 4; r++)

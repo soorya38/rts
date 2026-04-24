@@ -304,10 +304,10 @@ static void rasterize(GameState *gs, OsmData *data) {
                         pri = 5;
                         if (hit && pri > priority) { best = TILE_FOREST; priority = pri; }
                         break;
-                    case 2: /* road */
+                    case 2: /* road → generate trees instead */
                         hit = point_near_way(way, lat, lon, road_thresh);
                         pri = 7;
-                        if (hit && pri > priority) { best = TILE_ROAD; priority = pri; }
+                        if (hit && pri > priority) { best = TILE_FOREST; priority = pri; }
                         break;
                     case 3: /* river */
                         hit = point_near_way(way, lat, lon, river_thresh);
