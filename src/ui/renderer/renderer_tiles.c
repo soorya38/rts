@@ -72,10 +72,11 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
                 float scale = (s * 1.5f) / tw;
                 float dw = tw * scale;
                 float dh = th * scale;
-                float dx = px + s * 0.5f - dw * 0.5f;
-                float dy = py + s - dh;
+                /* Convert tile center to isometric coords so trees align with
+                   the iso-projected grass base (fixes trees in black space) */
+                Vector2 bc = to_rvec2(world_to_iso(px + s * 0.5f, py + s * 0.5f));
                 Rectangle src = {0, 0, tw, th};
-                Rectangle dst = {dx, dy, dw, dh};
+                Rectangle dst = {bc.x - dw * 0.5f, bc.y - dh + s * 0.5f, dw, dh};
                 DrawTexturePro(tex, src, dst, (Vector2){0,0}, 0.0f, WHITE);
             } else {
                 draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,

@@ -304,10 +304,14 @@ static void rasterize(GameState *gs, OsmData *data) {
                         pri = 5;
                         if (hit && pri > priority) { best = TILE_FOREST; priority = pri; }
                         break;
-                    case 2: /* road → generate trees instead */
+                    case 2: /* road → scatter sparse trees along roads */
                         hit = point_near_way(way, lat, lon, road_thresh);
-                        pri = 7;
-                        if (hit && pri > priority) { best = TILE_FOREST; priority = pri; }
+                        pri = 3; /* low priority so forest polygons win */
+                        /* Only place trees on ~25% of road tiles for natural scatter */
+                        if (hit && pri > priority) {
+                            unsigned h = (unsigned)(x * 2654435761u + y * 40503u);
+                            if ((h % 100) < 25) { best = TILE_FOREST; priority = pri; }
+                        }
                         break;
                     case 3: /* river */
                         hit = point_near_way(way, lat, lon, river_thresh);
