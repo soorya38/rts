@@ -306,10 +306,12 @@ static int compare_forest_candidates(const void *a, const void *b) {
 }
 
 static void fill_forest_cover(GameState *gs, int target_percent) {
-    ForestCandidate candidates[MAP_W * MAP_H];
-    int candidate_count = 0;
     int current_forest = 0;
     int coverable_tiles = 0;
+    int phase_one_target = 0;
+    int needed = 0;
+    int added = 0;
+    ForestCandidate candidate_scores[MAP_W * MAP_H];
 
     for (int y = 0; y < MAP_H; y++) {
         for (int x = 0; x < MAP_W; x++) {
@@ -322,13 +324,6 @@ static void fill_forest_cover(GameState *gs, int target_percent) {
             if (!tile_can_be_forest_filled(t)) continue;
 
             coverable_tiles++;
-            int neighbors = count_forest_neighbors(gs, x, y);
-            unsigned hash = (unsigned)(x * 73856093u ^ y * 19349663u);
-            candidates[candidate_count++] = (ForestCandidate){
-                .x = x,
-                .y = y,
-                .score = neighbors * 1000 + (int)(hash % 1000u),
-            };
         }
     }
 
@@ -337,16 +332,91 @@ static void fill_forest_cover(GameState *gs, int target_percent) {
     int target_forest = (coverable_tiles * target_percent + 50) / 100;
     if (current_forest >= target_forest) return;
 
-    qsort(candidates, (size_t)candidate_count, sizeof(candidates[0]), compare_forest_candidates);
+    needed = target_forest - current_forest;
+    phase_one_target = needed * 2 / 3;
 
-    int needed = target_forest - current_forest;
-    if (needed > candidate_count) needed = candidate_count;
+    for (int y = 0; y < MAP_H; y++) {
+        for (int x = 0; x < MAP_W; x++) {
+            TileType t = gs->map[y][x].type;
+            if (!tile_can_be_forest_filled(t)) continue;
+            int neighbors = count_forest_neighbors(gs, x, y);
+            if (neighbors < 2) continue;
 
-    for (int i = 0; i < needed; i++) {
-        int x = candidates[i].x;
-        int y = candidates[i].y;
+            unsigned hash = (unsigned)(x * 73856093u ^ y * 19349663u);
+            candidate_scores[added] = (ForestCandidate){
+                .x = x,
+                .y = y,
+                .score = neighbors * 2000 + (int)(hash % 1000u),
+            };
+            added++;
+        }
+    }
+
+    qsort(candidate_scores, (size_t)added, sizeof(candidate_scores[0]), compare_forest_candidates);
+
+    int phase_one_added = phase_one_target < added ? phase_one_target : added;
+    for (int i = 0; i < phase_one_added; i++) {
+        int x = candidate_scores[i].x;
+        int y = candidate_scores[i].y;
         gs->map[y][x].type = TILE_FOREST;
         gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
+    }
+
+    int remaining = needed - phase_one_added;
+    if (remaining <= 0) return;
+
+    while (remaining > 0) {
+        int best_x = -1;
+        int best_y = -1;
+        int best_score = -1;
+
+        for (int y = 0; y < MAP_H; y++) {
+            for (int x = 0; x < MAP_W; x++) {
+                TileType t = gs->map[y][x].type;
+                if (!tile_can_be_forest_filled(t)) continue;
+
+                int neighbors = count_forest_neighbors(gs, x, y);
+                if (neighbors <= 0) continue;
+
+                unsigned hash = (unsigned)(x * 83492791u ^ y * 2971215073u);
+                int score = neighbors * 3000 + (int)(hash % 1000u);
+                if (score > best_score) {
+                    best_score = score;
+                    best_x = x;
+                    best_y = y;
+                }
+            }
+        }
+
+        if (best_x < 0 || best_y < 0) break;
+        gs->map[best_y][best_x].type = TILE_FOREST;
+        gs->map[best_y][best_x].resource_amt = 150 + rng_range(0, 100);
+        remaining--;
+    }
+
+    if (remaining <= 0) return;
+
+    int fallback_count = 0;
+    for (int y = 0; y < MAP_H; y++) {
+        for (int x = 0; x < MAP_W; x++) {
+            TileType t = gs->map[y][x].type;
+            if (!tile_can_be_forest_filled(t)) continue;
+            unsigned hash = (unsigned)(x * 1640531513u + y * 2654435761u);
+            candidate_scores[fallback_count++] = (ForestCandidate){
+                .x = x,
+                .y = y,
+                .score = (int)(hash % 1000u),
+            };
+        }
+    }
+
+    qsort(candidate_scores, (size_t)fallback_count, sizeof(candidate_scores[0]), compare_forest_candidates);
+    for (int i = 0; i < fallback_count && remaining > 0; i++) {
+        int x = candidate_scores[i].x;
+        int y = candidate_scores[i].y;
+        gs->map[y][x].type = TILE_FOREST;
+        gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
+        remaining--;
     }
 }
 
@@ -615,14 +685,17 @@ static void place_neutral_city_buildings(GameState *gs) {
     /* Iterate with a tighter step (+= 2) to pack buildings very closely, resembling dense ancient cities */
     for (int ty = 6; ty < MAP_H - 6; ty += 2) {
         for (int tx = 6; tx < MAP_W - 6; tx += 2) {
-            /* 75% chance to try placing a building in this spot */
-            if ((rng_next() % 100) < 75) {
+            /* Push coverage higher so neutral settlements feel like real towns. */
+            if ((rng_next() % 100) < 88) {
                 BldType type = BLD_HOUSE;
                 int rnd = rng_next() % 100;
-                if (rnd < 10) type = BLD_MARKET;
-                else if (rnd < 20) type = BLD_BLACKSMITH;
-                else if (rnd < 30) type = BLD_MONASTERY;
-                else if (rnd < 40) type = BLD_WATCH_TOWER;
+                if (rnd < 8) type = BLD_MARKET;
+                else if (rnd < 16) type = BLD_BLACKSMITH;
+                else if (rnd < 24) type = BLD_MONASTERY;
+                else if (rnd < 34) type = BLD_WATCH_TOWER;
+                else if (rnd < 42) type = BLD_BARRACKS;
+                else if (rnd < 50) type = BLD_ARCHERY_RANGE;
+                else if (rnd < 58) type = BLD_STABLE;
                 
                 int w = building_tw(type);
                 int h = building_th(type);
@@ -635,13 +708,13 @@ static void place_neutral_city_buildings(GameState *gs) {
                 }
                 
                 if (map_is_buildable(gs, tx, ty, w, h)) {
-                    /* Ensure we don't build too close to player TCs (keep a 25-tile radius clear) */
+                    /* Keep player town centers playable, but allow denser neutral settlements. */
                     bool too_close = false;
                     for (int i = 0; i < gs->bld_count; i++) {
                         if (gs->buildings[i].active && gs->buildings[i].type == BLD_TOWN_CENTER) {
                             int dx = gs->buildings[i].tx - tx;
                             int dy = gs->buildings[i].ty - ty;
-                            if (dx*dx + dy*dy < 25*25) {
+                            if (dx*dx + dy*dy < 18*18) {
                                 too_close = true;
                                 break;
                             }
