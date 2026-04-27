@@ -39,6 +39,36 @@ static void draw_grass_base(UIState *ui, uint8_t variant, float px, float py, fl
     DrawTexturePro(tex, src, dst, (Vector2){0}, 0.0f, WHITE);
 }
 
+static void draw_forest_canopy(UIState *ui, Tile *t, int x, int y, float px, float py, float s) {
+    unsigned tree_seed = (unsigned)(x * 92821u + y * 68917u + t->variant * 131u);
+    int tree_idx = (int)(tree_seed % TREE_VARIANT_COUNT);
+    Texture2D tex = ui->tex_env_trees[tree_idx];
+    if (tex.id != 0) {
+        float tw = tex.width;
+        float th = tex.height;
+        float size_jitter = 1.90f + (float)((tree_seed >> 3) % 20) / 100.0f;
+        float scale = (s * size_jitter) / tw;
+        float dw = tw * scale;
+        float dh = th * scale;
+        float offset_x = (float)((int)((tree_seed >> 8) % 7) - 3) * 0.6f;
+        float offset_y = (float)((int)((tree_seed >> 12) % 5) - 2) * 0.8f;
+        bool flip_x = ((tree_seed >> 16) & 1u) != 0;
+        float src_w = flip_x ? -tw : tw;
+        float src_x = flip_x ? tw : 0.0f;
+        unsigned tint_delta = (tree_seed >> 20) % 28u;
+        unsigned char green = (unsigned char)(232 - tint_delta);
+        unsigned char blue = (unsigned char)(232 - tint_delta / 2u);
+        Color tint = (Color){255, green, blue, 255};
+        Vector2 bc = to_rvec2(world_to_iso(px + s * 0.5f, py + s * 0.5f));
+        Rectangle src = {src_x, 0.0f, src_w, th};
+        Rectangle dst = {bc.x - dw * 0.5f + offset_x, bc.y - dh + s * 0.42f + offset_y, dw, dh};
+        DrawTexturePro(tex, src, dst, (Vector2){0,0}, 0.0f, tint);
+    } else {
+        draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,
+                     C_FOREST_L, C_FOREST_D, C_FOREST_D);
+    }
+}
+
 void draw_tile(GameState *gs, UIState *ui, int x, int y){
     Tile *t=&gs->map[y][x];
     float px=(float)(x*TILE_SIZE), py=(float)(y*TILE_SIZE);
@@ -64,35 +94,7 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
 
         case TILE_FOREST: {
             draw_grass_base(ui, t->variant, px, py, s);
-            unsigned tree_seed = (unsigned)(x * 92821u + y * 68917u + t->variant * 131u);
-            int tree_idx = (int)(tree_seed % TREE_VARIANT_COUNT);
-            Texture2D tex = ui->tex_env_trees[tree_idx];
-            if (tex.id != 0) {
-                float tw = tex.width;
-                float th = tex.height;
-                float size_jitter = 1.78f + (float)((tree_seed >> 3) % 20) / 100.0f;
-                float scale = (s * size_jitter) / tw;
-                float dw = tw * scale;
-                float dh = th * scale;
-                float offset_x = (float)((int)((tree_seed >> 8) % 7) - 3) * 0.6f;
-                float offset_y = (float)((int)((tree_seed >> 12) % 5) - 2) * 0.8f;
-                bool flip_x = ((tree_seed >> 16) & 1u) != 0;
-                float src_w = flip_x ? -tw : tw;
-                float src_x = flip_x ? tw : 0.0f;
-                unsigned tint_delta = (tree_seed >> 20) % 28u;
-                unsigned char green = (unsigned char)(232 - tint_delta);
-                unsigned char blue = (unsigned char)(232 - tint_delta / 2u);
-                Color tint = (Color){255, green, blue, 255};
-                /* Convert tile center to isometric coords so trees align with
-                   the iso-projected grass base (fixes trees in black space) */
-                Vector2 bc = to_rvec2(world_to_iso(px + s * 0.5f, py + s * 0.5f));
-                Rectangle src = {src_x, 0.0f, src_w, th};
-                Rectangle dst = {bc.x - dw * 0.5f + offset_x, bc.y - dh + s * 0.42f + offset_y, dw, dh};
-                DrawTexturePro(tex, src, dst, (Vector2){0,0}, 0.0f, tint);
-            } else {
-                draw_iso_box(px + 6, py + 6, s - 12, s - 12, 22,
-                             C_FOREST_L, C_FOREST_D, C_FOREST_D);
-            }
+            draw_forest_canopy(ui, t, x, y, px, py, s);
             break;
         }
 
@@ -172,6 +174,14 @@ void draw_tile(GameState *gs, UIState *ui, int x, int y){
         DrawLineEx(p3, p4, 2, C_HOVER);
         DrawLineEx(p4, p1, 2, C_HOVER);
     }
+}
+
+void draw_forest_overlay(GameState *gs, UIState *ui, int x, int y){
+    Tile *t = &gs->map[y][x];
+    if (t->type != TILE_FOREST) return;
+    float px = (float)(x * TILE_SIZE);
+    float py = (float)(y * TILE_SIZE);
+    draw_forest_canopy(ui, t, x, y, px, py, (float)TILE_SIZE);
 }
 
 void draw_fog(GameState *gs, int x, int y){

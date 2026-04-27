@@ -19,6 +19,9 @@ Color player_color_dark(int p);
 Color player_color_alpha(int p, unsigned char a);
 extern const Color GRASS_COLS[4];
 
+/* Tile overlays (renderer_tiles.c) */
+void draw_forest_overlay(GameState *gs, UIState *ui, int x, int y);
+
 /* Colors (shared via defines used in each .c) */
 #define C_SEL       CLITERAL(Color){ 80, 220, 100, 180}
 #define C_HOVER     CLITERAL(Color){255, 255, 255, 120}

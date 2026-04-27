@@ -742,6 +742,12 @@ void renderer_draw_world(GameState *gs, UIState *ui){
         }
     }
 
+    // Re-draw forest canopies on top so tree crowns can overlap nearby buildings.
+    for(int y=0;y<MAP_H;y++)
+        for(int x=0;x<MAP_W;x++)
+            if(gs->map[y][x].fog[lp]!=FOG_HIDDEN)
+                draw_forest_overlay(gs, ui, x, y);
+
     // Draw outlines for obscured units
     for(int i=0;i<MAX_UNITS;i++){
         Unit *u=&gs->units[i];
