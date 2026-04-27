@@ -264,23 +264,23 @@ const char* unit_name(UnitType t){
 
 const char* building_name(BldType t){
     switch(t){
-        case BLD_TOWN_CENTER: return "Town Center";
-        case BLD_HOUSE: return "House";
-        case BLD_BARRACKS: return "Barracks";
-        case BLD_ARCHERY_RANGE: return "Archery Range";
-        case BLD_STABLE: return "Stable";
-        case BLD_BLACKSMITH: return "Blacksmith";
-        case BLD_MARKET: return "Market";
-        case BLD_MILL: return "Mill";
-        case BLD_LUMBER_CAMP: return "Lumber Camp";
-        case BLD_MINING_CAMP: return "Mining Camp";
-        case BLD_FARM: return "Farm";
-        case BLD_WATCH_TOWER: return "Watch Tower";
-        case BLD_MONASTERY: return "Monastery";
-        case BLD_SIEGE_WORKSHOP: return "Siege Workshop";
-        case BLD_UNIVERSITY: return "University";
-        case BLD_WALL: return "Wall";
-        case BLD_GATE: return "Gate";
-        default: return "Building";
+        case BLD_TOWN_CENTER: return "Mandapam";
+        case BLD_HOUSE: return "Veedu";
+        case BLD_BARRACKS: return "Padai Veedu";
+        case BLD_ARCHERY_RANGE: return "Villalar Koodam";
+        case BLD_STABLE: return "Kuthirai Layam";
+        case BLD_BLACKSMITH: return "Kollan Pattarai";
+        case BLD_MARKET: return "Santhai";
+        case BLD_MILL: return "Aalai";
+        case BLD_LUMBER_CAMP: return "Maram Vettu Kalam";
+        case BLD_MINING_CAMP: return "Surangam";
+        case BLD_FARM: return "Vayal";
+        case BLD_WATCH_TOWER: return "Kaval Gopuram";
+        case BLD_MONASTERY: return "Kovil";
+        case BLD_SIEGE_WORKSHOP: return "Por Karuvi Pattarai";
+        case BLD_UNIVERSITY: return "Kalvi Koodam";
+        case BLD_WALL: return "Mathil";
+        case BLD_GATE: return "Kottai Vaasal";
+        default: return "Kattidam";
     }
 }

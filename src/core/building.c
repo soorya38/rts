@@ -688,10 +688,10 @@ const char* tech_desc(TechType t) {
         case TECH_FORTIFIED_WALL: return "+600 HP (Walls/Gates)";
         case TECH_GUARD_TOWER:    return "+2 Att, +1 Rng (Towers)";
         case TECH_KEEP:           return "+3 Att, +1 Rng (Towers)";
-        case TECH_MURDER_HOLES:   return "+1 Rng (TC/Towers)";
+        case TECH_MURDER_HOLES:   return "+1 Rng (Mandapam/Towers)";
         case TECH_TREADMILL_CRANE:return "+50% Build Speed";
         case TECH_CHEMISTRY:      return "+1 Att (Archers/Defenses)";
-        case TECH_HOARDINGS:      return "+500 HP (Town Center)";
+        case TECH_HOARDINGS:      return "+500 HP (Mandapam)";
         case TECH_HEATED_SHOT:    return "+8 vs Siege (Defenses)";
         case TECH_CANNON_EMPLACEMENTS:return "Unlock Bombard Cannon";
         case TECH_MISSILE_GUIDANCE:return "+2 Att, +2 Rng (Towers)";

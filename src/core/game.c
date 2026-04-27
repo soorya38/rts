@@ -217,15 +217,15 @@ static void campaign_refresh_text(GameState *gs){
         case 1:
             campaign_set_text(gs,
                 "Chapter II: A Home In The Vale",
-                "Build 2 Houses, a Mill, and a Lumber Camp.\nReach 6 Villagers.",
-                "Select the Town Center to queue villagers.\nUse [B] with a villager to open the build menu.",
+                "Build 2 Veedugal, an Aalai, and a Maram Vettu Kalam.\nReach 6 Villagers.",
+                "Select the Mandapam to queue villagers.\nUse [B] with a villager to open the build menu.",
                 "Elder Mira orders the camp turned into a real hamlet.\nHomes, food stores, and timber yards must come before any war.",
                 "New roofs rise over the camp, and Ashfall Vale becomes a village.");
             campaign_set_briefing(gs,
                 "The clan can survive a night, but not a season, without proper shelter.\nEvery new villager means more labor, but also more mouths.\n\n"
                 "Raise houses, build drop-off sites, and turn the landing camp into a hamlet.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
-                     "Build 2 Houses, a Mill, and a Lumber Camp.\nH%d/2  M%d/1  L%d/1  V%d/6",
+                     "Build 2 Veedugal, an Aalai, and a Maram Vettu Kalam.\nH%d/2  M%d/1  L%d/1  V%d/6",
                      houses, mill, lumber, villagers);
             snprintf(gs->campaign_status, sizeof(gs->campaign_status),
                      "Status: hamlet rising  |  Population room %d", gs->res[0].pop_cap - gs->res[0].population);
@@ -233,15 +233,15 @@ static void campaign_refresh_text(GameState *gs){
         case 2:
             campaign_set_text(gs,
                 "Chapter III: Iron In The Hills",
-                "Add a Mining Camp, Barracks, and 2 Farms.\nAdvance to Feudal Age.",
-                "Gold and stone need a Mining Camp drop-off.\nWhen you have 400 food, use the top bar age-up button.",
+                "Add a Surangam, Padai Veedu, and 2 Vayals.\nAdvance to Feudal Age.",
+                "Gold and stone need a Surangam drop-off.\nWhen you have 400 food, use the top bar age-up button.",
                 "Scouts return with word of the Ashen Banner beyond the hills.\nIf the clan stays in the Dark Age, raiders will crush it before winter.",
                 "Ashfall Vale reaches Feudal Age before the raiders can strike in force.");
             campaign_set_briefing(gs,
                 "A hostile warband called the Ashen Banner has been seen beyond the ridge.\nMira wants iron, farms, and a barracks before their scouts become an army.\n\n"
                 "Secure mining, lay farms, and advance to the Feudal Age.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
-                     "Add a Mining Camp, Barracks, and 2 Farms.\nMine%d/1  Barr%d/1  Farm%d/2  Age:%s",
+                     "Add a Surangam, Padai Veedu, and 2 Vayals.\nMine%d/1  Barr%d/1  Farm%d/2  Age:%s",
                      mining, barracks, farms, gs->res[0].age >= 1 ? "Feudal" : "Dark");
             snprintf(gs->campaign_status, sizeof(gs->campaign_status),
                      "Status: frontier arming  |  Food %d  Gold %d", gs->res[0].amount[RES_FOOD], gs->res[0].amount[RES_GOLD]);
@@ -249,15 +249,15 @@ static void campaign_refresh_text(GameState *gs){
         case 3:
             campaign_set_text(gs,
                 "Chapter IV: The Broken Watch",
-                "Build an Archery Range, train 2 Archers and 3 Barracks troops.\nDestroy the raider Barracks.",
-                "Barracks train melee units; Archery Ranges train ranged units.\nRight-click enemies to attack, and use [G] to set rally points.",
+                "Build a Villalar Koodam, train 2 Archers and 3 Padai Veedu troops.\nDestroy the raider Padai Veedu.",
+                "Padai Veedu train melee units; Villalar Koodams train ranged units.\nRight-click enemies to attack, and use [G] to set rally points.",
                 "At dawn a raider outpost appears on the ridge above the valley.\nYou must field a mixed force before the sentries summon the full host.",
-                "The watchtower falls silent, but the Ashen Banner is already marching.");
+                "The Kaval Gopuram falls silent, but the Ashen Banner is already marching.");
             campaign_set_briefing(gs,
                 "Captain Brann rides in with grim news: the enemy has raised a forward watch post.\nIf that camp survives, the valley will be mapped and the clan surrounded.\n\n"
-                "Train a real mixed force and wipe out the raider barracks.");
+                "Train a real mixed force and wipe out the raider Padai Veedu.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
-                     "Build an Archery Range, train 2 Archers and 3 Barracks troops.\nRange%d/1  Arch%d/2  Troops%d/3  Camp:%s",
+                     "Build a Villalar Koodam, train 2 Archers and 3 Padai Veedu troops.\nRange%d/1  Arch%d/2  Troops%d/3  Camp:%s",
                      archery, archers, barracks_troops, enemy_barracks > 0 ? "Up" : "Down");
             if(gs->campaign_event_stage == 0){
                 snprintf(gs->campaign_status, sizeof(gs->campaign_status),
@@ -270,13 +270,13 @@ static void campaign_refresh_text(GameState *gs){
         case 4:
             campaign_set_text(gs,
                 "Chapter V: Hold The Ford",
-                "Hold Ashfall Vale for %ds.\nKeep the Town Center alive through 3 attack waves.",
+                "Hold Ashfall Vale for %ds.\nKeep the Mandapam alive through 3 attack waves.",
                 "Use rally points and grouped armies to defend.\nKeep villagers working so you can replace losses during the assault.",
                 "The enemy host reaches the river crossing before dawn.\nMira orders the bridges held while the clan prepares a counterstroke.",
                 "The ford holds. The Ashen Banner is bloodied and exposed.");
             campaign_set_briefing(gs,
                 "The Ashen Banner launches a full assault on the river crossing.\nThis mission is about defense: keep your economy alive while surviving repeated waves.\n\n"
-                "Hold the Town Center until the attack breaks.");
+                "Hold the Mandapam until the attack breaks.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
                      "Hold Ashfall Vale for %ds.\nWaves launched %d/3  Enemy army %d",
                      hold_seconds, gs->campaign_event_stage, enemy_army);
@@ -297,7 +297,7 @@ static void campaign_refresh_text(GameState *gs){
         default:
             campaign_set_text(gs,
                 "Chapter VI: Break The Ashen Banner",
-                "Destroy the enemy Town Center.\nEnemy TC %d HP  Army %d",
+                "Destroy the enemy Mandapam.\nEnemy Mandapam %d HP  Army %d",
                 "Keep villagers gathering while reinforcements train.\nAttack in groups and keep ranged units behind your front line.",
                 "With the ford secured, the River Clan marches on the enemy camp.\nWin here and Ashfall Vale becomes more than a refuge: it becomes a kingdom's beginning.",
                 "The Ashen Banner breaks. Ashfall Vale is won, and the River Clan finally has a home.");
@@ -305,7 +305,7 @@ static void campaign_refresh_text(GameState *gs){
                 "The enemy assault failed. Now Brann wants to end the war before the Ashen Banner can regroup.\nThis is the final mission: keep the economy running, build an army, and crush their town center.\n\n"
                 "A relief band will arrive shortly after the battle begins.");
             snprintf(gs->campaign_objective, sizeof(gs->campaign_objective),
-                     "Destroy the enemy Town Center.\nEnemy TC %d HP  Army %d",
+                     "Destroy the enemy Mandapam.\nEnemy Mandapam %d HP  Army %d",
                      enemy_tc_hp, army);
             if(gs->campaign_event_stage == 0){
                 snprintf(gs->campaign_status, sizeof(gs->campaign_status),
@@ -424,7 +424,7 @@ static void game_handle_tc_destroyed(GameState *gs, int defeated_player){
         return;
     }
     if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 3){
-        game_set_alert(gs, "The outpost is crippled. Finish off the raider Barracks.");
+        game_set_alert(gs, "The outpost is crippled. Finish off the raider Padai Veedu.");
         return;
     }
     if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 4){
