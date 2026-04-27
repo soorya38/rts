@@ -2,6 +2,8 @@
 #include "raylib.h"
 #include "game.h"
 
+#define TREE_VARIANT_COUNT 5
+
 /* Helper to bridge domain Vec2 to Raylib Vector2 */
 static inline Vector2 to_rvec2(Vec2 v) {
     return (Vector2){ v.x, v.y };
@@ -57,7 +59,7 @@ typedef struct {
     Texture2D tex_monasteries[4];
     Texture2D tex_land_grass[4];
     Texture2D tex_units[UNIT_COUNT];
-    Texture2D tex_env_trees[4];
+    Texture2D tex_env_trees[TREE_VARIANT_COUNT];
     Texture2D tex_env_gold;
     Texture2D tex_env_stone;
     Texture2D tex_env_berries;

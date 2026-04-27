@@ -275,20 +275,14 @@ static bool point_near_way(Way *w, double lat, double lon, double threshold) {
     return false;
 }
 
-typedef struct {
-    int x;
-    int y;
-    int score;
-} ForestCandidate;
-
 static bool tile_can_be_forest_filled(TileType t) {
-    return t == TILE_GRASS || t == TILE_DESERT || t == TILE_ROAD;
+    return t == TILE_GRASS || t == TILE_DESERT;
 }
 
-static int count_forest_neighbors(GameState *gs, int x, int y) {
+static int count_forest_neighbors(GameState *gs, int x, int y, int radius) {
     int count = 0;
-    for (int dy = -2; dy <= 2; dy++) {
-        for (int dx = -2; dx <= 2; dx++) {
+    for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
             if (dx == 0 && dy == 0) continue;
             int nx = x + dx;
             int ny = y + dy;
@@ -299,19 +293,116 @@ static int count_forest_neighbors(GameState *gs, int x, int y) {
     return count;
 }
 
-static int compare_forest_candidates(const void *a, const void *b) {
-    const ForestCandidate *ca = (const ForestCandidate *)a;
-    const ForestCandidate *cb = (const ForestCandidate *)b;
-    return cb->score - ca->score;
+static void set_forest_tile(GameState *gs, int x, int y, int *added) {
+    if (!map_in_bounds(x, y)) return;
+    if (!tile_can_be_forest_filled(gs->map[y][x].type)) return;
+    gs->map[y][x].type = TILE_FOREST;
+    gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
+    if (added) (*added)++;
+}
+
+static void grow_forest_blob(GameState *gs, int sx, int sy, int budget, int *added) {
+    int cx = sx;
+    int cy = sy;
+    int remaining = budget;
+    int stall_steps = 0;
+    int max_steps = budget * 12 + 32;
+
+    while (remaining > 0 && max_steps-- > 0) {
+        int before_remaining = remaining;
+        int radius = 2 + (int)(rng_next() % 3);
+        for (int dy = -radius; dy <= radius && remaining > 0; dy++) {
+            for (int dx = -radius; dx <= radius && remaining > 0; dx++) {
+                int x = cx + dx;
+                int y = cy + dy;
+                if (!map_in_bounds(x, y)) continue;
+                if (!tile_can_be_forest_filled(gs->map[y][x].type)) continue;
+
+                float fx = (float)dx / (float)radius;
+                float fy = (float)dy / (float)radius;
+                float dist = fx * fx + fy * fy;
+                if (dist > 1.15f) continue;
+
+                int nearby = count_forest_neighbors(gs, x, y, 1);
+                unsigned hash = (unsigned)(x * 1103515245u + y * 12345u + remaining * 97u);
+                int threshold = nearby >= 4 ? 92 : nearby >= 2 ? 75 : 58;
+                if ((int)(hash % 100u) > threshold) continue;
+
+                bool was_fillable = tile_can_be_forest_filled(gs->map[y][x].type);
+                set_forest_tile(gs, x, y, added);
+                if (was_fillable)
+                    remaining--;
+            }
+        }
+
+        if (remaining == before_remaining) {
+            stall_steps++;
+            if (stall_steps >= 6) break;
+        } else {
+            stall_steps = 0;
+        }
+
+        cx += (int)(rng_next() % 5) - 2;
+        cy += (int)(rng_next() % 5) - 2;
+        cx = clampi(cx, 2, MAP_W - 3);
+        cy = clampi(cy, 2, MAP_H - 3);
+
+        if (!tile_can_be_forest_filled(gs->map[cy][cx].type)) {
+            for (int r = 1; r <= 6; r++) {
+                bool found = false;
+                for (int dy = -r; dy <= r && !found; dy++) {
+                    for (int dx = -r; dx <= r; dx++) {
+                        int nx = cx + dx;
+                        int ny = cy + dy;
+                        if (!map_in_bounds(nx, ny)) continue;
+                        if (!tile_can_be_forest_filled(gs->map[ny][nx].type)) continue;
+                        cx = nx;
+                        cy = ny;
+                        found = true;
+                        break;
+                    }
+                }
+                if (found) break;
+            }
+        }
+    }
+}
+
+static void smooth_forest_shapes(GameState *gs) {
+    TileType next_types[MAP_H][MAP_W];
+    for (int y = 0; y < MAP_H; y++)
+        for (int x = 0; x < MAP_W; x++)
+            next_types[y][x] = gs->map[y][x].type;
+
+    for (int y = 1; y < MAP_H - 1; y++) {
+        for (int x = 1; x < MAP_W - 1; x++) {
+            TileType t = gs->map[y][x].type;
+            int neighbors = count_forest_neighbors(gs, x, y, 1);
+
+            if (t == TILE_FOREST && neighbors <= 1) {
+                next_types[y][x] = TILE_GRASS;
+            } else if (tile_can_be_forest_filled(t) && neighbors >= 5) {
+                next_types[y][x] = TILE_FOREST;
+            }
+        }
+    }
+
+    for (int y = 1; y < MAP_H - 1; y++) {
+        for (int x = 1; x < MAP_W - 1; x++) {
+            if (next_types[y][x] == TILE_FOREST && gs->map[y][x].type != TILE_FOREST) {
+                gs->map[y][x].type = TILE_FOREST;
+                gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
+            } else if (next_types[y][x] != TILE_FOREST && gs->map[y][x].type == TILE_FOREST) {
+                gs->map[y][x].type = next_types[y][x];
+                gs->map[y][x].resource_amt = 0;
+            }
+        }
+    }
 }
 
 static void fill_forest_cover(GameState *gs, int target_percent) {
     int current_forest = 0;
     int coverable_tiles = 0;
-    int phase_one_target = 0;
-    int needed = 0;
-    int added = 0;
-    ForestCandidate candidate_scores[MAP_W * MAP_H];
 
     for (int y = 0; y < MAP_H; y++) {
         for (int x = 0; x < MAP_W; x++) {
@@ -319,104 +410,60 @@ static void fill_forest_cover(GameState *gs, int target_percent) {
             if (t == TILE_FOREST) {
                 current_forest++;
                 coverable_tiles++;
-                continue;
+            } else if (tile_can_be_forest_filled(t)) {
+                coverable_tiles++;
             }
-            if (!tile_can_be_forest_filled(t)) continue;
-
-            coverable_tiles++;
         }
     }
 
     if (coverable_tiles == 0) return;
 
     int target_forest = (coverable_tiles * target_percent + 50) / 100;
-    if (current_forest >= target_forest) return;
-
-    needed = target_forest - current_forest;
-    phase_one_target = needed * 2 / 3;
-
-    for (int y = 0; y < MAP_H; y++) {
-        for (int x = 0; x < MAP_W; x++) {
-            TileType t = gs->map[y][x].type;
-            if (!tile_can_be_forest_filled(t)) continue;
-            int neighbors = count_forest_neighbors(gs, x, y);
-            if (neighbors < 2) continue;
-
-            unsigned hash = (unsigned)(x * 73856093u ^ y * 19349663u);
-            candidate_scores[added] = (ForestCandidate){
-                .x = x,
-                .y = y,
-                .score = neighbors * 2000 + (int)(hash % 1000u),
-            };
-            added++;
-        }
-    }
-
-    qsort(candidate_scores, (size_t)added, sizeof(candidate_scores[0]), compare_forest_candidates);
-
-    int phase_one_added = phase_one_target < added ? phase_one_target : added;
-    for (int i = 0; i < phase_one_added; i++) {
-        int x = candidate_scores[i].x;
-        int y = candidate_scores[i].y;
-        gs->map[y][x].type = TILE_FOREST;
-        gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
-    }
-
-    int remaining = needed - phase_one_added;
+    int remaining = target_forest - current_forest;
     if (remaining <= 0) return;
 
-    while (remaining > 0) {
-        int best_x = -1;
-        int best_y = -1;
-        int best_score = -1;
+    int blob_attempts = 10 + remaining / 50;
+    for (int attempt = 0; attempt < blob_attempts && remaining > 0; attempt++) {
+        int sx = (int)(rng_next() % MAP_W);
+        int sy = (int)(rng_next() % MAP_H);
 
-        for (int y = 0; y < MAP_H; y++) {
-            for (int x = 0; x < MAP_W; x++) {
-                TileType t = gs->map[y][x].type;
-                if (!tile_can_be_forest_filled(t)) continue;
-
-                int neighbors = count_forest_neighbors(gs, x, y);
-                if (neighbors <= 0) continue;
-
-                unsigned hash = (unsigned)(x * 83492791u ^ y * 2971215073u);
-                int score = neighbors * 3000 + (int)(hash % 1000u);
-                if (score > best_score) {
-                    best_score = score;
-                    best_x = x;
-                    best_y = y;
+        if (!tile_can_be_forest_filled(gs->map[sy][sx].type)) {
+            bool found = false;
+            for (int r = 1; r <= 8 && !found; r++) {
+                for (int dy = -r; dy <= r && !found; dy++) {
+                    for (int dx = -r; dx <= r; dx++) {
+                        int nx = sx + dx;
+                        int ny = sy + dy;
+                        if (!map_in_bounds(nx, ny)) continue;
+                        if (!tile_can_be_forest_filled(gs->map[ny][nx].type)) continue;
+                        sx = nx;
+                        sy = ny;
+                        found = true;
+                        break;
+                    }
                 }
             }
+            if (!found) continue;
         }
 
-        if (best_x < 0 || best_y < 0) break;
-        gs->map[best_y][best_x].type = TILE_FOREST;
-        gs->map[best_y][best_x].resource_amt = 150 + rng_range(0, 100);
-        remaining--;
+        int blob_budget = 10 + (int)(rng_next() % 28);
+        if (blob_budget > remaining) blob_budget = remaining;
+        int added = 0;
+        grow_forest_blob(gs, sx, sy, blob_budget, &added);
+        remaining -= added;
     }
 
-    if (remaining <= 0) return;
+    smooth_forest_shapes(gs);
 
-    int fallback_count = 0;
-    for (int y = 0; y < MAP_H; y++) {
-        for (int x = 0; x < MAP_W; x++) {
-            TileType t = gs->map[y][x].type;
-            if (!tile_can_be_forest_filled(t)) continue;
-            unsigned hash = (unsigned)(x * 1640531513u + y * 2654435761u);
-            candidate_scores[fallback_count++] = (ForestCandidate){
-                .x = x,
-                .y = y,
-                .score = (int)(hash % 1000u),
-            };
+    if (remaining > 0) {
+        for (int y = 0; y < MAP_H && remaining > 0; y++) {
+            for (int x = 0; x < MAP_W && remaining > 0; x++) {
+                if (!tile_can_be_forest_filled(gs->map[y][x].type)) continue;
+                if (count_forest_neighbors(gs, x, y, 1) < 2) continue;
+                set_forest_tile(gs, x, y, NULL);
+                remaining--;
+            }
         }
-    }
-
-    qsort(candidate_scores, (size_t)fallback_count, sizeof(candidate_scores[0]), compare_forest_candidates);
-    for (int i = 0; i < fallback_count && remaining > 0; i++) {
-        int x = candidate_scores[i].x;
-        int y = candidate_scores[i].y;
-        gs->map[y][x].type = TILE_FOREST;
-        gs->map[y][x].resource_amt = 150 + rng_range(0, 100);
-        remaining--;
     }
 }
 
