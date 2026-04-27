@@ -724,89 +724,197 @@ static void place_gameplay(GameState *gs, int num_players, int *start_x, int *st
     }
 }
 
+static bool near_player_town_center(GameState *gs, int tx, int ty, int radius) {
+    for (int i = 0; i < gs->bld_count; i++) {
+        if (!gs->buildings[i].active || gs->buildings[i].type != BLD_TOWN_CENTER) continue;
+        int dx = gs->buildings[i].tx - tx;
+        int dy = gs->buildings[i].ty - ty;
+        if (dx * dx + dy * dy < radius * radius) return true;
+    }
+    return false;
+}
+
+static int count_adjacent_roads(GameState *gs, int tx, int ty, int w, int h) {
+    int roads = 0;
+    for (int x = tx - 1; x <= tx + w; x++) {
+        if (map_in_bounds(x, ty - 1) && gs->map[ty - 1][x].type == TILE_ROAD) roads++;
+        if (map_in_bounds(x, ty + h) && gs->map[ty + h][x].type == TILE_ROAD) roads++;
+    }
+    for (int y = ty; y < ty + h; y++) {
+        if (map_in_bounds(tx - 1, y) && gs->map[y][tx - 1].type == TILE_ROAD) roads++;
+        if (map_in_bounds(tx + w, y) && gs->map[y][tx + w].type == TILE_ROAD) roads++;
+    }
+    return roads;
+}
+
+static bool footprint_overlaps_road(GameState *gs, int tx, int ty, int w, int h) {
+    for (int dy = 0; dy < h; dy++)
+        for (int dx = 0; dx < w; dx++)
+            if (gs->map[ty + dy][tx + dx].type == TILE_ROAD)
+                return true;
+    return false;
+}
+
+static bool lot_has_breathing_room(GameState *gs, int tx, int ty, int w, int h, int pad) {
+    for (int y = ty - pad; y < ty + h + pad; y++) {
+        for (int x = tx - pad; x < tx + w + pad; x++) {
+            if (!map_in_bounds(x, y)) continue;
+            if (x >= tx && x < tx + w && y >= ty && y < ty + h) continue;
+            int bid = gs->map[y][x].building_id;
+            if (bid < 0) continue;
+            Building *b = &gs->buildings[bid];
+            if (b->active) return false;
+        }
+    }
+    return true;
+}
+
+static int place_neutral_building_at(GameState *gs, int neutral_player, BldType type, int tx, int ty) {
+    int w = building_tw(type);
+    int h = building_th(type);
+    if (!map_in_bounds(tx, ty) || !map_in_bounds(tx + w - 1, ty + h - 1)) return -1;
+    if (!map_is_buildable(gs, tx, ty, w, h)) return -1;
+    if (footprint_overlaps_road(gs, tx, ty, w, h)) return -1;
+
+    int slot = -1;
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        if (!gs->buildings[i].active) {
+            slot = i;
+            break;
+        }
+    }
+    if (slot < 0) return -1;
+
+    Building *b = &gs->buildings[slot];
+    memset(b, 0, sizeof(Building));
+    b->active = true;
+    b->id = slot;
+    b->player = neutral_player;
+    b->type = type;
+    b->tx = tx;
+    b->ty = ty;
+    b->tw = w;
+    b->th = h;
+    b->max_hp = building_max_hp(type);
+    b->hp = b->max_hp;
+    b->construction = 1.0f;
+    b->complete = true;
+    b->variant = (type == BLD_HOUSE) ? (rng_next() % 4) : 0;
+    map_place_building(gs, tx, ty, w, h, slot);
+    if (slot >= gs->bld_count) gs->bld_count = slot + 1;
+    return slot;
+}
+
+static BldType choose_neutral_building_type(int road_contacts, bool intersection_bias) {
+    int roll = (int)(rng_next() % 100);
+    if (intersection_bias || road_contacts >= 4) {
+        if (roll < 18) return BLD_MARKET;
+        if (roll < 32) return BLD_MONASTERY;
+        if (roll < 46) return BLD_BLACKSMITH;
+        if (roll < 58) return BLD_WATCH_TOWER;
+        if (roll < 68) return BLD_BARRACKS;
+        if (roll < 76) return BLD_ARCHERY_RANGE;
+        if (roll < 84) return BLD_STABLE;
+        return BLD_HOUSE;
+    }
+
+    if (roll < 72) return BLD_HOUSE;
+    if (roll < 81) return BLD_BLACKSMITH;
+    if (roll < 88) return BLD_BARRACKS;
+    if (roll < 93) return BLD_ARCHERY_RANGE;
+    if (roll < 97) return BLD_STABLE;
+    return BLD_MARKET;
+}
+
 static void place_neutral_city_buildings(GameState *gs) {
     int neutral_player = 3; /* Uncontrollable neutral player */
     /* Upgrade neutral player to Castle Age so their markets/blacksmiths look grander */
     gs->res[neutral_player].age = 2;
+    const int town_center_buffer = 26;
+    int road_sites[MAP_W * MAP_H][2];
+    int road_site_count = 0;
 
-    /* Iterate with a tighter step (+= 2) to pack buildings very closely, resembling dense ancient cities */
-    for (int ty = 6; ty < MAP_H - 6; ty += 2) {
-        for (int tx = 6; tx < MAP_W - 6; tx += 2) {
-            /* Push coverage higher so neutral settlements feel like real towns. */
-            if ((rng_next() % 100) < 88) {
-                BldType type = BLD_HOUSE;
-                int rnd = rng_next() % 100;
-                if (rnd < 8) type = BLD_MARKET;
-                else if (rnd < 16) type = BLD_BLACKSMITH;
-                else if (rnd < 24) type = BLD_MONASTERY;
-                else if (rnd < 34) type = BLD_WATCH_TOWER;
-                else if (rnd < 42) type = BLD_BARRACKS;
-                else if (rnd < 50) type = BLD_ARCHERY_RANGE;
-                else if (rnd < 58) type = BLD_STABLE;
-                
-                int w = building_tw(type);
-                int h = building_th(type);
-                
-                if (!map_is_buildable(gs, tx, ty, w, h)) {
-                    /* Fallback to house if larger building doesn't fit */
-                    type = BLD_HOUSE;
-                    w = building_tw(type);
-                    h = building_th(type);
-                }
-                
-                if (map_is_buildable(gs, tx, ty, w, h)) {
-                    /* Keep player town centers playable, but allow denser neutral settlements. */
-                    bool too_close = false;
-                    for (int i = 0; i < gs->bld_count; i++) {
-                        if (gs->buildings[i].active && gs->buildings[i].type == BLD_TOWN_CENTER) {
-                            int dx = gs->buildings[i].tx - tx;
-                            int dy = gs->buildings[i].ty - ty;
-                            if (dx*dx + dy*dy < 18*18) {
-                                too_close = true;
-                                break;
-                            }
-                        }
-                    }
-                    if (too_close) continue;
+    for (int y = 2; y < MAP_H - 2; y++) {
+        for (int x = 2; x < MAP_W - 2; x++) {
+            if (gs->map[y][x].type != TILE_ROAD) continue;
+            if (near_player_town_center(gs, x, y, town_center_buffer)) continue;
+            road_sites[road_site_count][0] = x;
+            road_sites[road_site_count][1] = y;
+            road_site_count++;
+        }
+    }
 
-                    /* Ensure the footprint doesn't overlap roads */
-                    bool over_road = false;
-                    for (int dy = 0; dy < h; dy++) {
-                        for (int dx = 0; dx < w; dx++) {
-                            if (gs->map[ty+dy][tx+dx].type == TILE_ROAD) {
-                                over_road = true;
-                            }
-                        }
-                    }
-                    if (over_road) continue;
-                    
-                    /* Place the neutral building */
-                    int slot = -1;
-                    for (int i=0; i<MAX_BUILDINGS; i++) {
-                        if (!gs->buildings[i].active) { slot = i; break; }
-                    }
-                    if (slot >= 0) {
-                        Building *b = &gs->buildings[slot];
-                        memset(b, 0, sizeof(Building));
-                        b->active = true;
-                        b->id = slot;
-                        b->player = neutral_player;
-                        b->type = type;
-                        b->tx = tx; b->ty = ty;
-                        b->tw = w; b->th = h;
-                        b->max_hp = building_max_hp(type);
-                        b->hp = b->max_hp;
-                        b->construction = 1.0f;
-                        b->complete = true;
-                        /* Randomize visual variant for houses (4 Tamil variants) */
-                        if (type == BLD_HOUSE) {
-                            b->variant = rng_next() % 4;
-                        } else {
-                            b->variant = 0;
-                        }
-                        map_place_building(gs, tx, ty, w, h, slot);
-                        if(slot >= gs->bld_count) gs->bld_count = slot + 1;
-                    }
+    for (int i = road_site_count - 1; i > 0; i--) {
+        int j = (int)(rng_next() % (unsigned)(i + 1));
+        int tmpx = road_sites[i][0], tmpy = road_sites[i][1];
+        road_sites[i][0] = road_sites[j][0];
+        road_sites[i][1] = road_sites[j][1];
+        road_sites[j][0] = tmpx;
+        road_sites[j][1] = tmpy;
+    }
+
+    int buildings_placed = 0;
+    int building_cap = MAP_W * MAP_H / 22;
+
+    for (int i = 0; i < road_site_count && buildings_placed < building_cap; i++) {
+        int rx = road_sites[i][0];
+        int ry = road_sites[i][1];
+        bool intersection_bias = false;
+
+        int road_neighbors = 0;
+        static const int dirs[4][2] = {{1,0},{-1,0},{0,1},{0,-1}};
+        for (int d = 0; d < 4; d++) {
+            int nx = rx + dirs[d][0];
+            int ny = ry + dirs[d][1];
+            if (map_in_bounds(nx, ny) && gs->map[ny][nx].type == TILE_ROAD)
+                road_neighbors++;
+        }
+        if (road_neighbors >= 3) intersection_bias = true;
+
+        BldType type = choose_neutral_building_type(road_neighbors, intersection_bias);
+        bool placed_here = false;
+
+        for (int side = 0; side < 4 && !placed_here; side++) {
+            int tx = rx;
+            int ty = ry;
+            int w = building_tw(type);
+            int h = building_th(type);
+
+            if (side == 0) { tx = rx - w / 2; ty = ry - h; }
+            else if (side == 1) { tx = rx - w / 2; ty = ry + 1; }
+            else if (side == 2) { tx = rx - w; ty = ry - h / 2; }
+            else { tx = rx + 1; ty = ry - h / 2; }
+
+            if (!map_in_bounds(tx, ty) || !map_in_bounds(tx + w - 1, ty + h - 1)) continue;
+            if (near_player_town_center(gs, tx, ty, town_center_buffer)) continue;
+            if (!lot_has_breathing_room(gs, tx, ty, w, h, type == BLD_HOUSE ? 0 : 1)) continue;
+
+            int road_contacts = count_adjacent_roads(gs, tx, ty, w, h);
+            if (road_contacts == 0) continue;
+
+            if (type != BLD_HOUSE && road_contacts < 2 && (rng_next() % 100) < 60) continue;
+            if (type == BLD_HOUSE && road_contacts < 1) continue;
+
+            if (place_neutral_building_at(gs, neutral_player, type, tx, ty) >= 0) {
+                buildings_placed++;
+                placed_here = true;
+            } else if (type != BLD_HOUSE) {
+                int hw = building_tw(BLD_HOUSE);
+                int hh = building_th(BLD_HOUSE);
+                int htx = tx;
+                int hty = ty;
+                if (side == 0) { htx = rx - hw / 2; hty = ry - hh; }
+                else if (side == 1) { htx = rx - hw / 2; hty = ry + 1; }
+                else if (side == 2) { htx = rx - hw; hty = ry - hh / 2; }
+                else { htx = rx + 1; hty = ry - hh / 2; }
+
+                if (map_in_bounds(htx, hty) && map_in_bounds(htx + hw - 1, hty + hh - 1) &&
+                    !near_player_town_center(gs, htx, hty, town_center_buffer) &&
+                    lot_has_breathing_room(gs, htx, hty, hw, hh, 0) &&
+                    count_adjacent_roads(gs, htx, hty, hw, hh) > 0 &&
+                    place_neutral_building_at(gs, neutral_player, BLD_HOUSE, htx, hty) >= 0) {
+                    buildings_placed++;
+                    placed_here = true;
                 }
             }
         }
