@@ -694,6 +694,45 @@ static bool is_unit_obscured(GameState *gs, Unit *u) {
     return false;
 }
 
+static bool forest_overlay_blocked_by_building(GameState *gs, int tx, int ty) {
+    float tree_depth = (tx + 0.5f) + (ty + 0.5f);
+    float px = tx * TILE_SIZE;
+    float py = ty * TILE_SIZE;
+    unsigned tree_seed = (unsigned)(tx * 92821u + ty * 68917u + gs->map[ty][tx].variant * 131u);
+    float size_jitter = 1.90f + (float)((tree_seed >> 3) % 20) / 100.0f;
+
+    Vector2 tree_center = to_rvec2(world_to_iso(px + TILE_SIZE * 0.5f, py + TILE_SIZE * 0.5f));
+    float canopy_w = TILE_SIZE * size_jitter;
+    float canopy_h = canopy_w * 1.6f;
+    float offset_x = (float)((int)((tree_seed >> 8) % 7) - 3) * 0.6f;
+    float offset_y = (float)((int)((tree_seed >> 12) % 5) - 2) * 0.8f;
+    Rectangle canopy_rect = {
+        tree_center.x - canopy_w * 0.5f + offset_x,
+        tree_center.y - canopy_h + TILE_SIZE * 0.42f + offset_y,
+        canopy_w,
+        canopy_h
+    };
+
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *b = &gs->buildings[i];
+        if (!b->active) continue;
+
+        float b_depth = (b->tx + b->tw / 2.0f) + (b->ty + b->th / 2.0f);
+        if (b_depth <= tree_depth) continue;
+
+        float bw = b->tw * TILE_SIZE;
+        float bh = b->th * TILE_SIZE;
+        Vector2 bc = to_rvec2(world_to_iso(b->tx * TILE_SIZE + bw * 0.5f,
+                                           b->ty * TILE_SIZE + bh * 0.5f));
+        float screen_w = (b->tw + b->th) * 32.0f;
+        float screen_h = screen_w * 0.5f + 100.0f;
+        Rectangle brect = {bc.x - screen_w * 0.5f, bc.y - screen_h + 16.0f, screen_w, screen_h};
+
+        if (CheckCollisionRecs(canopy_rect, brect)) return true;
+    }
+    return false;
+}
+
 void renderer_draw_world(GameState *gs, UIState *ui){
     int lp = net_get_local_player();
     for(int y=0;y<MAP_H;y++)
@@ -746,7 +785,8 @@ void renderer_draw_world(GameState *gs, UIState *ui){
     for(int y=0;y<MAP_H;y++)
         for(int x=0;x<MAP_W;x++)
             if(gs->map[y][x].fog[lp]!=FOG_HIDDEN)
-                draw_forest_overlay(gs, ui, x, y);
+                if(gs->map[y][x].type == TILE_FOREST && !forest_overlay_blocked_by_building(gs, x, y))
+                    draw_forest_overlay(gs, ui, x, y);
 
     // Draw outlines for obscured units
     for(int i=0;i<MAX_UNITS;i++){

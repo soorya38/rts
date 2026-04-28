@@ -46,7 +46,7 @@ static void draw_forest_canopy(UIState *ui, Tile *t, int x, int y, float px, flo
     if (tex.id != 0) {
         float tw = tex.width;
         float th = tex.height;
-        float size_jitter = 1.90f + (float)((tree_seed >> 3) % 20) / 100.0f;
+        float size_jitter = 4.56f + (float)((tree_seed >> 3) % 48) / 100.0f;
         float scale = (s * size_jitter) / tw;
         float dw = tw * scale;
         float dh = th * scale;
