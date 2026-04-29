@@ -358,6 +358,16 @@ void hud_draw(GameState *gs, UIState *ui){
     if(gs->phase==PHASE_MENU){ draw_menu(gs, ui); return; }
     if(gs->phase==PHASE_VICTORY||gs->phase==PHASE_DEFEAT){ draw_end_screen(gs, ui); return; }
 
+    if(gs->hero.phase != HERO_POSSESSION_OFF){
+        draw_alert(gs, ui);
+        if(gs->phase==PHASE_PAUSED){
+            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,100});
+            const char *pm="PAUSED  -  Press [P] to resume";
+            DrawText(pm,GetScreenWidth()/2-MeasureText(pm,22)/2,GetScreenHeight()/2-11,22,CLITERAL(Color){220,200,140,255});
+        }
+        return;
+    }
+
     draw_top_bar(gs, ui);
     draw_bottom_panel(gs, ui);
     draw_minimap(gs, ui);
@@ -385,4 +395,3 @@ void hud_draw(GameState *gs, UIState *ui){
         DrawText(dbuf,8,HUD_TOP_H+4,10,CLITERAL(Color){100,90,65,180});
     }
 }
-

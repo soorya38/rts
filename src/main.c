@@ -27,6 +27,7 @@ int main(void){
 #endif
     TraceLog(LOG_INFO, "RTS >> InitWindow done. screen=%dx%d",
              GetScreenWidth(), GetScreenHeight());
+    InitAudioDevice();
 
     SetExitKey(KEY_NULL);   /* Don't quit on ESC */
 
@@ -73,9 +74,16 @@ int main(void){
 
         if(gs->phase==PHASE_PLAYING || gs->phase==PHASE_PAUSED ||
            gs->phase==PHASE_VICTORY || gs->phase==PHASE_DEFEAT){
-            BeginMode2D(ui->camera);
-                renderer_draw_world(gs, ui);
-            EndMode2D();
+            if(gs->hero.phase == HERO_POSSESSION_OFF ||
+               gs->hero.phase == HERO_POSSESSION_ENTERING ||
+               gs->hero.phase == HERO_POSSESSION_EXITING){
+                BeginMode2D(ui->camera);
+                    renderer_draw_world(gs, ui);
+                EndMode2D();
+            }
+            if(gs->hero.phase != HERO_POSSESSION_OFF){
+                renderer_draw_hero_possession(gs, ui);
+            }
         }
 
         /* HUD / overlay (screen-space) */
@@ -89,6 +97,7 @@ int main(void){
 
     net_deinit();
     ui_state_deinit(ui);
+    if (IsAudioDeviceReady()) CloseAudioDevice();
     CloseWindow();
     free(gs);
     free(ui);

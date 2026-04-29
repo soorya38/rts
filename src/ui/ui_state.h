@@ -15,6 +15,10 @@ static inline Vec2 to_vec2(Vector2 v) {
 
 typedef struct {
     Camera2D camera;
+    Camera3D hero_camera;
+    Camera2D hero_saved_camera;
+    bool     hero_has_saved_camera;
+    HeroPossessionPhase hero_seen_phase;
 
     /* Selection state (belongs to UI) */
     bool       box_selecting;
@@ -68,6 +72,11 @@ typedef struct {
     Texture2D tex_ui_gold;
     Texture2D tex_ui_stone;
     Texture2D tex_ui_pop;
+    Sound     snd_hero_enter;
+    Sound     snd_hero_attack;
+    Sound     snd_hero_exit;
+    Sound     snd_hero_block;
+    bool      hero_audio_ready;
 
     /* OSM map overlay */
     Texture2D tex_osm_tiles[4][4]; /* [row][col] */
@@ -77,6 +86,9 @@ typedef struct {
 void ui_state_init(UIState *ui, GameState *gs);
 void ui_state_deinit(UIState *ui);
 void ui_center_on_tc(UIState *ui, GameState *gs);
+void ui_sync_hero_possession(UIState *ui, GameState *gs);
+void ui_play_hero_attack(UIState *ui);
+void ui_play_hero_block(UIState *ui);
 Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age);
 Texture2D ui_get_house_texture(const UIState *ui, uint8_t variant);
 /* Returns a scale factor relative to 720p so HUD elements are legible on any
@@ -85,5 +97,6 @@ float hud_scale(void);
 
 /* Abstracted prototypes that now take UIState for rendering / input */
 void renderer_draw_world(GameState *gs, UIState *ui);
+void renderer_draw_hero_possession(GameState *gs, UIState *ui);
 void hud_draw(GameState *gs, UIState *ui);
 void input_update(GameState *gs, UIState *ui);

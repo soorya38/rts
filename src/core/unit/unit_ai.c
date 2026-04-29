@@ -591,6 +591,15 @@ void unit_update(GameState *gs, Unit *u, float dt){
     }
     if(u->state==US_DEAD){u->active=false;return;}
 
+    if(hero_possession_controls_unit(gs, u->id)){
+        u->path_len = 0;
+        u->path_idx = 0;
+        u->target_unit = -1;
+        u->target_bld = -1;
+        u->state = US_IDLE;
+        return;
+    }
+
     if(u->state==US_MOVING||u->state==US_RETURNING)
         unit_step_path(u,dt);
 

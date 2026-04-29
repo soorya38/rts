@@ -25,6 +25,9 @@ typedef struct { float x, y; } Vec2;
 #define NUM_PLAYERS     4
 #define POP_CAP_MAX     200
 #define HOUSE_VARIANT_COUNT 16
+#define HERO_POSSESSION_DURATION 22.0f
+#define HERO_POSSESSION_COOLDOWN 45.0f
+#define HERO_POSSESSION_TRANSITION_TIME 0.65f
 
 /* ─── Priority queue (min-heap) used by A* ─────────────────── */
 #define PQ_CAP 8192
@@ -328,6 +331,36 @@ typedef struct {
     float          arc_height;
 } Projectile;
 
+/* ─── Hero possession mode ─────────────────────────────────── */
+typedef enum {
+    HERO_POSSESSION_OFF = 0,
+    HERO_POSSESSION_ENTERING,
+    HERO_POSSESSION_ACTIVE,
+    HERO_POSSESSION_EXITING
+} HeroPossessionPhase;
+
+typedef struct {
+    HeroPossessionPhase phase;
+    int       unit_id;             /* possessed unit, -1 = none */
+    float     duration;
+    float     timer;
+    float     cooldown_timer;
+    float     transition_timer;
+    float     transition_time;
+
+    /* First-person control/view state */
+    float     yaw;
+    float     pitch;
+    float     stamina;
+    float     attack_timer;
+    float     dodge_timer;
+    float     dodge_cooldown;
+    float     block_timer;
+    float     shake;
+    float     blur;
+    float     impact_timer;
+} HeroPossession;
+
 /* ─── Match mode ─────────────────────────────────────────────── */
 typedef enum {
     GAME_MODE_STANDARD = 0,
@@ -358,6 +391,7 @@ typedef struct {
 
     BuildMode  build_mode;
     Projectile projectiles[MAX_PROJECTILES];
+    HeroPossession hero;
 
     /* AI */
     int        ai_phase;
@@ -528,3 +562,12 @@ void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,
                            int target_unit, int target_bld, int dmg,
                            float duration, float arc_height);
 void game_update_projectiles(GameState *gs, float dt);
+
+/* hero_possession.c */
+bool hero_possession_is_unit_eligible(const GameState *gs, int unit_id, int player);
+bool hero_possession_can_start(const GameState *gs, int unit_id, int player);
+bool hero_possession_start(GameState *gs, int unit_id, int player);
+void hero_possession_request_exit(GameState *gs, const char *alert);
+void hero_possession_update(GameState *gs, float dt);
+float hero_possession_time_scale(const GameState *gs);
+bool hero_possession_controls_unit(const GameState *gs, int unit_id);

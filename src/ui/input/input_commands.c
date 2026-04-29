@@ -16,6 +16,279 @@ extern void handle_left_down(GameState *gs, UIState *ui);
 extern void handle_left_up(GameState *gs, UIState *ui);
 extern void handle_tap(GameState *gs, UIState *ui);
 
+static int selected_hero_candidate(GameState *gs, UIState *ui) {
+    int lp = net_get_local_player();
+    if (ui->sel_count != 1) return -1;
+    int uid = ui->sel_units[0];
+    if (!hero_possession_is_unit_eligible(gs, uid, lp)) return -1;
+    return uid;
+}
+
+static bool try_start_selected_hero_possession(GameState *gs, UIState *ui) {
+    int uid = selected_hero_candidate(gs, ui);
+    if (uid < 0) return false;
+    if (g_net_active) {
+        game_set_alert(gs, "Hero Possession is available in solo play only.");
+        return true;
+    }
+    if (hero_possession_start(gs, uid, net_get_local_player())) {
+        ui_sync_hero_possession(ui, gs);
+        return true;
+    }
+    if (gs->hero.cooldown_timer > 0.0f) {
+        char msg[80];
+        snprintf(msg, sizeof(msg), "Hero Possession cooling down: %.0fs.", gs->hero.cooldown_timer);
+        game_set_alert(gs, msg);
+        return true;
+    }
+    return false;
+}
+
+static bool hero_try_move(GameState *gs, Unit *u, float dx, float dy) {
+    float nx = u->wx + dx;
+    float ny = u->wy + dy;
+    int tx = (int)(nx / TILE_SIZE);
+    int ty = (int)(ny / TILE_SIZE);
+    if (!map_in_bounds(tx, ty) || !map_is_passable(gs, tx, ty)) return false;
+    u->wx = clampf(nx, 1.0f, (MAP_W * TILE_SIZE) - 1.0f);
+    u->wy = clampf(ny, 1.0f, (MAP_H * TILE_SIZE) - 1.0f);
+    return true;
+}
+
+static float hero_building_distance_tiles(Unit *u, Building *b) {
+    float bx1 = b->tx * TILE_SIZE;
+    float by1 = b->ty * TILE_SIZE;
+    float bx2 = bx1 + b->tw * TILE_SIZE;
+    float by2 = by1 + b->th * TILE_SIZE;
+    float cx = clampf(u->wx, bx1, bx2);
+    float cy = clampf(u->wy, by1, by2);
+    return dist2f(u->wx, u->wy, cx, cy) / TILE_SIZE;
+}
+
+static int hero_find_unit_in_aim(GameState *gs, Unit *u, float yaw, float range_tiles, float cone_cos) {
+    float fx = cosf(yaw);
+    float fy = sinf(yaw);
+    int best = -1;
+    float best_d = range_tiles;
+
+    for (int i = 0; i < MAX_UNITS; i++) {
+        Unit *t = &gs->units[i];
+        if (!t->active || t->player == u->player || t->state == US_DEAD || t->state == US_DYING) continue;
+        float dx = t->wx - u->wx;
+        float dy = t->wy - u->wy;
+        float dist_px = sqrtf(dx * dx + dy * dy);
+        if (dist_px < 1.0f) continue;
+        float dist_tiles = dist_px / TILE_SIZE;
+        if (dist_tiles > best_d) continue;
+        float dot = (dx / dist_px) * fx + (dy / dist_px) * fy;
+        if (dot < cone_cos) continue;
+        best = i;
+        best_d = dist_tiles;
+    }
+
+    return best;
+}
+
+static int hero_find_building_in_aim(GameState *gs, Unit *u, float yaw,
+                                     float range_tiles, float cone_cos, float *out_dist) {
+    float fx = cosf(yaw);
+    float fy = sinf(yaw);
+    int best = -1;
+    float best_d = range_tiles;
+
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *b = &gs->buildings[i];
+        if (!b->active || b->player == u->player || !b->complete) continue;
+        float cx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
+        float cy = (b->ty + b->th * 0.5f) * TILE_SIZE;
+        float dx = cx - u->wx;
+        float dy = cy - u->wy;
+        float dist_px = sqrtf(dx * dx + dy * dy);
+        if (dist_px < 1.0f) continue;
+        float dist_tiles = hero_building_distance_tiles(u, b);
+        if (dist_tiles > best_d) continue;
+        float dot = (dx / dist_px) * fx + (dy / dist_px) * fy;
+        if (dot < cone_cos) continue;
+        best = i;
+        best_d = dist_tiles;
+    }
+
+    if (out_dist) *out_dist = best_d;
+    return best;
+}
+
+static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
+    if (gs->hero.attack_timer > 0.0f) return;
+
+    bool ranged = unit_uses_projectiles(u->type);
+    float range = ranged ? clampf(u->attack_range + 1.25f, 4.0f, 9.5f) : 1.85f;
+    float cone = ranged ? 0.94f : 0.16f;
+    int target_unit = hero_find_unit_in_aim(gs, u, gs->hero.yaw, range, cone);
+    float target_dist = range;
+    int target_bld = -1;
+
+    if (target_unit < 0) {
+        target_bld = hero_find_building_in_aim(gs, u, gs->hero.yaw, range, cone, &target_dist);
+    } else {
+        Unit *t = &gs->units[target_unit];
+        target_dist = dist2f(u->wx, u->wy, t->wx, t->wy) / TILE_SIZE;
+    }
+
+    int dmg = u->attack_dmg + (ranged ? 1 : 3);
+    if (gs->hero.dodge_timer > 0.0f) dmg += 2;
+
+    if (target_unit >= 0) {
+        Unit *t = &gs->units[target_unit];
+        int final_dmg = dmg - t->armor;
+        if (final_dmg < 1) final_dmg = 1;
+        if (ranged) {
+            game_spawn_projectile(gs, u->player, PROJ_ARROW,
+                                  u->wx, u->wy, t->wx, t->wy,
+                                  target_unit, -1, final_dmg,
+                                  clampf(0.08f + target_dist * 0.045f, 0.12f, 0.42f),
+                                  24.0f);
+        } else {
+            game_damage_unit(gs, target_unit, final_dmg);
+        }
+        gs->hero.shake = 0.35f;
+        gs->hero.impact_timer = 0.16f;
+    } else if (target_bld >= 0) {
+        Building *b = &gs->buildings[target_bld];
+        int final_dmg = dmg + (ranged ? 0 : 2);
+        if (ranged) {
+            float bx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
+            float by = (b->ty + b->th * 0.5f) * TILE_SIZE;
+            game_spawn_projectile(gs, u->player, PROJ_ARROW,
+                                  u->wx, u->wy, bx, by,
+                                  -1, target_bld, final_dmg,
+                                  clampf(0.08f + target_dist * 0.045f, 0.12f, 0.42f),
+                                  22.0f);
+        } else {
+            game_damage_building(gs, target_bld, final_dmg);
+        }
+        gs->hero.shake = 0.38f;
+        gs->hero.impact_timer = 0.16f;
+    } else {
+        gs->hero.shake = 0.12f;
+    }
+
+    gs->hero.blur = 0.38f;
+    gs->hero.attack_timer = clampf(u->attack_cd * 0.55f, 0.35f, 1.1f);
+    ui_play_hero_attack(ui);
+}
+
+static void hero_perform_interact(GameState *gs, UIState *ui, Unit *u) {
+    float fx = cosf(gs->hero.yaw);
+    float fy = sinf(gs->hero.yaw);
+    int tx = (int)((u->wx + fx * TILE_SIZE * 1.25f) / TILE_SIZE);
+    int ty = (int)((u->wy + fy * TILE_SIZE * 1.25f) / TILE_SIZE);
+    if (!map_in_bounds(tx, ty)) return;
+
+    Tile *tile = &gs->map[ty][tx];
+    bool resource = tile->type == TILE_FOREST || tile->type == TILE_GOLD ||
+                    tile->type == TILE_STONE || tile->type == TILE_BERRIES ||
+                    tile->type == TILE_FARM;
+    if (resource && tile->resource_amt > 0) {
+        tile->resource_amt -= u->attack_dmg * 5;
+        if (tile->resource_amt <= 0 && tile->type != TILE_FARM) {
+            tile->resource_amt = 0;
+            tile->type = TILE_GRASS;
+        }
+        gs->hero.shake = 0.22f;
+        gs->hero.blur = 0.25f;
+        game_set_alert(gs, "Hero interaction: obstacle cleared.");
+        ui_play_hero_attack(ui);
+        return;
+    }
+
+    float dist = 2.1f;
+    int b = hero_find_building_in_aim(gs, u, gs->hero.yaw, 2.1f, 0.0f, &dist);
+    if (b >= 0) {
+        game_damage_building(gs, b, u->attack_dmg + 4);
+        gs->hero.shake = 0.28f;
+        gs->hero.blur = 0.22f;
+        game_set_alert(gs, "Hero interaction: breached enemy structure.");
+        ui_play_hero_attack(ui);
+    }
+}
+
+static void update_hero_possession_controls(GameState *gs, UIState *ui, float dt) {
+    ui_sync_hero_possession(ui, gs);
+    if (gs->hero.unit_id < 0 || gs->hero.unit_id >= MAX_UNITS) return;
+
+    Unit *u = &gs->units[gs->hero.unit_id];
+    if (!u->active || u->state == US_DEAD || u->state == US_DYING) return;
+
+    if (IsKeyPressed(KEY_ESCAPE)) {
+        hero_possession_request_exit(gs, "Hero Possession canceled: returning to command view.");
+        ui_sync_hero_possession(ui, gs);
+        return;
+    }
+
+    Vector2 md = GetMouseDelta();
+    gs->hero.yaw += md.x * 0.0032f;
+    gs->hero.pitch = clampf(gs->hero.pitch - md.y * 0.0024f, -0.62f, 0.48f);
+    u->facing = gs->hero.yaw;
+
+    if (gs->hero.phase != HERO_POSSESSION_ACTIVE) return;
+
+    float forward = 0.0f;
+    float strafe = 0.0f;
+    if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) forward += 1.0f;
+    if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) forward -= 1.0f;
+    if (IsKeyDown(KEY_D)) strafe += 1.0f;
+    if (IsKeyDown(KEY_A)) strafe -= 1.0f;
+
+    bool blocking = (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsKeyDown(KEY_Q)) &&
+                    gs->hero.stamina > 1.0f && gs->hero.dodge_timer <= 0.0f;
+    if (blocking) {
+        gs->hero.block_timer = 0.12f;
+        gs->hero.stamina -= 34.0f * dt;
+        if (gs->hero.stamina < 0.0f) gs->hero.stamina = 0.0f;
+        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_Q)) ui_play_hero_block(ui);
+    } else {
+        gs->hero.stamina += 20.0f * dt;
+        if (gs->hero.stamina > 100.0f) gs->hero.stamina = 100.0f;
+    }
+
+    bool dodge_pressed = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_LEFT_SHIFT);
+    if (dodge_pressed && gs->hero.dodge_cooldown <= 0.0f && gs->hero.stamina >= 24.0f) {
+        gs->hero.dodge_timer = 0.28f;
+        gs->hero.dodge_cooldown = 1.1f;
+        gs->hero.stamina -= 24.0f;
+        gs->hero.shake = 0.32f;
+        gs->hero.blur = 0.85f;
+        if (fabsf(forward) < 0.1f && fabsf(strafe) < 0.1f) forward = 1.0f;
+    }
+
+    if (!blocking && (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_F))) {
+        hero_perform_attack(gs, ui, u);
+    }
+    if (IsKeyPressed(KEY_E)) {
+        hero_perform_interact(gs, ui, u);
+    }
+
+    float fx = cosf(gs->hero.yaw);
+    float fy = sinf(gs->hero.yaw);
+    float rx = -sinf(gs->hero.yaw);
+    float ry = cosf(gs->hero.yaw);
+    float mx = fx * forward + rx * strafe;
+    float my = fy * forward + ry * strafe;
+    float mag = sqrtf(mx * mx + my * my);
+    if (mag > 0.001f) {
+        mx /= mag;
+        my /= mag;
+        float speed = u->move_speed * 1.15f;
+        if (blocking) speed *= 0.42f;
+        if (gs->hero.dodge_timer > 0.0f) speed *= 3.1f;
+        float step_x = mx * speed * dt;
+        float step_y = my * speed * dt;
+        if (!hero_try_move(gs, u, step_x, 0.0f)) hero_try_move(gs, u, step_x * 0.25f, 0.0f);
+        if (!hero_try_move(gs, u, 0.0f, step_y)) hero_try_move(gs, u, 0.0f, step_y * 0.25f);
+        gs->hero.blur = fmaxf(gs->hero.blur, gs->hero.dodge_timer > 0.0f ? 0.65f : 0.18f);
+    }
+}
+
 /* ─── Build ghost placement ───────────────────────────────── */
 static void update_build_mode(GameState *gs, UIState *ui) {
     if (!gs->build_mode.active) return;
@@ -238,6 +511,9 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
             return;
         }
     }
+    if (IsKeyPressed(KEY_E)) {
+        if (try_start_selected_hero_possession(gs, ui)) return;
+    }
     bool vil = false;
     for (int i = 0; i < ui->sel_count; i++)
         if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { vil = true; break; }
@@ -304,6 +580,7 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
 /* ─── Master input update ─────────────────────────────────── */
 void input_update(GameState *gs, UIState *ui) {
     float dt = GetFrameTime();
+    ui_sync_hero_possession(ui, gs);
 
     if (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_briefing_open && gs->phase == PHASE_PLAYING) {
         bool dismiss = IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_KP_ENTER) ||
@@ -315,6 +592,11 @@ void input_update(GameState *gs, UIState *ui) {
             gs->campaign_briefing_open = false;
             game_set_alert(gs, "Mission underway.");
         }
+        return;
+    }
+
+    if (gs->hero.phase != HERO_POSSESSION_OFF) {
+        update_hero_possession_controls(gs, ui, dt);
         return;
     }
 

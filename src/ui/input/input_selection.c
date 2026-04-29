@@ -4,6 +4,7 @@
 #include "game.h"
 #include "ui_state.h"
 #include <math.h>
+#include <stdio.h>
 #include "net.h"
 #include "hud_common.h"   /* HUD_TOP_H, HUD_BOT_H, MINI_SIZE */
 
@@ -29,6 +30,24 @@ void select_unit(GameState *gs, UIState *ui, int uid) {
     if (ui->sel_count >= MAX_UNITS) return;
     gs->units[uid].selected = true;
     ui->sel_units[ui->sel_count++] = uid;
+}
+
+static bool click_reactivates_selected_hero(GameState *gs, UIState *ui, int uid) {
+    int lp = net_get_local_player();
+    if (uid < 0 || ui->sel_count != 1 || ui->sel_units[0] != uid) return false;
+    if (!hero_possession_is_unit_eligible(gs, uid, lp)) return false;
+    if (g_net_active) {
+        game_set_alert(gs, "Hero Possession is available in solo play only.");
+        return true;
+    }
+    if (hero_possession_start(gs, uid, lp)) return true;
+    if (gs->hero.cooldown_timer > 0.0f) {
+        char msg[80];
+        snprintf(msg, sizeof(msg), "Hero Possession cooling down: %.0fs.", gs->hero.cooldown_timer);
+        game_set_alert(gs, msg);
+        return true;
+    }
+    return false;
 }
 
 /* ─── World-hit testers ───────────────────────────────────── */
@@ -429,6 +448,7 @@ void handle_left_up(GameState *gs, UIState *ui) {
         if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { has_villagers = true; break; }
 
     if (fu >= 0) {
+        if (!shift && click_reactivates_selected_hero(gs, ui, fu)) return;
         /* Clicked a friendly unit → select it */
         if (!shift) clear_selection(gs, ui);
         select_unit(gs, ui, fu);
@@ -508,6 +528,7 @@ void handle_tap(GameState *gs, UIState *ui) {
         if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { has_villagers = true; break; }
 
     if (fu >= 0) {
+        if (!shift && click_reactivates_selected_hero(gs, ui, fu)) return;
         if (!shift) clear_selection(gs, ui);
         select_unit(gs, ui, fu);
         ui->sel_tile_x = -1; ui->sel_tile_y = -1;

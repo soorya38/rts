@@ -1064,6 +1064,22 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         DrawRectangleLinesEx((Rectangle){(float)(panel_w-portrait-pad),(float)(by_start+(int)(8*sc)),(float)portrait,(float)portrait},1.5f,C_HUD_LINE);
         DrawCircle(panel_w-portrait/2-pad,by_start+(int)(8*sc)+(int)(16*sc),(int)(8*sc),CLITERAL(Color){220,185,145,255});
         DrawRectangle(panel_w-portrait/2-pad-(int)(6*sc),by_start+(int)(8*sc)+(int)(27*sc),(int)(12*sc),(int)(14*sc),player_color(u->player));
+        if(hero_possession_is_unit_eligible(gs, ui->sel_units[0], net_get_local_player())){
+            int possess_w = (int)(126 * sc);
+            int possess_h = (int)(36 * sc);
+            int possess_x = panel_w - portrait - pad - possess_w - (int)(12 * sc);
+            int possess_y = by_start + (int)(80 * sc);
+            bool ready = !g_net_active && gs->hero.phase == HERO_POSSESSION_OFF &&
+                         gs->hero.cooldown_timer <= 0.0f;
+            char plabel[40];
+            if(g_net_active) snprintf(plabel, sizeof(plabel), "Possess\nSolo only");
+            else if(gs->hero.cooldown_timer > 0.0f) snprintf(plabel, sizeof(plabel), "Cooldown\n%.0fs", gs->hero.cooldown_timer);
+            else snprintf(plabel, sizeof(plabel), "Possess\n[E]");
+            if(draw_button(plabel, possess_x, possess_y, possess_w, possess_h, ready)){
+                if(hero_possession_start(gs, ui->sel_units[0], net_get_local_player()))
+                    ui_sync_hero_possession(ui, gs);
+            }
+        }
     } else {
         snprintf(buf,sizeof(buf),"%d units selected",ui->sel_count);
         DrawText(buf,pad,by_start+(int)(8*sc),fs14,C_HUD_TXT);

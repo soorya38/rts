@@ -445,6 +445,18 @@ bool game_damage_unit(GameState *gs, int target_unit, int dmg){
     if(target_unit < 0 || target_unit >= MAX_UNITS) return false;
     Unit *t = &gs->units[target_unit];
     if(!t->active || t->state == US_DEAD || t->state == US_DYING) return false;
+    if(hero_possession_controls_unit(gs, target_unit)){
+        if(gs->hero.dodge_timer > 0.0f){
+            dmg = (int)ceilf((float)dmg * 0.25f);
+        } else if(gs->hero.block_timer > 0.0f && gs->hero.stamina > 0.0f &&
+                  gs->hero.phase == HERO_POSSESSION_ACTIVE){
+            dmg = (int)ceilf((float)dmg * 0.55f);
+        }
+        gs->hero.shake = 0.45f;
+        gs->hero.blur = 0.35f;
+        gs->hero.impact_timer = 0.22f;
+    }
+    if(dmg < 1) dmg = 1;
     t->hp -= dmg;
     if(t->hp <= 0){
         t->state = US_DYING;
@@ -1088,6 +1100,9 @@ void game_update(GameState *gs, float dt){
 
     if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_briefing_open) return;
 
+    hero_possession_update(gs, dt);
+    float sim_dt = dt * hero_possession_time_scale(gs);
+
     /* Update pop caps */
     for (int i = 0; i < gs->num_players; i++) {
         if (gs->mode == GAME_MODE_SANDBOX) {
@@ -1099,25 +1114,25 @@ void game_update(GameState *gs, float dt){
     }
 
     /* Age advancement timers */
-    res_update_age_advance(gs,dt);
+    res_update_age_advance(gs,sim_dt);
 
     /* Units */
-    units_update_all(gs,dt);
+    units_update_all(gs,sim_dt);
 
     /* Buildings */
-    buildings_update_all(gs,dt);
+    buildings_update_all(gs,sim_dt);
 
     /* Projectiles */
-    game_update_projectiles(gs, dt);
+    game_update_projectiles(gs, sim_dt);
 
     /* AI - only in singleplayer */
     if (!g_net_active && gs->mode != GAME_MODE_SANDBOX &&
         !(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission < 5)) {
-        ai_update(gs,dt);
+        ai_update(gs,sim_dt);
     }
 
     if (gs->mode == GAME_MODE_CAMPAIGN) {
-        game_update_campaign(gs, dt);
+        game_update_campaign(gs, sim_dt);
     }
 
     /* Fog of war */
