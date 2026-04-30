@@ -293,8 +293,8 @@ static void draw_hero_overlay(GameState *gs, Unit *u) {
     }
 
     if (gs->hero.impact_timer > 0.0f) {
-        unsigned char a = (unsigned char)(clampf(gs->hero.impact_timer / 0.22f, 0.0f, 1.0f) * 95.0f);
-        DrawRectangle(0, 0, sw, sh, CLITERAL(Color){180, 22, 18, a});
+        unsigned char a = (unsigned char)(clampf(gs->hero.impact_timer / 0.35f, 0.0f, 1.0f) * 160.0f);
+        DrawRectangle(0, 0, sw, sh, CLITERAL(Color){200, 15, 10, a});
     }
 
     unsigned char fade_a = (unsigned char)((1.0f - transition) * 215.0f);
@@ -339,18 +339,23 @@ void renderer_draw_hero_possession(GameState *gs, UIState *ui) {
 
     float yaw = gs->hero.yaw;
     float pitch = gs->hero.pitch;
-    float fx = cosf(yaw);
-    float fz = sinf(yaw);
     float shake = gs->hero.shake;
-    float sx = sinf(gs->game_time * 47.0f) * shake * 0.05f;
-    float sy = sinf(gs->game_time * 33.0f + 1.8f) * shake * 0.035f;
-    float sz = cosf(gs->game_time * 41.0f) * shake * 0.05f;
+    
+    float sx = sinf(gs->game_time * 58.0f) * shake * 0.25f;
+    float sy = sinf(gs->game_time * 43.0f + 1.8f) * shake * 0.22f;
+    float sz = cosf(gs->game_time * 51.0f) * shake * 0.25f;
+    
+    float pitch_shake = sinf(gs->game_time * 75.0f) * shake * 0.15f;
+    float yaw_shake = cosf(gs->game_time * 65.0f) * shake * 0.15f;
+
+    float fx = cosf(yaw + yaw_shake);
+    float fz = sinf(yaw + yaw_shake);
 
     Vector3 eye = world3(hero->wx, hero->wy, 0.92f + sy);
     eye.x += sx;
     eye.z += sz;
     ui->hero_camera.position = (Vector3){eye.x - fx * 0.08f, eye.y, eye.z - fz * 0.08f};
-    ui->hero_camera.target = (Vector3){eye.x + fx, eye.y + sinf(pitch), eye.z + fz};
+    ui->hero_camera.target = (Vector3){eye.x + fx, eye.y + sinf(pitch + pitch_shake), eye.z + fz};
     ui->hero_camera.up = (Vector3){0.0f, 1.0f, 0.0f};
     ui->hero_camera.fovy = 72.0f + gs->hero.blur * 5.0f;
     ui->hero_camera.projection = CAMERA_PERSPECTIVE;

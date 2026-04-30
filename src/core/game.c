@@ -452,9 +452,9 @@ bool game_damage_unit(GameState *gs, int target_unit, int dmg){
                   gs->hero.phase == HERO_POSSESSION_ACTIVE){
             dmg = (int)ceilf((float)dmg * 0.55f);
         }
-        gs->hero.shake = 0.45f;
-        gs->hero.blur = 0.35f;
-        gs->hero.impact_timer = 0.22f;
+        gs->hero.shake = 0.85f; // Violent shake when hit
+        gs->hero.blur = 0.65f;
+        gs->hero.impact_timer = 0.35f;
     }
     if(dmg < 1) dmg = 1;
     t->hp -= dmg;

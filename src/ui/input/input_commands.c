@@ -163,8 +163,7 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         } else {
             game_damage_unit(gs, target_unit, final_dmg);
         }
-        gs->hero.shake = 0.35f;
-        gs->hero.impact_timer = 0.16f;
+        gs->hero.shake = 0.15f; // Small recoil
     } else if (target_bld >= 0) {
         Building *b = &gs->buildings[target_bld];
         int final_dmg = dmg + (ranged ? 0 : 2);
@@ -181,8 +180,7 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         } else {
             game_damage_building(gs, target_bld, final_dmg);
         }
-        gs->hero.shake = 0.38f;
-        gs->hero.impact_timer = 0.16f;
+        gs->hero.shake = 0.15f; // Small recoil
     } else {
         if (ranged) {
             float spawn_x = u->wx + cosf(gs->hero.yaw) * TILE_SIZE * 0.5f;
