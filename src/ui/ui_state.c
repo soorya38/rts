@@ -177,6 +177,8 @@ static void load_house_variant_textures(UIState *ui) {
     ui->mdl_houses[1] = load_game_model("assets/buildings/tamil_house_1.obj");
     ui->mdl_houses[2] = load_game_model("assets/buildings/tamil_house_2.obj");
     ui->mdl_houses[3] = load_game_model("assets/buildings/tamil_house_3.obj");
+    ui->mdl_hero_house = load_game_model("assets/buildings/hero_house/model.obj");
+    ui->tex_hero_house_diffuse = load_game_texture("assets/buildings/hero_house/diffuse_0.png");
 }
 
 void ui_state_init(UIState *ui, GameState *gs) {
@@ -327,9 +329,11 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mining_camps[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_watch_towers[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_monasteries[i]);
+    UnloadTexture(ui->tex_hero_house_diffuse);
     
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_town_centers[i]);
     for (int i = 0; i < HOUSE_VARIANT_COUNT; i++) UnloadModel(ui->mdl_houses[i]);
+    UnloadModel(ui->mdl_hero_house);
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_mills[i]);
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_lumber_camps[i]);
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_barracks[i]);
@@ -554,6 +558,16 @@ Model ui_get_building_model(const UIState *ui, BldType type, int age, uint8_t va
         }
     }
 
+    return mdl;
+}
+
+Model ui_get_hero_house_model(const UIState *ui) {
+    if (!ui) return (Model){0};
+
+    Model mdl = ui->mdl_hero_house;
+    if (mdl.meshCount > 0 && ui->tex_hero_house_diffuse.id != 0 && mdl.materials != NULL) {
+        mdl.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = ui->tex_hero_house_diffuse;
+    }
     return mdl;
 }
 

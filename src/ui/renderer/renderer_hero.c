@@ -77,6 +77,22 @@ static float building_height_3d(BldType type) {
     }
 }
 
+static bool draw_hero_house_model(UIState *ui, Building *b, Vector3 pos, Color tint) {
+    Model mdl = ui_get_hero_house_model(ui);
+    if (mdl.meshCount == 0) return false;
+
+    const float model_min_y = -0.279456f;
+    float footprint = fminf((float)b->tw, (float)b->th);
+    float scale = footprint * 1.45f;
+    DrawModelEx(mdl,
+                (Vector3){pos.x, -model_min_y * scale, pos.z},
+                (Vector3){0.0f, 1.0f, 0.0f},
+                90.0f,
+                (Vector3){scale, scale, scale},
+                tint);
+    return true;
+}
+
 static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
     float h = building_height_3d(b->type);
     Color c = player_color(b->player);
@@ -99,6 +115,13 @@ static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
     }
     
     Model mdl = ui_get_building_model(ui, b->type, age, b->variant);
+    Color tint = WHITE;
+    if (!b->complete) tint.a = 150;
+
+    if (b->type == BLD_HOUSE && draw_hero_house_model(ui, b, pos, tint)) {
+        return;
+    }
+
     if (mdl.meshCount > 0) {
         Texture2D tex = ui_get_building_texture(ui, b->type, age);
         if (b->type == BLD_HOUSE) tex = ui_get_house_texture(ui, b->variant);
@@ -112,9 +135,6 @@ static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
         float scale_y = h * 2.0f; 
         float scale_x = scale_y * aspect;
         float scale_z = scale_x;
-        
-        Color tint = WHITE;
-        if (!b->complete) tint.a = 150;
         
         // Calculate angle to camera for billboarding
         float dx = ui->hero_camera.position.x - pos.x;
