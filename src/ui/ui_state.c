@@ -18,12 +18,18 @@ static Texture2D load_game_texture(const char *path) {
     if (!path || !path[0]) return tex;
 
     tex = LoadTexture(path);
-    if (tex.id != 0) return tex;
+    if (tex.id != 0) {
+        SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+        return tex;
+    }
 
     const char *trimmed = asset_path_without_prefix(path);
     if (trimmed) {
         tex = LoadTexture(trimmed);
-        if (tex.id != 0) return tex;
+        if (tex.id != 0) {
+            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+            return tex;
+        }
     }
 
     const char *app_dir = GetApplicationDirectory();
@@ -32,25 +38,77 @@ static Texture2D load_game_texture(const char *path) {
 
         snprintf(full_path, sizeof(full_path), "%s%s", app_dir, path);
         tex = LoadTexture(full_path);
-        if (tex.id != 0) return tex;
+        if (tex.id != 0) {
+            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+            return tex;
+        }
 
         snprintf(full_path, sizeof(full_path), "%s../%s", app_dir, path);
         tex = LoadTexture(full_path);
-        if (tex.id != 0) return tex;
+        if (tex.id != 0) {
+            SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+            return tex;
+        }
 
         if (trimmed) {
             snprintf(full_path, sizeof(full_path), "%s%s", app_dir, trimmed);
             tex = LoadTexture(full_path);
-            if (tex.id != 0) return tex;
+            if (tex.id != 0) {
+                SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+                return tex;
+            }
 
             snprintf(full_path, sizeof(full_path), "%s../%s", app_dir, trimmed);
             tex = LoadTexture(full_path);
-            if (tex.id != 0) return tex;
+            if (tex.id != 0) {
+                SetTextureFilter(tex, TEXTURE_FILTER_POINT);
+                return tex;
+            }
         }
     }
 
     TraceLog(LOG_WARNING, "RTS >> failed to load texture: %s", path);
     return tex;
+}
+
+static Model load_game_model(const char *path) {
+    Model mdl = {0};
+    if (!path || !path[0]) return mdl;
+
+    mdl = LoadModel(path);
+    if (mdl.meshCount > 0) return mdl;
+
+    const char *trimmed = asset_path_without_prefix(path);
+    if (trimmed) {
+        mdl = LoadModel(trimmed);
+        if (mdl.meshCount > 0) return mdl;
+    }
+
+    const char *app_dir = GetApplicationDirectory();
+    if (app_dir && app_dir[0]) {
+        char full_path[1024];
+
+        snprintf(full_path, sizeof(full_path), "%s%s", app_dir, path);
+        mdl = LoadModel(full_path);
+        if (mdl.meshCount > 0) return mdl;
+
+        snprintf(full_path, sizeof(full_path), "%s../%s", app_dir, path);
+        mdl = LoadModel(full_path);
+        if (mdl.meshCount > 0) return mdl;
+
+        if (trimmed) {
+            snprintf(full_path, sizeof(full_path), "%s%s", app_dir, trimmed);
+            mdl = LoadModel(full_path);
+            if (mdl.meshCount > 0) return mdl;
+
+            snprintf(full_path, sizeof(full_path), "%s../%s", app_dir, trimmed);
+            mdl = LoadModel(full_path);
+            if (mdl.meshCount > 0) return mdl;
+        }
+    }
+
+    TraceLog(LOG_WARNING, "RTS >> failed to load model: %s", path);
+    return mdl;
 }
 
 static Sound make_hero_tone(float f0, float f1, float duration, float volume) {
@@ -114,6 +172,11 @@ static void load_house_variant_textures(UIState *ui) {
     if (ui->tex_houses[1].id == 0) ui->tex_houses[1] = load_game_texture("assets/buildings/house_feudal.png");
     if (ui->tex_houses[2].id == 0) ui->tex_houses[2] = load_game_texture("assets/buildings/house_castle.png");
     if (ui->tex_houses[3].id == 0) ui->tex_houses[3] = load_game_texture("assets/buildings/house_imperial.png");
+
+    ui->mdl_houses[0] = load_game_model("assets/buildings/tamil_house_0.obj");
+    ui->mdl_houses[1] = load_game_model("assets/buildings/tamil_house_1.obj");
+    ui->mdl_houses[2] = load_game_model("assets/buildings/tamil_house_2.obj");
+    ui->mdl_houses[3] = load_game_model("assets/buildings/tamil_house_3.obj");
 }
 
 void ui_state_init(UIState *ui, GameState *gs) {
@@ -191,6 +254,51 @@ void ui_state_init(UIState *ui, GameState *gs) {
     ui->tex_monasteries[1]               = load_game_texture("assets/buildings/tamil_monastery.png");
     ui->tex_monasteries[2]               = load_game_texture("assets/buildings/tamil_monastery.png");
     ui->tex_monasteries[3]               = load_game_texture("assets/buildings/tamil_monastery.png");
+    
+    ui->mdl_town_centers[0]              = load_game_model("assets/buildings/tamil_town_center.obj");
+    ui->mdl_town_centers[1]              = load_game_model("assets/buildings/tamil_town_center.obj");
+    ui->mdl_town_centers[2]              = load_game_model("assets/buildings/tamil_town_center.obj");
+    ui->mdl_town_centers[3]              = load_game_model("assets/buildings/tamil_town_center.obj");
+    ui->mdl_mills[0]                     = load_game_model("assets/buildings/tamil_mill.obj");
+    ui->mdl_mills[1]                     = load_game_model("assets/buildings/tamil_mill.obj");
+    ui->mdl_mills[2]                     = load_game_model("assets/buildings/tamil_mill.obj");
+    ui->mdl_mills[3]                     = load_game_model("assets/buildings/tamil_mill.obj");
+    ui->mdl_lumber_camps[0]              = load_game_model("assets/buildings/tamil_lumber_camp.obj");
+    ui->mdl_lumber_camps[1]              = load_game_model("assets/buildings/tamil_lumber_camp.obj");
+    ui->mdl_lumber_camps[2]              = load_game_model("assets/buildings/tamil_lumber_camp.obj");
+    ui->mdl_lumber_camps[3]              = load_game_model("assets/buildings/tamil_lumber_camp.obj");
+    ui->mdl_barracks[0]                  = load_game_model("assets/buildings/tamil_barracks.obj");
+    ui->mdl_barracks[1]                  = load_game_model("assets/buildings/tamil_barracks.obj");
+    ui->mdl_barracks[2]                  = load_game_model("assets/buildings/tamil_barracks.obj");
+    ui->mdl_barracks[3]                  = load_game_model("assets/buildings/tamil_barracks.obj");
+    ui->mdl_archery_ranges[0]            = load_game_model("assets/buildings/tamil_archery_range.obj");
+    ui->mdl_archery_ranges[1]            = load_game_model("assets/buildings/tamil_archery_range.obj");
+    ui->mdl_archery_ranges[2]            = load_game_model("assets/buildings/tamil_archery_range.obj");
+    ui->mdl_archery_ranges[3]            = load_game_model("assets/buildings/tamil_archery_range.obj");
+    ui->mdl_stables[0]                   = load_game_model("assets/buildings/tamil_stable.obj");
+    ui->mdl_stables[1]                   = load_game_model("assets/buildings/tamil_stable.obj");
+    ui->mdl_stables[2]                   = load_game_model("assets/buildings/tamil_stable.obj");
+    ui->mdl_stables[3]                   = load_game_model("assets/buildings/tamil_stable.obj");
+    ui->mdl_blacksmiths[0]               = load_game_model("assets/buildings/tamil_blacksmith.obj");
+    ui->mdl_blacksmiths[1]               = load_game_model("assets/buildings/tamil_blacksmith.obj");
+    ui->mdl_blacksmiths[2]               = load_game_model("assets/buildings/tamil_blacksmith.obj");
+    ui->mdl_blacksmiths[3]               = load_game_model("assets/buildings/tamil_blacksmith.obj");
+    ui->mdl_markets[0]                   = load_game_model("assets/buildings/tamil_market.obj");
+    ui->mdl_markets[1]                   = load_game_model("assets/buildings/tamil_market.obj");
+    ui->mdl_markets[2]                   = load_game_model("assets/buildings/tamil_market.obj");
+    ui->mdl_markets[3]                   = load_game_model("assets/buildings/tamil_market.obj");
+    ui->mdl_mining_camps[0]              = load_game_model("assets/buildings/tamil_mining_camp.obj");
+    ui->mdl_mining_camps[1]              = load_game_model("assets/buildings/tamil_mining_camp.obj");
+    ui->mdl_mining_camps[2]              = load_game_model("assets/buildings/tamil_mining_camp.obj");
+    ui->mdl_mining_camps[3]              = load_game_model("assets/buildings/tamil_mining_camp.obj");
+    ui->mdl_watch_towers[0]              = load_game_model("assets/buildings/tamil_watch_tower.obj");
+    ui->mdl_watch_towers[1]              = load_game_model("assets/buildings/tamil_watch_tower.obj");
+    ui->mdl_watch_towers[2]              = load_game_model("assets/buildings/tamil_watch_tower.obj");
+    ui->mdl_watch_towers[3]              = load_game_model("assets/buildings/tamil_watch_tower.obj");
+    ui->mdl_monasteries[0]               = load_game_model("assets/buildings/tamil_monastery.obj");
+    ui->mdl_monasteries[1]               = load_game_model("assets/buildings/tamil_monastery.obj");
+    ui->mdl_monasteries[2]               = load_game_model("assets/buildings/tamil_monastery.obj");
+    ui->mdl_monasteries[3]               = load_game_model("assets/buildings/tamil_monastery.obj");
     ui->tex_land_grass[0]                = load_game_texture("assets/ui/land_grass_0.png");
     ui->tex_land_grass[1]                = load_game_texture("assets/ui/land_grass_1.png");
     ui->tex_land_grass[2]                = load_game_texture("assets/ui/land_grass_2.png");
@@ -219,6 +327,19 @@ void ui_state_deinit(UIState *ui) {
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_mining_camps[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_watch_towers[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_monasteries[i]);
+    
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_town_centers[i]);
+    for (int i = 0; i < HOUSE_VARIANT_COUNT; i++) UnloadModel(ui->mdl_houses[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_mills[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_lumber_camps[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_barracks[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_archery_ranges[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_stables[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_blacksmiths[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_markets[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_mining_camps[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_watch_towers[i]);
+    for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_monasteries[i]);
     for (int i = 0; i < 4; i++) UnloadTexture(ui->tex_land_grass[i]);
     for (int i = 0; i < UNIT_COUNT; i++) UnloadTexture(ui->tex_units[i]);
     for (int i = 0; i < TREE_VARIANT_COUNT; i++) UnloadTexture(ui->tex_env_trees[i]);
@@ -368,6 +489,72 @@ Texture2D ui_get_house_texture(const UIState *ui, uint8_t variant) {
         if (ui->tex_houses[i].id != 0) return ui->tex_houses[i];
     }
     return (Texture2D){0};
+}
+
+Model ui_get_building_model(const UIState *ui, BldType type, int age, uint8_t variant) {
+    if (!ui) return (Model){0};
+
+    if (age < 0) age = 0;
+    if (age > 3) age = 3;
+
+    Model mdl = {0};
+    switch (type) {
+        case BLD_TOWN_CENTER:
+            if (ui->mdl_town_centers[age].meshCount > 0) mdl = ui->mdl_town_centers[age];
+            break;
+        case BLD_HOUSE:
+            mdl = ui->mdl_houses[variant % HOUSE_VARIANT_COUNT];
+            if (mdl.meshCount == 0) {
+                for (int i = 0; i < HOUSE_VARIANT_COUNT; i++) {
+                    if (ui->mdl_houses[i].meshCount > 0) {
+                        mdl = ui->mdl_houses[i];
+                        break;
+                    }
+                }
+            }
+            break;
+        case BLD_MILL:
+            if (ui->mdl_mills[age].meshCount > 0) mdl = ui->mdl_mills[age];
+            break;
+        case BLD_LUMBER_CAMP:
+            if (ui->mdl_lumber_camps[age].meshCount > 0) mdl = ui->mdl_lumber_camps[age];
+            break;
+        case BLD_BARRACKS:
+            if (ui->mdl_barracks[age].meshCount > 0) mdl = ui->mdl_barracks[age];
+            break;
+        case BLD_ARCHERY_RANGE:
+            if (ui->mdl_archery_ranges[age].meshCount > 0) mdl = ui->mdl_archery_ranges[age];
+            break;
+        case BLD_STABLE:
+            if (ui->mdl_stables[age].meshCount > 0) mdl = ui->mdl_stables[age];
+            break;
+        case BLD_BLACKSMITH:
+            if (ui->mdl_blacksmiths[age].meshCount > 0) mdl = ui->mdl_blacksmiths[age];
+            break;
+        case BLD_MARKET:
+            if (ui->mdl_markets[age].meshCount > 0) mdl = ui->mdl_markets[age];
+            break;
+        case BLD_MINING_CAMP:
+            if (ui->mdl_mining_camps[age].meshCount > 0) mdl = ui->mdl_mining_camps[age];
+            break;
+        case BLD_WATCH_TOWER:
+            if (ui->mdl_watch_towers[age].meshCount > 0) mdl = ui->mdl_watch_towers[age];
+            break;
+        case BLD_MONASTERY:
+            if (ui->mdl_monasteries[age].meshCount > 0) mdl = ui->mdl_monasteries[age];
+            break;
+        default:
+            break;
+    }
+
+    if (mdl.meshCount > 0) {
+        Texture2D tex = ui_get_building_texture(ui, type, age);
+        if (tex.id != 0 && mdl.materials != NULL) {
+            mdl.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+        }
+    }
+
+    return mdl;
 }
 
 /* Scale factor relative to 720p so all HUD elements are readable on phones */

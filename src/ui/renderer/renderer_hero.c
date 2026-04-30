@@ -77,7 +77,7 @@ static float building_height_3d(BldType type) {
     }
 }
 
-static void draw_building_3d(Building *b) {
+static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
     float h = building_height_3d(b->type);
     Color c = player_color(b->player);
     Color dc = player_color_dark(b->player);
@@ -92,12 +92,45 @@ static void draw_building_3d(Building *b) {
         b->ty + b->th * 0.5f
     };
     Vector3 size = {(float)b->tw * 0.92f, h, (float)b->th * 0.92f};
-    DrawCubeV(pos, size, c);
-    DrawCubeWiresV(pos, size, dc);
+    
+    int age = 0;
+    if (b->player >= 0 && b->player < NUM_PLAYERS) {
+        age = gs->res[b->player].age;
+    }
+    
+    Model mdl = ui_get_building_model(ui, b->type, age, b->variant);
+    if (mdl.meshCount > 0) {
+        Texture2D tex = ui_get_building_texture(ui, b->type, age);
+        if (b->type == BLD_HOUSE) tex = ui_get_house_texture(ui, b->variant);
+        
+        float aspect = 1.0f;
+        if (tex.id != 0 && tex.height > 0) {
+            aspect = (float)tex.width / (float)tex.height;
+        }
+        
+        // Preserve perfect aspect ratio of the 2D sprite
+        float scale_y = h * 2.0f; 
+        float scale_x = scale_y * aspect;
+        float scale_z = scale_x;
+        
+        Color tint = WHITE;
+        if (!b->complete) tint.a = 150;
+        
+        // Calculate angle to camera for billboarding
+        float dx = ui->hero_camera.position.x - pos.x;
+        float dz = ui->hero_camera.position.z - pos.z;
+        float angle = atan2f(dx, dz) * RAD2DEG;
+        
+        // Face the model directly towards the camera
+        DrawModelEx(mdl, (Vector3){pos.x, 0.0f, pos.z}, (Vector3){0, 1, 0}, angle, (Vector3){scale_x, scale_y, scale_z}, tint);
+    } else {
+        DrawCubeV(pos, size, c);
+        DrawCubeWiresV(pos, size, dc);
 
-    if (b->type == BLD_WATCH_TOWER) {
-        DrawCubeV((Vector3){pos.x, h + 0.18f, pos.z},
-                  (Vector3){0.82f, 0.36f, 0.82f}, dc);
+        if (b->type == BLD_WATCH_TOWER) {
+            DrawCubeV((Vector3){pos.x, h + 0.18f, pos.z},
+                      (Vector3){0.82f, 0.36f, 0.82f}, dc);
+        }
     }
 }
 
@@ -137,9 +170,24 @@ static void draw_projectiles_3d(GameState *gs) {
         float wx = lerpf(p->sx, p->ex, t);
         float wy = lerpf(p->sy, p->ey, t);
         float arc = 4.0f * t * (1.0f - t) * p->arc_height / TILE_SIZE;
-        Color c = p->type == PROJ_STONE ? CLITERAL(Color){180, 170, 150, 255}
-                                        : CLITERAL(Color){230, 210, 120, 255};
-        DrawSphere(world3(wx, wy, 0.65f + arc), p->type == PROJ_STONE ? 0.16f : 0.06f, c);
+        
+        if (p->type == PROJ_ARROW) {
+            // Draw a thick cylinder for the arrow to ensure visibility
+            float tail_t = t - 0.15f; 
+            float pwx = p->sx + (p->ex - p->sx) * tail_t;
+            float pwy = p->sy + (p->ey - p->sy) * tail_t;
+            float parc = 4.0f * tail_t * (1.0f - tail_t) * p->arc_height / TILE_SIZE;
+            
+            Vector3 startP = world3(pwx, pwy, 0.95f + parc);
+            Vector3 endP = world3(wx, wy, 0.95f + arc);
+            
+            // Bright colored wooden shaft
+            DrawCylinderEx(startP, endP, 0.05f, 0.05f, 6, CLITERAL(Color){255, 200, 120, 255});
+        } else {
+            Color c = p->type == PROJ_STONE ? CLITERAL(Color){180, 170, 150, 255}
+                                            : CLITERAL(Color){230, 210, 120, 255};
+            DrawSphere(world3(wx, wy, 0.95f + arc), p->type == PROJ_STONE ? 0.16f : 0.06f, c);
+        }
     }
 }
 
@@ -177,6 +225,45 @@ static void draw_first_person_weapon(GameState *gs, Unit *u) {
         DrawCircleGradient((int)(sw * 0.18f), (int)(sh * 0.72f), 90.0f,
                            CLITERAL(Color){120, 90, 54, 155},
                            CLITERAL(Color){32, 22, 12, 20});
+    }
+}
+
+static void draw_archer_crosshair(GameState *gs, Unit *u) {
+    if (!unit_uses_projectiles(u->type)) return;
+
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
+    float sc = hud_scale();
+    float cx = sw * 0.5f;
+    float cy = sh * 0.5f;
+
+    bool ready = gs->hero.attack_timer <= 0.0f;
+    float cooldown = clampf(gs->hero.attack_timer / clampf(u->attack_cd * 0.55f, 0.35f, 1.1f), 0.0f, 1.0f);
+    float spread = (ready ? 13.0f : 20.0f + cooldown * 10.0f) * sc;
+    float tick = 9.0f * sc;
+    float gap = 5.0f * sc;
+    Color main = ready ? CLITERAL(Color){238, 226, 172, 235}
+                       : CLITERAL(Color){170, 150, 110, 175};
+    Color shadow = CLITERAL(Color){0, 0, 0, 150};
+
+    DrawCircleLines((int)cx, (int)cy, spread * 0.72f, shadow);
+    DrawCircleLines((int)cx, (int)cy, spread * 0.72f, main);
+    DrawCircleV((Vector2){cx, cy}, ready ? 2.2f * sc : 1.6f * sc, main);
+
+    DrawLineEx((Vector2){cx - spread - tick, cy}, (Vector2){cx - spread - gap, cy}, 3.5f * sc, shadow);
+    DrawLineEx((Vector2){cx + spread + gap, cy}, (Vector2){cx + spread + tick, cy}, 3.5f * sc, shadow);
+    DrawLineEx((Vector2){cx, cy - spread - tick}, (Vector2){cx, cy - spread - gap}, 3.5f * sc, shadow);
+    DrawLineEx((Vector2){cx, cy + spread + gap}, (Vector2){cx, cy + spread + tick}, 3.5f * sc, shadow);
+
+    DrawLineEx((Vector2){cx - spread - tick, cy}, (Vector2){cx - spread - gap, cy}, 1.5f * sc, main);
+    DrawLineEx((Vector2){cx + spread + gap, cy}, (Vector2){cx + spread + tick, cy}, 1.5f * sc, main);
+    DrawLineEx((Vector2){cx, cy - spread - tick}, (Vector2){cx, cy - spread - gap}, 1.5f * sc, main);
+    DrawLineEx((Vector2){cx, cy + spread + gap}, (Vector2){cx, cy + spread + tick}, 1.5f * sc, main);
+
+    if (!ready) {
+        float arc = 360.0f * (1.0f - cooldown);
+        DrawRing((Vector2){cx, cy}, spread + 5.0f * sc, spread + 7.0f * sc,
+                 -90.0f, -90.0f + arc, 28, CLITERAL(Color){82, 190, 220, 210});
     }
 }
 
@@ -239,6 +326,7 @@ static void draw_hero_overlay(GameState *gs, Unit *u) {
     DrawText(hp, meter_x + meter_w + (int)(16 * sc), sh - bar_h + (int)(10 * sc),
              (int)(13 * sc), CLITERAL(Color){220, 205, 168, 235});
 
+    draw_archer_crosshair(gs, u);
     draw_first_person_weapon(gs, u);
 }
 
@@ -296,7 +384,7 @@ void renderer_draw_hero_possession(GameState *gs, UIState *ui) {
             int fog_x = clampi((int)cx, 0, MAP_W - 1);
             int fog_y = clampi((int)cy, 0, MAP_H - 1);
             if (gs->map[fog_y][fog_x].fog[lp] == FOG_HIDDEN && b->player != lp) continue;
-            draw_building_3d(b);
+            draw_building_3d(gs, ui, b);
         }
 
         for (int i = 0; i < MAX_UNITS; i++) {

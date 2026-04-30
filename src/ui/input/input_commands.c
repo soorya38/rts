@@ -69,7 +69,9 @@ static int hero_find_unit_in_aim(GameState *gs, Unit *u, float yaw, float range_
     float fx = cosf(yaw);
     float fy = sinf(yaw);
     int best = -1;
-    float best_d = range_tiles;
+    float best_score = 99999.0f;
+    int fallback = -1;
+    float fallback_d = range_tiles;
 
     for (int i = 0; i < MAX_UNITS; i++) {
         Unit *t = &gs->units[i];
@@ -79,14 +81,23 @@ static int hero_find_unit_in_aim(GameState *gs, Unit *u, float yaw, float range_
         float dist_px = sqrtf(dx * dx + dy * dy);
         if (dist_px < 1.0f) continue;
         float dist_tiles = dist_px / TILE_SIZE;
-        if (dist_tiles > best_d) continue;
+        if (dist_tiles > range_tiles) continue;
         float dot = (dx / dist_px) * fx + (dy / dist_px) * fy;
+        if (dist_tiles < fallback_d) {
+            fallback = i;
+            fallback_d = dist_tiles;
+        }
         if (dot < cone_cos) continue;
-        best = i;
-        best_d = dist_tiles;
+
+        float aim_penalty = (1.0f - dot) * 7.0f;
+        float score = dist_tiles + aim_penalty;
+        if (score < best_score) {
+            best = i;
+            best_score = score;
+        }
     }
 
-    return best;
+    return best >= 0 ? best : fallback;
 }
 
 static int hero_find_building_in_aim(GameState *gs, Unit *u, float yaw,
@@ -121,8 +132,8 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
     if (gs->hero.attack_timer > 0.0f) return;
 
     bool ranged = unit_uses_projectiles(u->type);
-    float range = ranged ? clampf(u->attack_range + 1.25f, 4.0f, 9.5f) : 1.85f;
-    float cone = ranged ? 0.94f : 0.16f;
+    float range = ranged ? clampf(u->attack_range + 3.0f, 6.0f, 11.5f) : 2.35f;
+    float cone = ranged ? 0.72f : -0.15f;
     int target_unit = hero_find_unit_in_aim(gs, u, gs->hero.yaw, range, cone);
     float target_dist = range;
     int target_bld = -1;
@@ -134,16 +145,18 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         target_dist = dist2f(u->wx, u->wy, t->wx, t->wy) / TILE_SIZE;
     }
 
-    int dmg = u->attack_dmg + (ranged ? 1 : 3);
-    if (gs->hero.dodge_timer > 0.0f) dmg += 2;
+    int dmg = (int)ceilf((float)u->attack_dmg * (ranged ? 2.8f : 2.25f)) + (ranged ? 3 : 5);
+    if (gs->hero.dodge_timer > 0.0f) dmg += 4;
 
     if (target_unit >= 0) {
         Unit *t = &gs->units[target_unit];
         int final_dmg = dmg - t->armor;
         if (final_dmg < 1) final_dmg = 1;
         if (ranged) {
+            float spawn_x = u->wx + cosf(gs->hero.yaw) * TILE_SIZE * 0.5f;
+            float spawn_y = u->wy + sinf(gs->hero.yaw) * TILE_SIZE * 0.5f;
             game_spawn_projectile(gs, u->player, PROJ_ARROW,
-                                  u->wx, u->wy, t->wx, t->wy,
+                                  spawn_x, spawn_y, t->wx, t->wy,
                                   target_unit, -1, final_dmg,
                                   clampf(0.08f + target_dist * 0.045f, 0.12f, 0.42f),
                                   24.0f);
@@ -158,8 +171,10 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         if (ranged) {
             float bx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
             float by = (b->ty + b->th * 0.5f) * TILE_SIZE;
+            float spawn_x = u->wx + cosf(gs->hero.yaw) * TILE_SIZE * 0.5f;
+            float spawn_y = u->wy + sinf(gs->hero.yaw) * TILE_SIZE * 0.5f;
             game_spawn_projectile(gs, u->player, PROJ_ARROW,
-                                  u->wx, u->wy, bx, by,
+                                  spawn_x, spawn_y, bx, by,
                                   -1, target_bld, final_dmg,
                                   clampf(0.08f + target_dist * 0.045f, 0.12f, 0.42f),
                                   22.0f);
@@ -169,6 +184,18 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         gs->hero.shake = 0.38f;
         gs->hero.impact_timer = 0.16f;
     } else {
+        if (ranged) {
+            float spawn_x = u->wx + cosf(gs->hero.yaw) * TILE_SIZE * 0.5f;
+            float spawn_y = u->wy + sinf(gs->hero.yaw) * TILE_SIZE * 0.5f;
+            float miss_tx = u->wx + cosf(gs->hero.yaw) * TILE_SIZE * range;
+            float miss_ty = u->wy + sinf(gs->hero.yaw) * TILE_SIZE * range;
+            
+            game_spawn_projectile(gs, u->player, PROJ_ARROW,
+                                  spawn_x, spawn_y, miss_tx, miss_ty,
+                                  -1, -1, 0, // 0 damage, no target
+                                  0.4f, // 0.4s duration for max range
+                                  18.0f); // slight arc
+        }
         gs->hero.shake = 0.12f;
     }
 
