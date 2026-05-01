@@ -93,6 +93,22 @@ static bool draw_hero_house_model(UIState *ui, Building *b, Vector3 pos, Color t
     return true;
 }
 
+static bool draw_hero_town_center_model(UIState *ui, Building *b, Vector3 pos, Color tint) {
+    Model mdl = ui_get_hero_town_center_model(ui);
+    if (mdl.meshCount == 0) return false;
+
+    const float model_min_y = -0.378787f;
+    float footprint = fminf((float)b->tw, (float)b->th);
+    float scale = footprint * 1.05f;
+    DrawModelEx(mdl,
+                (Vector3){pos.x, -model_min_y * scale, pos.z},
+                (Vector3){0.0f, 1.0f, 0.0f},
+                0.0f,
+                (Vector3){scale, scale, scale},
+                tint);
+    return true;
+}
+
 static bool draw_hero_stable_model(UIState *ui, Building *b, Vector3 pos, Color tint) {
     Model mdl = ui_get_hero_stable_model(ui);
     if (mdl.meshCount == 0) return false;
@@ -135,6 +151,10 @@ static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
     if (!b->complete) tint.a = 150;
 
     if (b->type == BLD_HOUSE && draw_hero_house_model(ui, b, pos, tint)) {
+        return;
+    }
+
+    if (b->type == BLD_TOWN_CENTER && draw_hero_town_center_model(ui, b, pos, tint)) {
         return;
     }
 

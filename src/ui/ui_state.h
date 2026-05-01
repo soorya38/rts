@@ -68,6 +68,7 @@ typedef struct {
     Model mdl_town_centers[4];
     Model mdl_houses[HOUSE_VARIANT_COUNT];
     Model mdl_hero_house;
+    Model mdl_hero_town_center;
     Model mdl_hero_stable;
     Model mdl_mills[4];
     Model mdl_lumber_camps[4];
@@ -81,6 +82,7 @@ typedef struct {
     Model mdl_monasteries[4];
     Model mdl_castles[4];
     Texture2D tex_hero_house_diffuse;
+    Texture2D tex_hero_town_center_diffuse;
     Texture2D tex_hero_stable_diffuse;
     Texture2D tex_units[UNIT_COUNT];
     Texture2D tex_env_trees[TREE_VARIANT_COUNT];
@@ -113,6 +115,7 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age);
 Texture2D ui_get_house_texture(const UIState *ui, uint8_t variant);
 Model ui_get_building_model(const UIState *ui, BldType type, int age, uint8_t variant);
 Model ui_get_hero_house_model(const UIState *ui);
+Model ui_get_hero_town_center_model(const UIState *ui);
 Model ui_get_hero_stable_model(const UIState *ui);
 /* Returns a scale factor relative to 720p so HUD elements are legible on any
    screen size, including high-DPI phones.  Range [1.0, 2.5]. */
