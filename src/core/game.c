@@ -655,6 +655,8 @@ static void sandbox_setup_bases(GameState *gs){
     building_place_ready(gs, 0, BLD_WATCH_TOWER, 16, 41);
     building_place_ready(gs, 0, BLD_WATCH_TOWER, 21, 41);
 
+    building_place_ready(gs, 0, BLD_CASTLE,        18, 3);
+
     // Core City Layout
     building_place_ready(gs, 0, BLD_TOWN_CENTER,   18, 27);
     building_place_ready(gs, 0, BLD_MARKET,        14, 27);
@@ -712,6 +714,8 @@ static void sandbox_setup_bases(GameState *gs){
     building_place_ready(gs, 1, BLD_WATCH_TOWER, 51, 15);
     building_place_ready(gs, 1, BLD_WATCH_TOWER, 46, 41);
     building_place_ready(gs, 1, BLD_WATCH_TOWER, 51, 41);
+
+    building_place_ready(gs, 1, BLD_CASTLE,        48, 3);
 
     building_place_ready(gs, 1, BLD_TOWN_CENTER,   48, 27);
     building_place_ready(gs, 1, BLD_MARKET,        44, 27);

@@ -10,8 +10,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+/* ── Per-frame cached state to avoid redundant work ── */
+static float s_cam_angle;       /* billboard angle toward camera */
+static Vector3 s_cam_pos;       /* camera position cache */
+static Vector3 s_cam_fwd;       /* camera forward vector for frustum */
+
 static Vector3 world3(float wx, float wy, float h) {
     return (Vector3){wx / TILE_SIZE, h, wy / TILE_SIZE};
+}
+
+/* Fast frustum check: is tile (tx,ty) roughly in front of the camera? */
+static bool tile_in_view(int tx, int ty) {
+    float dx = (tx + 0.5f) - s_cam_pos.x;
+    float dz = (ty + 0.5f) - s_cam_pos.z;
+    float dot = dx * s_cam_fwd.x + dz * s_cam_fwd.z;
+    return dot > -2.0f; /* small slack for tiles at screen edges */
 }
 
 static Color tile_color_3d(Tile *t) {
@@ -40,18 +53,23 @@ static void draw_tile_3d(GameState *gs, int x, int y) {
     Tile *t = &gs->map[y][x];
     Color c = tile_color_3d(t);
     if (t->type == TILE_WATER) {
-        float wave = sinf(gs->game_time * 2.0f + (float)(x + y) * 0.7f) * 0.5f + 0.5f;
-        c.b = (unsigned char)clampi((int)c.b + (int)(wave * 34.0f), 0, 255);
+        /* Cheap integer-based wave instead of sinf per tile */
+        int wave_i = ((int)(gs->game_time * 512.0f) + (x + y) * 179) & 0xFF;
+        c.b = (unsigned char)clampi((int)c.b + (wave_i >> 3), 0, 255);
     }
 
     DrawCubeV((Vector3){x + 0.5f, -0.035f, y + 0.5f},
               (Vector3){1.02f, 0.07f, 1.02f}, c);
 
     if (t->type == TILE_FOREST) {
+        /* Trunk */
         DrawCubeV((Vector3){x + 0.5f, 0.28f, y + 0.5f},
-                  (Vector3){0.16f, 0.56f, 0.16f}, CLITERAL(Color){82, 50, 30, 255});
-        DrawSphere((Vector3){x + 0.5f, 0.82f, y + 0.5f}, 0.34f,
-                   CLITERAL(Color){28, 104, 36, 255});
+                  (Vector3){0.14f, 0.52f, 0.14f}, CLITERAL(Color){82, 50, 30, 255});
+        /* Cheap cone-shaped canopy using two stacked cubes instead of DrawSphere */
+        DrawCubeV((Vector3){x + 0.5f, 0.68f, y + 0.5f},
+                  (Vector3){0.52f, 0.28f, 0.52f}, CLITERAL(Color){28, 104, 36, 255});
+        DrawCubeV((Vector3){x + 0.5f, 0.92f, y + 0.5f},
+                  (Vector3){0.32f, 0.22f, 0.32f}, CLITERAL(Color){34, 118, 42, 255});
     } else if (t->type == TILE_GOLD) {
         DrawCubeV((Vector3){x + 0.5f, 0.14f, y + 0.5f},
                   (Vector3){0.44f, 0.28f, 0.44f}, CLITERAL(Color){218, 178, 42, 255});
@@ -59,8 +77,9 @@ static void draw_tile_3d(GameState *gs, int x, int y) {
         DrawCubeV((Vector3){x + 0.5f, 0.12f, y + 0.5f},
                   (Vector3){0.46f, 0.24f, 0.46f}, CLITERAL(Color){162, 158, 148, 255});
     } else if (t->type == TILE_BERRIES) {
-        DrawSphere((Vector3){x + 0.5f, 0.24f, y + 0.5f}, 0.23f,
-                   CLITERAL(Color){158, 42, 52, 255});
+        /* Cheap cube instead of DrawSphere */
+        DrawCubeV((Vector3){x + 0.5f, 0.20f, y + 0.5f},
+                  (Vector3){0.36f, 0.28f, 0.36f}, CLITERAL(Color){158, 42, 52, 255});
     }
 }
 
@@ -125,6 +144,38 @@ static bool draw_hero_stable_model(UIState *ui, Building *b, Vector3 pos, Color 
     return true;
 }
 
+static bool draw_hero_watch_tower_model(UIState *ui, Building *b, Vector3 pos, Color tint) {
+    Model mdl = ui_get_hero_watch_tower_model(ui);
+    if (mdl.meshCount == 0) return false;
+
+    const float model_min_y = -0.5f;
+    float footprint = fminf((float)b->tw, (float)b->th);
+    float scale = footprint * 1.15f;
+    DrawModelEx(mdl,
+                (Vector3){pos.x, -model_min_y * scale, pos.z},
+                (Vector3){0.0f, 1.0f, 0.0f},
+                0.0f,
+                (Vector3){scale, scale, scale},
+                tint);
+    return true;
+}
+
+static bool draw_hero_castle_model(UIState *ui, Building *b, Vector3 pos, Color tint) {
+    Model mdl = ui_get_hero_castle_model(ui);
+    if (mdl.meshCount == 0) return false;
+
+    const float model_min_y = -0.271237f;
+    float footprint = fminf((float)b->tw, (float)b->th);
+    float scale = footprint * 1.15f;
+    DrawModelEx(mdl,
+                (Vector3){pos.x, -model_min_y * scale, pos.z},
+                (Vector3){0.0f, 1.0f, 0.0f},
+                0.0f,
+                (Vector3){scale, scale, scale},
+                tint);
+    return true;
+}
+
 static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
     float h = building_height_3d(b->type);
     Color c = player_color(b->player);
@@ -162,6 +213,14 @@ static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
         return;
     }
 
+    if (b->type == BLD_WATCH_TOWER && draw_hero_watch_tower_model(ui, b, pos, tint)) {
+        return;
+    }
+
+    if (b->type == BLD_CASTLE && draw_hero_castle_model(ui, b, pos, tint)) {
+        return;
+    }
+
     if (mdl.meshCount > 0) {
         Texture2D tex = ui_get_building_texture(ui, b->type, age);
         if (b->type == BLD_HOUSE) tex = ui_get_house_texture(ui, b->variant);
@@ -171,22 +230,14 @@ static void draw_building_3d(GameState *gs, UIState *ui, Building *b) {
             aspect = (float)tex.width / (float)tex.height;
         }
         
-        // Preserve perfect aspect ratio of the 2D sprite
         float scale_y = h * 2.0f; 
         float scale_x = scale_y * aspect;
         float scale_z = scale_x;
         
-        // Calculate angle to camera for billboarding
-        float dx = ui->hero_camera.position.x - pos.x;
-        float dz = ui->hero_camera.position.z - pos.z;
-        float angle = atan2f(dx, dz) * RAD2DEG;
-        
-        // Face the model directly towards the camera
-        DrawModelEx(mdl, (Vector3){pos.x, 0.0f, pos.z}, (Vector3){0, 1, 0}, angle, (Vector3){scale_x, scale_y, scale_z}, tint);
+        /* Use cached billboard angle instead of per-building atan2f */
+        DrawModelEx(mdl, (Vector3){pos.x, 0.0f, pos.z}, (Vector3){0, 1, 0}, s_cam_angle, (Vector3){scale_x, scale_y, scale_z}, tint);
     } else {
         DrawCubeV(pos, size, c);
-        DrawCubeWiresV(pos, size, dc);
-
         if (b->type == BLD_WATCH_TOWER) {
             DrawCubeV((Vector3){pos.x, h + 0.18f, pos.z},
                       (Vector3){0.82f, 0.36f, 0.82f}, dc);
@@ -232,7 +283,7 @@ static void draw_projectiles_3d(GameState *gs) {
         float arc = 4.0f * t * (1.0f - t) * p->arc_height / TILE_SIZE;
         
         if (p->type == PROJ_ARROW) {
-            // Draw a thick cylinder for the arrow to ensure visibility
+            /* Cheap DrawLine3D instead of expensive DrawCylinderEx */
             float tail_t = t - 0.15f; 
             float pwx = p->sx + (p->ex - p->sx) * tail_t;
             float pwy = p->sy + (p->ey - p->sy) * tail_t;
@@ -241,12 +292,13 @@ static void draw_projectiles_3d(GameState *gs) {
             Vector3 startP = world3(pwx, pwy, 0.95f + parc);
             Vector3 endP = world3(wx, wy, 0.95f + arc);
             
-            // Bright colored wooden shaft
-            DrawCylinderEx(startP, endP, 0.05f, 0.05f, 6, CLITERAL(Color){255, 200, 120, 255});
+            DrawLine3D(startP, endP, CLITERAL(Color){255, 200, 120, 255});
         } else {
             Color c = p->type == PROJ_STONE ? CLITERAL(Color){180, 170, 150, 255}
                                             : CLITERAL(Color){230, 210, 120, 255};
-            DrawSphere(world3(wx, wy, 0.95f + arc), p->type == PROJ_STONE ? 0.16f : 0.06f, c);
+            /* Cheap cube instead of DrawSphere for stone/bolt projectiles */
+            float sz = p->type == PROJ_STONE ? 0.22f : 0.08f;
+            DrawCubeV(world3(wx, wy, 0.95f + arc), (Vector3){sz, sz, sz}, c);
         }
     }
 }
@@ -420,10 +472,15 @@ void renderer_draw_hero_possession(GameState *gs, UIState *ui) {
     ui->hero_camera.fovy = 72.0f + gs->hero.blur * 5.0f;
     ui->hero_camera.projection = CAMERA_PERSPECTIVE;
 
+    /* Cache per-frame values for frustum culling and billboarding */
+    s_cam_pos = ui->hero_camera.position;
+    s_cam_fwd = (Vector3){fx, 0.0f, fz};
+    s_cam_angle = atan2f(fx, fz) * RAD2DEG; /* one atan2f per frame, not per building */
+
     int lp = net_get_local_player();
     int hx = (int)(hero->wx / TILE_SIZE);
     int hy = (int)(hero->wy / TILE_SIZE);
-    int radius = 22;
+    int radius = 18; /* reduced from 22 — tiles beyond ~18 are rarely visible */
 
     BeginMode3D(ui->hero_camera);
         DrawPlane((Vector3){MAP_W * 0.5f, -0.08f, MAP_H * 0.5f},
@@ -436,6 +493,7 @@ void renderer_draw_hero_possession(GameState *gs, UIState *ui) {
         for (int y = y0; y <= y1; y++) {
             for (int x = x0; x <= x1; x++) {
                 if (gs->map[y][x].fog[lp] == FOG_HIDDEN) continue;
+                if (!tile_in_view(x, y)) continue; /* frustum cull */
                 draw_tile_3d(gs, x, y);
             }
         }
@@ -446,6 +504,7 @@ void renderer_draw_hero_possession(GameState *gs, UIState *ui) {
             float cx = b->tx + b->tw * 0.5f;
             float cy = b->ty + b->th * 0.5f;
             if (fabsf(cx - hx) > radius || fabsf(cy - hy) > radius) continue;
+            if (!tile_in_view((int)cx, (int)cy)) continue; /* frustum cull */
             int fog_x = clampi((int)cx, 0, MAP_W - 1);
             int fog_y = clampi((int)cy, 0, MAP_H - 1);
             if (gs->map[fog_y][fog_x].fog[lp] == FOG_HIDDEN && b->player != lp) continue;
@@ -458,6 +517,7 @@ void renderer_draw_hero_possession(GameState *gs, UIState *ui) {
             int ux = (int)(u->wx / TILE_SIZE);
             int uy = (int)(u->wy / TILE_SIZE);
             if (abs(ux - hx) > radius || abs(uy - hy) > radius) continue;
+            if (!tile_in_view(ux, uy)) continue; /* frustum cull */
             if (gs->map[clampi(uy, 0, MAP_H - 1)][clampi(ux, 0, MAP_W - 1)].fog[lp] == FOG_HIDDEN &&
                 u->player != lp) continue;
             draw_unit_3d(u, i == gs->hero.unit_id);

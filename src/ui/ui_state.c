@@ -180,9 +180,13 @@ static void load_house_variant_textures(UIState *ui) {
     ui->mdl_hero_house = load_game_model("assets/buildings/hero_house/model.obj");
     ui->mdl_hero_town_center = load_game_model("assets/buildings/hero_town_center/model.obj");
     ui->mdl_hero_stable = load_game_model("assets/buildings/hero_stable/model.obj");
+    ui->mdl_hero_watch_tower = load_game_model("assets/buildings/hero_watch_tower/model.obj");
+    ui->mdl_hero_castle = load_game_model("assets/buildings/hero_castle/model.obj");
     ui->tex_hero_house_diffuse = load_game_texture("assets/buildings/hero_house/diffuse_0.png");
     ui->tex_hero_town_center_diffuse = load_game_texture("assets/buildings/hero_town_center/diffuse_0.png");
     ui->tex_hero_stable_diffuse = load_game_texture("assets/buildings/hero_stable/diffuse_0.png");
+    ui->tex_hero_watch_tower_diffuse = load_game_texture("assets/buildings/hero_watch_tower/diffuse_0.png");
+    ui->tex_hero_castle_diffuse = load_game_texture("assets/buildings/hero_castle/diffuse_0.png");
 }
 
 void ui_state_init(UIState *ui, GameState *gs) {
@@ -345,12 +349,16 @@ void ui_state_deinit(UIState *ui) {
     UnloadTexture(ui->tex_hero_house_diffuse);
     UnloadTexture(ui->tex_hero_town_center_diffuse);
     UnloadTexture(ui->tex_hero_stable_diffuse);
+    UnloadTexture(ui->tex_hero_watch_tower_diffuse);
+    UnloadTexture(ui->tex_hero_castle_diffuse);
     
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_town_centers[i]);
     for (int i = 0; i < HOUSE_VARIANT_COUNT; i++) UnloadModel(ui->mdl_houses[i]);
     UnloadModel(ui->mdl_hero_house);
     UnloadModel(ui->mdl_hero_town_center);
     UnloadModel(ui->mdl_hero_stable);
+    UnloadModel(ui->mdl_hero_watch_tower);
+    UnloadModel(ui->mdl_hero_castle);
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_mills[i]);
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_lumber_camps[i]);
     for (int i = 0; i < 4; i++) UnloadModel(ui->mdl_barracks[i]);
@@ -611,6 +619,26 @@ Model ui_get_hero_stable_model(const UIState *ui) {
     Model mdl = ui->mdl_hero_stable;
     if (mdl.meshCount > 0 && ui->tex_hero_stable_diffuse.id != 0 && mdl.materials != NULL) {
         mdl.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = ui->tex_hero_stable_diffuse;
+    }
+    return mdl;
+}
+
+Model ui_get_hero_watch_tower_model(const UIState *ui) {
+    if (!ui) return (Model){0};
+
+    Model mdl = ui->mdl_hero_watch_tower;
+    if (mdl.meshCount > 0 && ui->tex_hero_watch_tower_diffuse.id != 0 && mdl.materials != NULL) {
+        mdl.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = ui->tex_hero_watch_tower_diffuse;
+    }
+    return mdl;
+}
+
+Model ui_get_hero_castle_model(const UIState *ui) {
+    if (!ui) return (Model){0};
+
+    Model mdl = ui->mdl_hero_castle;
+    if (mdl.meshCount > 0 && ui->tex_hero_castle_diffuse.id != 0 && mdl.materials != NULL) {
+        mdl.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = ui->tex_hero_castle_diffuse;
     }
     return mdl;
 }
