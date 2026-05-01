@@ -217,6 +217,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     bool is_mining_camp = (b->type == BLD_MINING_CAMP);
     bool is_watch_tower = (b->type == BLD_WATCH_TOWER);
     bool is_monastery = (b->type == BLD_MONASTERY);
+    bool is_castle = (b->type == BLD_CASTLE);
     if (building_is_walllike(b->type)) {
         draw_wall_piece(gs, b, mc, dc);
     } else if (tex.id != 0) {
@@ -295,6 +296,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             float scale_x = monastery_target_width / (float)tex.width;
             float scale_y = monastery_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_castle) {
+            const float castle_target_width = 285.0f;
+            const float castle_target_height = 310.0f;
+            float scale_x = castle_target_width / (float)tex.width;
+            float scale_y = castle_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else {
             /* Scale buildings biased towards footprint size, with a global boost */
             float base_ratio = 1.25f / 4.0f; /* TC as baseline */
@@ -327,6 +334,8 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             y_offset += 32.0f; /* watch towers are tall, so they need a stronger ground anchor */
         } else if (is_monastery) {
             y_offset += 22.0f; /* monasteries need a moderate drop to keep their stairs on the footprint */
+        } else if (is_castle) {
+            y_offset += 24.0f; /* castle is massive, anchor the base firmly */
         }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
         DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
@@ -626,6 +635,13 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     float s_y = monastery_target_height / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
                     y_offset += 22.0f;
+                } else if (gs->build_mode.type == BLD_CASTLE) {
+                    const float castle_target_width = 285.0f;
+                    const float castle_target_height = 310.0f;
+                    float s_x = castle_target_width / (float)tex.width;
+                    float s_y = castle_target_height / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 24.0f;
                 } else {
                     float base_ratio = 1.25f / 4.0f;
                     float boost = 1.25f;

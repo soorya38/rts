@@ -61,12 +61,14 @@ typedef struct {
     Texture2D tex_mining_camps[4];
     Texture2D tex_watch_towers[4];
     Texture2D tex_monasteries[4];
+    Texture2D tex_castles[4];
     Texture2D tex_land_grass[4];
     
     /* 3D Assets */
     Model mdl_town_centers[4];
     Model mdl_houses[HOUSE_VARIANT_COUNT];
     Model mdl_hero_house;
+    Model mdl_hero_stable;
     Model mdl_mills[4];
     Model mdl_lumber_camps[4];
     Model mdl_barracks[4];
@@ -77,7 +79,9 @@ typedef struct {
     Model mdl_mining_camps[4];
     Model mdl_watch_towers[4];
     Model mdl_monasteries[4];
+    Model mdl_castles[4];
     Texture2D tex_hero_house_diffuse;
+    Texture2D tex_hero_stable_diffuse;
     Texture2D tex_units[UNIT_COUNT];
     Texture2D tex_env_trees[TREE_VARIANT_COUNT];
     Texture2D tex_env_gold;
@@ -109,6 +113,7 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age);
 Texture2D ui_get_house_texture(const UIState *ui, uint8_t variant);
 Model ui_get_building_model(const UIState *ui, BldType type, int age, uint8_t variant);
 Model ui_get_hero_house_model(const UIState *ui);
+Model ui_get_hero_stable_model(const UIState *ui);
 /* Returns a scale factor relative to 720p so HUD elements are legible on any
    screen size, including high-DPI phones.  Range [1.0, 2.5]. */
 float hud_scale(void);

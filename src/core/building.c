@@ -21,6 +21,9 @@ static void building_apply_combat_stats(Building *b){
     } else if(b->type == BLD_WATCH_TOWER){
         b->attack_dmg = 6;
         b->attack_range = 8.0f;
+    } else if(b->type == BLD_CASTLE){
+        b->attack_dmg = 8;
+        b->attack_range = 8.0f;
     }
 }
 
@@ -59,7 +62,7 @@ static void building_refresh_upgrades(GameState *gs, Building *b){
        (b->type == BLD_WALL || b->type == BLD_GATE)) {
         b->max_hp += 600;
     }
-    if(pr->tech_unlocked[TECH_HOARDINGS] && b->type == BLD_TOWN_CENTER) {
+    if(pr->tech_unlocked[TECH_HOARDINGS] && (b->type == BLD_TOWN_CENTER || b->type == BLD_CASTLE)) {
         b->max_hp += 500;
     }
     if(b->type == BLD_WATCH_TOWER){
@@ -79,11 +82,11 @@ static void building_refresh_upgrades(GameState *gs, Building *b){
             b->attack_range += 2.0f;
         }
     }
-    if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER) &&
+    if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER || b->type == BLD_CASTLE) &&
        pr->tech_unlocked[TECH_MURDER_HOLES]) {
         b->attack_range += 1.0f;
     }
-    if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER) &&
+    if((b->type == BLD_TOWN_CENTER || b->type == BLD_WATCH_TOWER || b->type == BLD_CASTLE) &&
        pr->tech_unlocked[TECH_CHEMISTRY] && b->attack_dmg > 0) {
         b->attack_dmg += 1;
     }
@@ -105,6 +108,7 @@ bool building_supports_rally(BldType type){
         case BLD_STABLE:
         case BLD_MONASTERY:
         case BLD_SIEGE_WORKSHOP:
+        case BLD_CASTLE:
             return true;
         default:
             return false;

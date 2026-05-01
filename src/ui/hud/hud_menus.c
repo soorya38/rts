@@ -49,6 +49,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
         {BLD_MONASTERY,    "Monastery (O)\n175W",        {0,175,0,0}},
         {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",           {0,200,0,0}},
         {BLD_UNIVERSITY,   "University (C)\n200W",       {0,200,0,0}},
+        {BLD_CASTLE,       "Castle (X)\n650S",           {0,0,  0,650}},
         {BLD_WALL,         "Wall (U)\n20 Wood",          {0,20, 0,0}},
         {BLD_GATE,         "Gate (J)\n35W 15S",          {0,35, 0,15}},
     };
@@ -78,7 +79,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
             items[i].t==BLD_WATCH_TOWER) && !is_feudal) prereq_ok=false;
         if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP ||
-            items[i].t==BLD_UNIVERSITY) && !is_castle) prereq_ok=false;
+            items[i].t==BLD_UNIVERSITY || items[i].t==BLD_CASTLE) && !is_castle) prereq_ok=false;
         bool clickable = can && prereq_ok;
         bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
         if(items[i].t==BLD_FARM && !has_mill)
@@ -88,7 +89,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             items[i].t==BLD_WATCH_TOWER) && !is_feudal)
             DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP ||
-            items[i].t==BLD_UNIVERSITY) && !is_castle)
+            items[i].t==BLD_UNIVERSITY || items[i].t==BLD_CASTLE) && !is_castle)
             DrawText("Castle Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
         if(pressed && clickable){
             gs->build_mode.type=items[i].t;
@@ -100,7 +101,7 @@ static void draw_build_menu(GameState *gs, UIState *ui){
             game_set_alert(gs,msg);
         }
     }
-    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I C U J",
+    DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I C X U J",
              mx,my+bh*rows+gap*(rows-1)+4,9,CLITERAL(Color){100,90,60,200});
 }
 

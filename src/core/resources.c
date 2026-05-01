@@ -91,6 +91,7 @@ Cost building_cost(BldType t){
         case BLD_UNIVERSITY:   return (Cost){0,200,0,0};
         case BLD_WALL:         return (Cost){0,20,0,0};
         case BLD_GATE:         return (Cost){0,35,0,15};
+        case BLD_CASTLE:       return (Cost){0,0,0,650};
         default:               return (Cost){0,0,0,0};
     }
 }
@@ -114,6 +115,7 @@ int building_tw(BldType t){
         case BLD_UNIVERSITY:  return 3;
         case BLD_WALL:        return 1;
         case BLD_GATE:        return 1;
+        case BLD_CASTLE:      return 4;
         default:              return 2;
     }
 }
@@ -139,6 +141,7 @@ int building_max_hp(BldType t){
         case BLD_UNIVERSITY:   return 1200;
         case BLD_WALL:         return 900;
         case BLD_GATE:         return 1100;
+        case BLD_CASTLE:       return 4800;
         default:               return 500;
     }
 }
@@ -216,6 +219,7 @@ int building_age_required(BldType t){
         case BLD_MONASTERY:
         case BLD_SIEGE_WORKSHOP:
         case BLD_UNIVERSITY:
+        case BLD_CASTLE:
             return 2;
         default:
             return 0;
@@ -281,6 +285,7 @@ const char* building_name(BldType t){
         case BLD_UNIVERSITY: return "Kalvi Koodam";
         case BLD_WALL: return "Mathil";
         case BLD_GATE: return "Kottai Vaasal";
+        case BLD_CASTLE: return "Kottai";
         default: return "Kattidam";
     }
 }

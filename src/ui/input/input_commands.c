@@ -561,6 +561,7 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         if (IsKeyPressed(KEY_O) && cur_age >= 2) qt = BLD_MONASTERY;
         if (IsKeyPressed(KEY_I) && cur_age >= 2) qt = BLD_SIEGE_WORKSHOP;
         if (IsKeyPressed(KEY_C) && cur_age >= 2) qt = BLD_UNIVERSITY;
+        if (IsKeyPressed(KEY_X) && cur_age >= 2) qt = BLD_CASTLE;
         if (IsKeyPressed(KEY_U)) qt = BLD_WALL;
         if (IsKeyPressed(KEY_J)) qt = BLD_GATE;
         if (qt != BLD_COUNT && res_can_afford(&gs->res[lp], building_cost(qt))) {
@@ -574,6 +575,7 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         }
         if (IsKeyPressed(KEY_I) && cur_age < 2) game_set_alert(gs, "Siege Workshop requires Castle Age!");
         if (IsKeyPressed(KEY_C) && cur_age < 2) game_set_alert(gs, "University requires Castle Age!");
+        if (IsKeyPressed(KEY_X) && cur_age < 2) game_set_alert(gs, "Castle requires Castle Age!");
     }
     if (IsKeyPressed(KEY_P) && gs->phase == PHASE_PLAYING)  gs->phase = PHASE_PAUSED;
     else if (IsKeyPressed(KEY_P) && gs->phase == PHASE_PAUSED) gs->phase = PHASE_PLAYING;
