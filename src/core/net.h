@@ -27,6 +27,10 @@
   #undef WIN32_LEAN_AND_MEAN
   #undef NOGDI
   #undef NOUSER
+  /* winmm's PlaySound macro collides with raylib's PlaySound() API. */
+  #ifdef PlaySound
+    #undef PlaySound
+  #endif
 #endif
 
 /* Multiplayer states */
