@@ -39,6 +39,39 @@ static void draw_training_queue(Building *b, int x, int y, int fs10, int fs9){
     }
 }
 
+static void draw_unit_hud_sprite(UIState *ui, Unit *u, Rectangle slot, Color bg){
+    DrawRectangleRec(slot, bg);
+    DrawRectangleLinesEx(slot, 1.5f, C_HUD_LINE);
+
+    if(!ui || !u || u->type < 0 || u->type >= UNIT_COUNT)
+        return;
+
+    Texture2D tex = ui->tex_units[u->type];
+    if(tex.id == 0)
+        return;
+
+    float pad = slot.height * 0.08f;
+    float max_w = slot.width - pad * 2.0f;
+    float max_h = slot.height - pad * 2.0f;
+    float sc = max_h / (float)tex.height;
+    float draw_w = (float)tex.width * sc;
+    float draw_h = max_h;
+    if(draw_w > max_w){
+        sc = max_w / (float)tex.width;
+        draw_w = max_w;
+        draw_h = (float)tex.height * sc;
+    }
+
+    Rectangle src = {0.0f, 0.0f, (float)tex.width, (float)tex.height};
+    Rectangle dst = {
+        slot.x + (slot.width - draw_w) * 0.5f,
+        slot.y + (slot.height - draw_h) * 0.5f,
+        draw_w,
+        draw_h
+    };
+    DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
+}
+
 static bool can_queue_unit_now(GameState *gs, Building *b, int player, UnitType ut){
     if(!b || !b->complete || b->active_tech != TECH_NONE) return false;
     if(b->queue_len >= BQUEUE_CAP) return false;
@@ -1060,10 +1093,13 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             DrawText(buf,pad,by_start+(int)(60*sc),fs12,C_GOLD);
         }
         int portrait=(int)(48*sc);
-        DrawRectangle(panel_w-portrait-pad,by_start+(int)(8*sc),portrait,portrait,CLITERAL(Color){35,28,16,255});
-        DrawRectangleLinesEx((Rectangle){(float)(panel_w-portrait-pad),(float)(by_start+(int)(8*sc)),(float)portrait,(float)portrait},1.5f,C_HUD_LINE);
-        DrawCircle(panel_w-portrait/2-pad,by_start+(int)(8*sc)+(int)(16*sc),(int)(8*sc),CLITERAL(Color){220,185,145,255});
-        DrawRectangle(panel_w-portrait/2-pad-(int)(6*sc),by_start+(int)(8*sc)+(int)(27*sc),(int)(12*sc),(int)(14*sc),player_color(u->player));
+        Rectangle portrait_slot = {
+            (float)(panel_w - portrait - pad),
+            (float)(by_start + (int)(8 * sc)),
+            (float)portrait,
+            (float)portrait
+        };
+        draw_unit_hud_sprite(ui, u, portrait_slot, CLITERAL(Color){35,28,16,255});
         if(hero_possession_is_unit_eligible(gs, ui->sel_units[0], net_get_local_player())){
             int possess_w = (int)(126 * sc);
             int possess_h = (int)(36 * sc);
@@ -1086,9 +1122,13 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
         int uw=(int)(22*sc);
         for(int i=0;i<ui->sel_count&&i<12;i++){
             Unit *u=&gs->units[ui->sel_units[i]];
-            Color mc=player_color(u->player);
-            DrawRectangle(pad+i*uw,by_start+(int)(30*sc),(int)(18*sc),(int)(18*sc),mc);
-            DrawRectangleLinesEx((Rectangle){(float)(pad+i*uw),(float)(by_start+(int)(30*sc)),(float)(int)(18*sc),(float)(int)(18*sc)},1,C_HUD_LINE);
+            Rectangle unit_slot = {
+                (float)(pad + i * uw),
+                (float)(by_start + (int)(30 * sc)),
+                (float)(int)(18 * sc),
+                (float)(int)(18 * sc)
+            };
+            draw_unit_hud_sprite(ui, u, unit_slot, CLITERAL(Color){35,28,16,255});
             float frac=(float)u->hp/u->max_hp;
             DrawRectangle(pad+i*uw,by_start+(int)(50*sc),(int)(18*sc),(int)(3*sc),CLITERAL(Color){30,30,30,200});
             DrawRectangle(pad+i*uw,by_start+(int)(50*sc),(int)((18*sc)*frac),(int)(3*sc),frac>0.5f?CLITERAL(Color){50,200,60,255}:CLITERAL(Color){210,50,40,255});
