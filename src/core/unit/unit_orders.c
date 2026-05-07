@@ -534,6 +534,8 @@ void unit_give_attack_order(GameState *gs, Unit *u, int tunit, int tbld){
 void unit_give_build_order(GameState *gs, Unit *u, int bld_id){
     if(u->type!=UNIT_VILLAGER||bld_id<0) return;
     Building *b=&gs->buildings[bld_id];
+    if(!b->active || b->player != u->player) return;
+    if(b->complete && b->hp >= b->max_hp) return;
     u->build_id=bld_id;
     int bx,by;
     find_adjacent_tile(gs,b->tx,b->ty,b->tw,b->th,u->wx,u->wy,&bx,&by);

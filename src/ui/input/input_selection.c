@@ -281,6 +281,15 @@ int find_unfinished_building_at(GameState *gs, UIState *ui, Vector2 wp) {
     }
     return best_id;
 }
+
+static int find_damaged_friendly_building_at(GameState *gs, UIState *ui, Vector2 wp) {
+    int fb = find_friendly_building_at(gs, ui, wp);
+    if (fb < 0) return -1;
+    Building *b = &gs->buildings[fb];
+    if (!b->active || !b->complete || b->hp >= b->max_hp) return -1;
+    return fb;
+}
+
 int find_friendly_dropoff_at(GameState *gs, UIState *ui, Vector2 wp) {
     int fb = find_friendly_building_at(gs, ui, wp);
     if (fb >= 0 && gs->buildings[fb].complete) {
@@ -300,19 +309,20 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
     int eu = find_enemy_unit_at(gs, world);
     int eb = (eu < 0) ? find_enemy_building_at(gs, ui, world) : -1;
     int ub = find_unfinished_building_at(gs, ui, world);
+    int repair_b = find_damaged_friendly_building_at(gs, ui, world);
     int dropoff = find_friendly_dropoff_at(gs, ui, world);
 
     TileType tt = gs->map[ty][tx].type;
     bool is_resource = (tt == TILE_FOREST || tt == TILE_GOLD || tt == TILE_STONE || tt == TILE_BERRIES || tt == TILE_FARM);
 
     int ftx = tx, fty = ty;
-    bool must_be_passable = (!is_resource && eu < 0 && eb < 0 && ub < 0 && dropoff < 0);
+    bool must_be_passable = (!is_resource && eu < 0 && eb < 0 && ub < 0 && repair_b < 0 && dropoff < 0);
     if (must_be_passable) {
         if (!map_find_passable_near(gs, tx, ty, &ftx, &fty)) return;
     }
 
     PathCell formation_targets[64];
-    bool use_formation = (eu < 0 && eb < 0 && ub < 0 && dropoff < 0 && !is_resource);
+    bool use_formation = (eu < 0 && eb < 0 && ub < 0 && repair_b < 0 && dropoff < 0 && !is_resource);
     if (use_formation) {
         int formation_count = ui->sel_count < 64 ? ui->sel_count : 64;
         unit_compute_formation_targets(gs, ftx, fty, formation_count, formation_targets);
@@ -329,6 +339,9 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
         } else if (ub >= 0) {
             pkt.type = PKT_BUILD;
             pkt.target_id = ub;
+        } else if (repair_b >= 0) {
+            pkt.type = PKT_BUILD;
+            pkt.target_id = repair_b;
         } else if (dropoff >= 0) {
             pkt.type = PKT_MOVE; 
             pkt.tx = gs->buildings[dropoff].tx;
@@ -376,6 +389,8 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
                 unit_give_attack_order(gs, u, eu, eb);
             } else if (ub >= 0 && u->type == UNIT_VILLAGER) {
                 unit_give_build_order(gs, u, ub);
+            } else if (repair_b >= 0 && u->type == UNIT_VILLAGER) {
+                unit_give_build_order(gs, u, repair_b);
             } else if (dropoff >= 0 && u->type == UNIT_VILLAGER && u->carry_amt > 0) {
                 unit_give_dropoff_order(gs, u, gs->buildings[dropoff].tx, gs->buildings[dropoff].ty);
             } else if (is_resource && u->type == UNIT_VILLAGER) {

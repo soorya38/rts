@@ -335,7 +335,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
         } else if (is_monastery) {
             y_offset += 22.0f; /* monasteries need a moderate drop to keep their stairs on the footprint */
         } else if (is_castle) {
-            y_offset += 24.0f; /* castle is massive, anchor the base firmly */
+            y_offset += 72.0f; /* castle art has bottom padding; drop it so the visible base sits on the footprint */
         }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
         DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
@@ -641,7 +641,7 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     float s_x = castle_target_width / (float)tex.width;
                     float s_y = castle_target_height / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
-                    y_offset += 24.0f;
+                    y_offset += 72.0f;
                 } else {
                     float base_ratio = 1.25f / 4.0f;
                     float boost = 1.25f;

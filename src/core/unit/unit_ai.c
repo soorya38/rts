@@ -259,7 +259,7 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
     if(u->build_id<0){u->state=US_IDLE;return;}
     Building *b=&gs->buildings[u->build_id];
     if(!b->active){u->build_id=-1;u->state=US_IDLE;return;}
-    if(b->complete){u->build_id=-1;u->state=US_IDLE;return;}
+    if(b->complete && b->hp >= b->max_hp){u->build_id=-1;u->state=US_IDLE;return;}
     int utx=(int)(u->wx/TILE_SIZE),uty=(int)(u->wy/TILE_SIZE);
     bool adj=false;
     for(int dy=-1;dy<=b->th&&!adj;dy++)
@@ -269,6 +269,22 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
             if(nx==utx&&ny==uty) adj=true;
         }
     if(!adj){unit_give_build_order(gs,u,u->build_id);return;}
+    if(b->complete){
+        float repair_rate = 34.0f;
+        if(gs->res[u->player].tech_unlocked[TECH_TREADMILL_CRANE]) repair_rate *= 1.35f;
+        u->anim_timer += repair_rate * dt;
+        int repaired = (int)u->anim_timer;
+        if(repaired > 0){
+            u->anim_timer -= repaired;
+            b->hp += repaired;
+            if(b->hp >= b->max_hp){
+                b->hp = b->max_hp;
+                u->build_id = -1;
+                u->state = US_IDLE;
+            }
+        }
+        return;
+    }
     float build_rate = 0.035f;
     if(gs->res[u->player].tech_unlocked[TECH_TREADMILL_CRANE]) build_rate *= 1.5f;
     b->construction+=dt*build_rate;
