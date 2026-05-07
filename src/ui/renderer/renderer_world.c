@@ -9,6 +9,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifndef PI
+#define PI 3.14159265358979323846f
+#endif
+
 /* Forward declarations of functions in other renderer files */
 extern void draw_tile(GameState *gs, UIState *ui, int x, int y);
 extern void draw_fog(GameState *gs, int x, int y);
@@ -462,6 +466,55 @@ static bool build_hover_tile(UIState *ui, int *out_tx, int *out_ty){
     return true;
 }
 
+static void draw_move_target_marker(GameState *gs, UIState *ui){
+    if(!ui->move_marker_active) return;
+
+    const float duration = 0.85f;
+    float age = gs->game_time - ui->move_marker_start;
+    if(age < 0.0f) age = 0.0f;
+    if(age >= duration){
+        ui->move_marker_active = false;
+        return;
+    }
+
+    float f = age / duration;
+    float pulse = sinf(f * PI * 3.0f);
+    float alpha_f = 1.0f - f;
+    unsigned char alpha = (unsigned char)(alpha_f * 220.0f);
+    float tx = ui->move_marker_tx * TILE_SIZE;
+    float ty = ui->move_marker_ty * TILE_SIZE;
+    float s = (float)TILE_SIZE;
+    float inset = s * (0.10f + 0.12f * f);
+    Color c = CLITERAL(Color){90, 235, 135, 255};
+    c.a = alpha;
+    Color soft = c;
+    soft.a = (unsigned char)(alpha * 0.22f);
+
+    Vector2 top = to_rvec2(world_to_iso(tx + s * 0.5f, ty + inset));
+    Vector2 right = to_rvec2(world_to_iso(tx + s - inset, ty + s * 0.5f));
+    Vector2 bot = to_rvec2(world_to_iso(tx + s * 0.5f, ty + s - inset));
+    Vector2 left = to_rvec2(world_to_iso(tx + inset, ty + s * 0.5f));
+    DrawTriangle(top, left, right, soft);
+    DrawTriangle(left, bot, right, soft);
+
+    float thick = 2.0f + pulse * 1.2f;
+    DrawLineEx(top, right, thick, c);
+    DrawLineEx(right, bot, thick, c);
+    DrawLineEx(bot, left, thick, c);
+    DrawLineEx(left, top, thick, c);
+
+    Vector2 center = to_rvec2(world_to_iso(tx + s * 0.5f, ty + s * 0.5f));
+    float tick = 9.0f + 10.0f * (1.0f - f);
+    DrawLineEx((Vector2){center.x, center.y - tick - 5.0f},
+               (Vector2){center.x, center.y - 5.0f}, thick, c);
+    DrawLineEx((Vector2){center.x + tick, center.y},
+               (Vector2){center.x + 4.0f, center.y}, thick, c);
+    DrawLineEx((Vector2){center.x, center.y + tick * 0.55f + 4.0f},
+               (Vector2){center.x, center.y + 4.0f}, thick, c);
+    DrawLineEx((Vector2){center.x - tick, center.y},
+               (Vector2){center.x - 4.0f, center.y}, thick, c);
+}
+
 static void draw_build_grid(GameState *gs, UIState *ui){
     if(!gs->build_mode.active) return;
 
@@ -792,6 +845,7 @@ void renderer_draw_world(GameState *gs, UIState *ui){
 
     free(entities);
 
+    draw_move_target_marker(gs, ui);
     draw_projectiles(gs);
     draw_selected_rally_point(gs, ui);
     

@@ -34,6 +34,10 @@ typedef struct {
   bool build_panel_open;
   bool menu_start_hover;
   bool rally_mode;
+  bool move_marker_active;
+  float move_marker_tx;
+  float move_marker_ty;
+  float move_marker_start;
 
   /* Multiplayer lobby */
   char net_ip[64];    /* IP address the client will connect to */

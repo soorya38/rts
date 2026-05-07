@@ -327,6 +327,8 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
         int formation_count = ui->sel_count < 64 ? ui->sel_count : 64;
         unit_compute_formation_targets(gs, ftx, fty, formation_count, formation_targets);
     }
+    bool plain_move = (eu < 0 && eb < 0 && ub < 0 && repair_b < 0 &&
+                       dropoff < 0 && !is_resource);
 
     if (g_net_active) {
         NetPacket pkt = {0};
@@ -379,9 +381,16 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
                 
             }
             net_dispatch_packet(gs, &pkt);
+            if (plain_move && pkt.type == PKT_MOVE) {
+                ui->move_marker_active = true;
+                ui->move_marker_tx = (float)ftx;
+                ui->move_marker_ty = (float)fty;
+                ui->move_marker_start = gs->game_time;
+            }
         }
     } else {
         int lp = net_get_local_player();
+        bool issued_plain_move = false;
         for (int i = 0; i < ui->sel_count; i++) {
             Unit *u = &gs->units[ui->sel_units[i]];
             if (!u->active || u->player != lp) continue;
@@ -403,7 +412,14 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
                     nty = formation_targets[i].y;
                 }
                 unit_give_move_order(gs, u, ntx, nty);
+                if (plain_move) issued_plain_move = true;
             }
+        }
+        if (issued_plain_move) {
+            ui->move_marker_active = true;
+            ui->move_marker_tx = (float)ftx;
+            ui->move_marker_ty = (float)fty;
+            ui->move_marker_start = gs->game_time;
         }
     }
 }
