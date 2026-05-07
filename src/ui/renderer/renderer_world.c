@@ -391,17 +391,35 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
     for (int i = 0; i < MAX_UNITS; i++) if (&gs->units[i] == u && ui->hover_unit == i) u_hovered = true;
     if (u_hovered && !u->selected) DrawEllipseLines((int)p.x, (int)p.y, 11 * size_mult, 6 * size_mult, C_HOVER);
 
-    float px = p.x, py = p.y - 10;
+    Texture2D tex = {0};
+    if (ui && u->type >= 0 && u->type < UNIT_COUNT)
+        tex = ui->tex_units[u->type];
 
-    (void)ui;
-    (void)px;
-    (void)py;
-    float box_w = 8.0f * size_mult;
-    float box_h = 8.0f * size_mult;
-    float box_z = 10.0f * size_mult;
-    draw_iso_box(wx - box_w * 0.5f, wy - box_h * 0.5f, box_w, box_h, box_z,
-                 CLITERAL(Color){mc.r, mc.g, mc.b, (unsigned char)alpha},
-                 dc, dc);
+    if (tex.id != 0) {
+        float target_h = 30.0f * size_mult;
+        float sc = target_h / (float)tex.height;
+        float target_w = (float)tex.width * sc;
+        Rectangle src = {0.0f, 0.0f, (float)tex.width, (float)tex.height};
+        Rectangle dst = {
+            p.x - target_w * 0.5f,
+            p.y - target_h + 3.0f * size_mult,
+            target_w,
+            target_h
+        };
+        Color tint = CLITERAL(Color){255, 255, 255, (unsigned char)alpha};
+        DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, tint);
+
+        Color team = CLITERAL(Color){mc.r, mc.g, mc.b, (unsigned char)(alpha * 0.9f)};
+        DrawRectangle((int)(p.x - 5.0f * size_mult), (int)(p.y - 7.0f * size_mult),
+                      (int)(10.0f * size_mult), (int)(2.0f * size_mult), team);
+    } else {
+        float box_w = 8.0f * size_mult;
+        float box_h = 8.0f * size_mult;
+        float box_z = 10.0f * size_mult;
+        draw_iso_box(wx - box_w * 0.5f, wy - box_h * 0.5f, box_w, box_h, box_z,
+                     CLITERAL(Color){mc.r, mc.g, mc.b, (unsigned char)alpha},
+                     dc, dc);
+    }
 
     if(u->type==UNIT_VILLAGER && u->carry_amt>0){
         Color rc;

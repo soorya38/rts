@@ -1,5 +1,8 @@
 # RTS Game Architecture and Mechanics Reference
 
+
+ RTS Game Architecture and Mechanics Reference
+
 This document describes the game exactly as it is implemented in this repository. It is intended to be a full technical and gameplay reference for anyone who needs to understand:
 
 - how the game is built
@@ -9,6 +12,48 @@ This document describes the game exactly as it is implemented in this repository
 - how the networking model works
 - how the AI works
 - how rendering, input, and platform builds are organized
+
+## Beginner-friendly reading guide
+
+If you are new to game development, C programming, or RTS games, read this document in two passes.
+
+First pass:
+
+- Read the plain-English notes in each section.
+- Focus on the "what" and "why".
+- Do not worry if function names, file names, or algorithms feel unfamiliar.
+
+Second pass:
+
+- Re-read the technical sections.
+- Open the linked source files only when you want to see the exact implementation.
+- Treat each source file as one department of the game, such as "movement", "buildings", "AI", or "rendering".
+
+In simple terms, this project is a strategy game where the code keeps one big record of the whole match, updates that record every frame, and then draws the current result on screen.
+
+The most useful mental model is:
+
+1. The player gives commands.
+2. The game stores those commands as changes to `GameState`.
+3. The simulation updates units, buildings, projectiles, resources, AI, and fog.
+4. The renderer draws the newest state.
+5. The same cycle repeats many times per second.
+
+### Very short glossary
+
+- RTS: Real-time strategy game. Players control units and buildings while time keeps moving.
+- Frame: One pass through input, update, and drawing. Games usually run many frames per second.
+- Simulation: The rules that decide what happens next, such as movement, gathering, attacking, and training.
+- State: The current data of the game, such as where units are and how many resources each player has.
+- Tile: One square of the map grid.
+- World space: Pixel-based coordinates used for smooth unit movement.
+- Isometric: A tilted 2D view that makes the map look partly 3D.
+- Entity: A game object such as a unit, building, or projectile.
+- AI: Computer-controlled player logic.
+- Pathfinding: The process of finding a walkable route from one place to another.
+- Packet: A small message sent over the network.
+- Lockstep-style: A multiplayer style where players send commands and each machine applies those commands to its own copy of the game.
+- Heuristic: A practical rule of thumb that works well enough, even if it is not a perfect solution.
 
 The project is a single-process, single-threaded C RTS built on raylib, with ENet-based multiplayer, a deterministic-leaning lockstep-style command replication layer, an optional OpenStreetMap-derived map generator, a scripted campaign mode, a sandbox mode, and a temporary first-person "Hero Possession" mode.
 
@@ -1498,6 +1543,710 @@ Notable caveats:
 - The input layer notes that manual villager drop-off in multiplayer currently reuses `PKT_MOVE` rather than having a dedicated drop-off packet, so this interaction is weaker than the single-player local path.
 - `peer_count` is used both as a lobby concept and a live connection count, which is adequate but minimal.
 
+### 18.10 Networking explained from zero
+
+This networking system is custom at the game-protocol level.
+
+That means:
+
+- ENet provides the low-level transport.
+- The RTS game defines its own packet structure.
+- The RTS game defines what each packet type means.
+- The RTS game decides when packets are created.
+- The RTS game decides how received packets change `GameState`.
+
+ENet is not deciding how villagers gather, how units attack, how buildings are placed, or how the match starts. ENet only helps move bytes between machines reliably.
+
+The custom part is the meaning of those bytes.
+
+### 18.11 Why this architecture is used
+
+The game uses command replication because it is simpler and lighter than sending the entire world every frame.
+
+The game world contains many things:
+
+- all units
+- all buildings
+- all projectiles
+- all resource amounts
+- all map tiles
+- all player resources
+- all unit paths
+- all timers
+- all combat state
+
+Sending all of that every frame would be expensive and complicated.
+
+Instead, the game sends player intentions.
+
+Examples of player intentions:
+
+- "Player 1 ordered these units to move to tile 20, 30."
+- "Player 0 ordered this building to train a villager."
+- "Player 2 placed a barracks at tile 12, 16."
+- "Player 1 started researching this technology."
+
+Every machine already has its own copy of the game simulation. If every machine starts from the same initial state and receives the same commands in the same practical order, then every machine should reach the same result.
+
+That is the main idea behind this implementation.
+
+### 18.12 What ENet does and does not do here
+
+ENet does:
+
+- open host/client network connections
+- accept peers
+- send byte packets
+- receive byte packets
+- provide reliable packet delivery when `ENET_PACKET_FLAG_RELIABLE` is used
+- report connect, receive, and disconnect events
+
+ENet does not:
+
+- know what `GameState` is
+- know what a unit is
+- know what a building is
+- know what a move order is
+- know what a technology is
+- automatically synchronize the world
+- automatically fix desyncs
+
+The game code gives ENet a block of bytes that happens to contain `NetPacket`. The game code later receives a block of bytes and interprets it as `NetPacket`.
+
+### 18.13 The main networking globals
+
+The networking layer uses three global flags/values:
+
+- `g_net_active`
+- `g_local_player_id`
+- `g_net_connected`
+
+`g_net_active` means the game is currently using networking.
+
+`g_local_player_id` means which player this machine controls:
+
+- host uses player `0`
+- clients are assigned player `1`, `2`, or `3`
+- `-1` means no player id has been assigned yet
+
+`g_net_connected` means ENet has reported that a connection exists.
+
+The helper `net_get_local_player()` returns player `0` if no id has been assigned yet. This gives the game a safe fallback outside multiplayer.
+
+### 18.14 Host and client roles
+
+There are two roles:
+
+- host
+- client
+
+The host is the machine that creates the lobby/server.
+
+The client is a machine that joins the host.
+
+The host always controls player `0`.
+
+Clients do not choose their own player id. The host assigns ids.
+
+This matters because the packet's `player` field is used to say which player is performing an action. For example, if player `2` places a building, the packet must say player `2`, otherwise the building could be created for the wrong player.
+
+### 18.15 Host startup flow
+
+Host startup happens through `net_host_create(port)`.
+
+Step by step:
+
+1. The game creates an `ENetAddress`.
+2. The address uses `ENET_HOST_ANY`, meaning it listens on available local network interfaces.
+3. The address stores the chosen port.
+4. The game calls `enet_host_create(&address, 3, 2, 0, 0)`.
+5. The `3` means the host accepts up to 3 clients.
+6. The `2` means ENet can use 2 channels.
+7. The code clears the `peers[]` array.
+8. The code sets `peer_count = 0`.
+9. The code sets `g_net_active = true`.
+10. The code sets `g_local_player_id = 0`.
+11. The code sets `g_net_connected = false` until a client actually connects.
+
+The host does not need to connect to itself. It already exists as player `0`.
+
+### 18.16 Client join flow
+
+Client join happens through `net_join(ip, port)`.
+
+Step by step:
+
+1. The client creates an ENet host with `enet_host_create(NULL, 1, 2, 0, 0)`.
+2. Passing `NULL` means this is not binding as a server address.
+3. The `1` means the client needs one outgoing peer connection.
+4. The client clears the `peers[]` array.
+5. The client converts the host IP string into an `ENetAddress`.
+6. The client stores the host port.
+7. The client calls `enet_host_connect(client_or_server, &address, 2, 0)`.
+8. The returned peer is stored in `peers[0]`.
+9. The code sets `g_net_active = true`.
+10. The code sets `g_local_player_id = -1`.
+11. The client waits for the host to assign the real player id.
+
+On a client, `peers[0]` means "the server/host".
+
+On the host, `peers[0]`, `peers[1]`, and `peers[2]` mean connected clients for player ids `1`, `2`, and `3`.
+
+### 18.17 Connection event flow
+
+Network events are processed by `net_update(gs)`.
+
+`net_update(gs)` calls:
+
+- `enet_host_service(client_or_server, &event, 0)`
+
+This asks ENet whether anything network-related happened.
+
+Possible event types handled by the game:
+
+- `ENET_EVENT_TYPE_CONNECT`
+- `ENET_EVENT_TYPE_RECEIVE`
+- `ENET_EVENT_TYPE_DISCONNECT`
+- `ENET_EVENT_TYPE_NONE`
+
+When a client connects to the host:
+
+1. ENet reports `ENET_EVENT_TYPE_CONNECT`.
+2. The game sets `g_net_connected = true`.
+3. The host increments `peer_count`.
+4. The host chooses the client's player id from that count.
+5. The host stores the ENet peer pointer in `peers[assigned_id - 1]`.
+6. The host sends `PKT_ID_ASSIGN` directly to that new peer.
+7. The host sends `PKT_SYNC_SEED` directly to that new peer.
+8. The host broadcasts `PKT_LOBBY_SYNC` so everyone can update lobby player count.
+
+The id assignment packet is direct because only the new client needs to learn its assigned id.
+
+The lobby sync packet is broadcast because everyone should know how many players are connected.
+
+### 18.18 The custom packet format
+
+Every gameplay network message uses this struct:
+
+```c
+typedef struct {
+    uint8_t  type;
+    uint8_t  player;
+    uint16_t unit_count;
+    uint16_t units[64];
+    int32_t  tx;
+    int32_t  ty;
+    int32_t  target_id;
+    int32_t  extra;
+} NetPacket;
+```
+
+The struct is wrapped in:
+
+```c
+#pragma pack(push, 1)
+...
+#pragma pack(pop)
+```
+
+This tells the compiler not to insert padding bytes between fields. That matters because the code sends the raw memory bytes of this struct over the network.
+
+The packet fields mean:
+
+- `type`: which kind of command this is
+- `player`: which player issued the command
+- `unit_count`: how many entries in `units[]` are valid
+- `units[64]`: unit ids involved in the command
+- `tx`: target tile x coordinate or map x coordinate
+- `ty`: target tile y coordinate or map y coordinate
+- `target_id`: target unit id, building id, or selected building id depending on packet type
+- `extra`: extra meaning that depends on packet type
+
+The packet is generic. It does not have separate structs for move, attack, build, train, and research. Instead, each packet type reuses these same fields differently.
+
+This is compact, but it means the documentation must define the meaning of each field for each packet type.
+
+### 18.19 Why `extra` exists
+
+`extra` is a reusable integer field.
+
+It means different things for different packets.
+
+Examples:
+
+- in `PKT_SYNC_SEED`, `extra` is the random seed
+- in `PKT_START_GAME`, `extra` is the total player count
+- in `PKT_ATTACK`, `extra` says whether the target is a unit or building
+- in `PKT_PLACE_BLD`, `extra` is the building type
+- in `PKT_TRAIN_UNIT`, `extra` is the unit type
+- in `PKT_STANCE`, `extra` is whether manual stance is on
+- in `PKT_RESEARCH`, `extra` is the technology type
+- in `PKT_LOBBY_SYNC`, `extra` is peer count
+- in `PKT_ID_ASSIGN`, `extra` is the assigned player id
+
+Because `extra` is overloaded, a reader should never interpret it alone. Always read it together with `type`.
+
+### 18.20 How a packet is sent
+
+All normal command sending goes through:
+
+- `net_dispatch_packet(gs, pkt)`
+
+That function does two things:
+
+1. If networking is active, send the packet over the network.
+2. Apply the packet locally immediately.
+
+The code is:
+
+```c
+void net_dispatch_packet(GameState *gs, NetPacket *pkt) {
+    if (g_net_active) net_send_packet(pkt);
+    apply_packet(gs, pkt);
+}
+```
+
+This is important.
+
+It means the local player's action happens right away on their own machine instead of waiting for the packet to travel out and come back.
+
+This keeps controls responsive.
+
+### 18.21 How `net_send_packet()` works
+
+`net_send_packet(pkt)` is the function that actually gives bytes to ENet.
+
+Step by step:
+
+1. If the game is not connected, return and send nothing.
+2. If there is no ENet host/client object, return and send nothing.
+3. Create an `ENetPacket` from the bytes of `NetPacket`.
+4. Use `ENET_PACKET_FLAG_RELIABLE`.
+5. Broadcast the packet on ENet channel `0`.
+6. Flush the ENet host so the packet is pushed out promptly.
+
+The key line is conceptually:
+
+```c
+enet_packet_create(pkt, sizeof(NetPacket), ENET_PACKET_FLAG_RELIABLE);
+```
+
+That means the exact bytes of `pkt` are copied into an ENet packet.
+
+Then:
+
+```c
+enet_host_broadcast(client_or_server, 0, enet_pkt);
+```
+
+This sends the packet to all connected peers for that local ENet host object.
+
+On a client, broadcasting from the client's ENet host effectively sends to its connected host peer.
+
+On the host, broadcasting sends to connected clients.
+
+### 18.22 How a packet is received
+
+Packets are received in `net_update(gs)`.
+
+Step by step:
+
+1. `net_update(gs)` asks ENet for pending events.
+2. ENet returns a receive event.
+3. The game checks `event.packet->dataLength`.
+4. The packet is accepted only if the length equals `sizeof(NetPacket)`.
+5. The packet bytes are cast to `NetPacket *`.
+6. The game calls `apply_packet(gs, pkt)`.
+7. The ENet packet is destroyed after use.
+
+The game does not parse JSON, text, or a variable-length command format.
+
+The packet is binary.
+
+The receiver expects exactly the same `NetPacket` memory layout.
+
+### 18.23 How a move command travels through the system
+
+Example: player selects units and right-clicks empty ground.
+
+On the machine where the click happened:
+
+1. Input code detects the click.
+2. Input code decides this is a move command.
+3. It creates `NetPacket pkt = {0}`.
+4. It sets `pkt.type = PKT_MOVE`.
+5. It sets `pkt.player = g_local_player_id`.
+6. It stores the target tile in `pkt.tx` and `pkt.ty`.
+7. It fills `pkt.units[]` with selected unit ids.
+8. It sets `pkt.unit_count`.
+9. It calls `net_dispatch_packet(gs, &pkt)`.
+
+Inside `net_dispatch_packet()`:
+
+1. The packet is sent over ENet if networking is active.
+2. The packet is applied locally immediately.
+
+On a remote machine:
+
+1. ENet receives the packet.
+2. `net_update(gs)` sees `ENET_EVENT_TYPE_RECEIVE`.
+3. The bytes are interpreted as `NetPacket`.
+4. `apply_packet(gs, pkt)` handles `PKT_MOVE`.
+5. The receiver computes formation targets.
+6. The receiver calls `unit_give_move_order()` for each listed unit.
+
+The packet does not contain every future unit position. It only contains the move order. Each machine then simulates movement locally.
+
+### 18.24 How a gather command travels through the system
+
+Example: player selects villagers and right-clicks a forest tile.
+
+Packet fields:
+
+- `type = PKT_GATHER`
+- `player = local player id`
+- `units[] = selected villager ids`
+- `unit_count = number of selected villagers`
+- `tx = resource tile x`
+- `ty = resource tile y`
+
+When received:
+
+- `apply_packet()` loops over the listed units
+- it checks each id is below `MAX_UNITS`
+- it calls `unit_give_gather_order(gs, unit, tx, ty)`
+
+Only villagers should be included for gather commands. The input layer filters this before sending.
+
+### 18.25 How an attack command travels through the system
+
+Example: player selects military units and clicks an enemy.
+
+Packet fields:
+
+- `type = PKT_ATTACK`
+- `player = local player id`
+- `units[] = selected attacker ids`
+- `unit_count = number of attackers`
+- `target_id = enemy unit id or enemy building id`
+- `extra = 0` if target is a unit
+- `extra = 1` if target is a building
+
+When received:
+
+- `apply_packet()` loops over the listed units
+- if `extra == 0`, the target is passed as a unit target
+- if `extra == 1`, the target is passed as a building target
+- each unit receives `unit_give_attack_order()`
+
+The packet does not send damage. It sends the order to attack. Damage happens later through the normal combat simulation.
+
+### 18.26 How building placement travels through the system
+
+Example: player places a Barracks foundation.
+
+Packet fields:
+
+- `type = PKT_PLACE_BLD`
+- `player = local player id`
+- `extra = building type`
+- `tx = building tile x`
+- `ty = building tile y`
+- `units[] = villager ids assigned to build`
+- `unit_count = number of assigned builders`
+
+When received:
+
+1. `apply_packet()` calls `building_place(gs, player, building_type, tx, ty)`.
+2. `building_place()` checks placement rules and affordability on that machine.
+3. If placement succeeds, it returns a building id.
+4. `apply_packet()` loops over builder ids.
+5. Each builder receives `unit_give_build_order()` targeting the new building id.
+
+Important detail:
+
+The packet sends the requested building type and position, not a pre-created building object. Each machine creates the building locally from the same command.
+
+### 18.27 How training a unit travels through the system
+
+Example: player clicks "Villager" at the Town Center.
+
+Packet fields:
+
+- `type = PKT_TRAIN_UNIT`
+- `player = local player id`
+- `target_id = selected building id`
+- `extra = unit type`
+
+When received:
+
+- `apply_packet()` checks `target_id` is a valid building index
+- it calls `building_enqueue_unit(gs, building, unit_type)`
+
+The packet does not spawn the unit instantly unless the building logic would do that. It queues the unit, and the normal building update completes training over time.
+
+### 18.28 How research travels through the system
+
+Example: player starts a technology at a building.
+
+Packet fields:
+
+- `type = PKT_RESEARCH`
+- `player = local player id`
+- `target_id = selected building id`
+- `extra = technology type`
+
+When received:
+
+- `apply_packet()` checks the building id
+- it calls `building_start_tech(gs, building, tech_type)`
+
+The packet starts research. The actual timer and completion happen through normal building update logic.
+
+### 18.29 How age advancement travels through the system
+
+Example: player clicks advance age.
+
+Packet fields:
+
+- `type = PKT_AGE_ADVANCE`
+- `player = local player id`
+
+When received:
+
+- `apply_packet()` calls `res_try_advance_age(gs, player)`
+
+The resource check and age-up timer are handled by the normal resource system.
+
+### 18.30 How match start travels through the system
+
+The host starts the match from the lobby.
+
+When the host clicks start:
+
+1. The host generates a seed using `time(NULL)`.
+2. The host sends `PKT_SYNC_SEED` with `extra = seed`.
+3. The host sends `PKT_START_GAME` with `extra = total player count`.
+
+When `PKT_SYNC_SEED` is applied:
+
+- the global `_rng` is set to the seed
+
+When `PKT_START_GAME` is applied:
+
+- `game_init_started_game(gs, _rng, np)` is called
+- `np` comes from the packet's `extra`
+
+This is how all machines are supposed to create the same starting match.
+
+The seed matters because random map generation and random starts must be based on the same random sequence.
+
+### 18.31 Complete packet field meaning table
+
+| Packet type | `player` | `units[]` / `unit_count` | `tx`, `ty` | `target_id` | `extra` |
+| --- | --- | --- | --- | --- | --- |
+| `PKT_SYNC_SEED` | unused | unused | unused | unused | random seed |
+| `PKT_START_GAME` | unused | unused | unused | unused | total player count |
+| `PKT_MOVE` | issuing player | units to move | destination tile | unused | unused |
+| `PKT_GATHER` | issuing player | villagers to gather | resource tile | unused | unused |
+| `PKT_ATTACK` | issuing player | attackers | unused | target unit/building id | `0` for unit, `1` for building |
+| `PKT_BUILD` | issuing player | builders | unused | building id | unused |
+| `PKT_PLACE_BLD` | issuing player | builders | placement tile | unused before placement | building type |
+| `PKT_TRAIN_UNIT` | issuing player | unused | unused | trainer building id | unit type |
+| `PKT_DELETE_BLD` | issuing player | unused | unused | building id | unused |
+| `PKT_AGE_ADVANCE` | issuing player | unused | unused | unused | unused |
+| `PKT_ID_ASSIGN` | unused | unused | unused | unused | assigned player id |
+| `PKT_STANCE` | issuing player | affected units | unused | unused | manual stance flag |
+| `PKT_LOBBY_SYNC` | unused | unused | unused | unused | connected peer count |
+| `PKT_RESEARCH` | issuing player | unused | unused | research building id | technology type |
+| `PKT_SET_RALLY` | issuing player | unused | rally tile | building id | unused |
+
+### 18.32 Why local application and network sending both happen
+
+When the local player gives a command, the game applies it immediately and sends it to others.
+
+This has one big benefit:
+
+- local input feels responsive
+
+Without this, a player might click move and see nothing happen until the packet travels through the network and is processed.
+
+The tradeoff is:
+
+- the local machine trusts its own command immediately
+- the architecture assumes the same command will also be accepted by the other machines
+
+There is no server authority rollback step that later says, "that local action was invalid, undo it."
+
+### 18.33 Who is authoritative
+
+This implementation is not a strict server-authoritative simulation.
+
+The host has special authority for:
+
+- accepting clients
+- assigning player ids
+- sharing the startup seed
+- broadcasting lobby peer count
+- starting the match from the lobby UI
+
+But once gameplay commands are flowing, every machine applies commands to its own local simulation.
+
+The host is not sending full corrected world snapshots.
+
+The host is not validating every command and then sending approved state.
+
+The game is closer to peer command replication, with the host acting as lobby owner and connection hub.
+
+### 18.34 What "reliable" means here
+
+Packets are created with:
+
+- `ENET_PACKET_FLAG_RELIABLE`
+
+In practical terms, this asks ENet to deliver the packet reliably instead of treating it as disposable.
+
+This is important because gameplay commands should not randomly disappear.
+
+For example:
+
+- a build command should not be lost
+- an attack command should not be lost
+- a research command should not be lost
+- a match start command should not be lost
+
+Reliable does not mean the game can never desync. It only means ENet is trying to deliver the packet reliably at the transport layer.
+
+### 18.35 What is not sent over the network
+
+The game does not send:
+
+- every unit position every frame
+- every unit HP every frame
+- every building HP every frame
+- every projectile every frame
+- every resource amount every frame
+- full map state after match start
+- full player state snapshots
+- checksums
+- rollback data
+- deterministic frame numbers
+- input delay buffers
+- replay logs
+
+Those values are expected to evolve locally from the same starting state and the same command stream.
+
+### 18.36 Why the same starting seed matters
+
+The starting seed controls random generation.
+
+If two machines use different seeds, they may create different maps, different starting positions, or different resource placements.
+
+After that, the same command could mean different things on each machine.
+
+Example:
+
+- Player sends "move to tile 20, 20".
+- On machine A, tile 20,20 is grass.
+- On machine B, tile 20,20 is water.
+- The unit behavior can diverge.
+
+This is why the host sends `PKT_SYNC_SEED` before `PKT_START_GAME`.
+
+### 18.37 Why unit ids and building ids matter
+
+Packets refer to units and buildings by array index/id.
+
+For example:
+
+- unit id `17`
+- building id `4`
+
+This only works if all machines agree that id `17` means the same unit and id `4` means the same building.
+
+That is another reason all machines must start the same way and apply commands consistently.
+
+If one machine creates an extra unit or building that another machine does not create, ids can stop matching.
+
+After ids stop matching, commands may affect the wrong object.
+
+### 18.38 Packet validation level
+
+The receive path has minimal validation.
+
+It checks:
+
+- received packet size equals `sizeof(NetPacket)`
+- unit ids are below `MAX_UNITS` before unit commands are applied
+- building ids are within `MAX_BUILDINGS` for several building commands
+
+It does not deeply verify every gameplay rule at the network boundary.
+
+Instead, the called gameplay functions perform their usual checks where available, such as affordability, placement, age requirements, or queue validity.
+
+This means networking is mostly a command transport layer, not a security or anti-cheat layer.
+
+### 18.39 Disconnect behavior
+
+When a disconnect event happens:
+
+1. The game prints `"ENet disconnected."`.
+2. If this machine is host, it searches `peers[]` for the disconnected peer.
+3. The host clears that peer slot.
+4. The host decrements `peer_count`.
+5. The host broadcasts `PKT_LOBBY_SYNC`.
+6. If this machine is a client and `peer_count == 0`, it marks `g_net_connected = false`.
+
+The implementation does not include advanced reconnect, migration, pause-on-disconnect, or state recovery.
+
+### 18.40 Practical architecture diagram
+
+```text
+Local player input
+        |
+        v
+Input/HUD code decides command type
+        |
+        v
+Fill NetPacket fields
+        |
+        v
+net_dispatch_packet()
+        |
+        +----------------------+
+        |                      |
+        v                      v
+net_send_packet()          apply_packet()
+        |                      |
+        v                      v
+ENet reliable packet       local GameState changes now
+        |
+        v
+Remote machine receives packet in net_update()
+        |
+        v
+Remote apply_packet()
+        |
+        v
+Remote GameState changes in the same logical way
+```
+
+### 18.41 Important beginner takeaway
+
+The networking code does not synchronize "what the world looks like".
+
+It synchronizes "what commands players gave".
+
+That is the central idea.
+
+Everything else follows from that:
+
+- the same seed is needed so the starting world matches
+- ids must match so commands affect the same units/buildings
+- packet meanings must be explicit because the packet is custom
+- reliable delivery is used because commands are important
+- desync correction is not present because full world snapshots are not sent
+
 ## 19. Campaign architecture
 
 Campaign logic is centralized in `game.c`.
@@ -1910,3 +2659,468 @@ As implemented, this project is a handcrafted C RTS with:
 - an unusual but functional real-world OSM map ingestion path
 
 The most important architectural idea is that nearly all mechanics are encoded directly in plain C logic and small data tables, with `GameState` as the single source of truth. Understanding `GameState`, the frame update order, the unit/building update routines, and the packet application path is enough to understand nearly the entire game.
+
+## 30. Plain-English companion guide
+
+This section repeats the most important ideas in simpler language. It is meant for junior developers, designers, producers, testers, and anyone who wants to understand the game without reading C code first.
+
+### 30.1 What this game is, in one paragraph
+
+This is a real-time strategy game. The player gathers resources, builds a base, trains units, researches upgrades, fights enemies, and tries to win the match. The game is written mostly as direct C code. That means the rules are not hidden inside a separate engine or scripting system. Most gameplay behavior can be found by reading the source files listed in this document.
+
+### 30.2 The big picture
+
+Think of the game as a board game that updates very quickly.
+
+- The map is the board.
+- Units and buildings are the pieces.
+- Resources are the currency.
+- Commands are the player's instructions.
+- The rules decide what each piece is allowed to do.
+- Rendering is the part that shows the board and pieces on screen.
+
+The game does not create a new world every frame. Instead, it keeps updating the same `GameState` object. `GameState` is like the master notebook for the match.
+
+### 30.3 What happens every frame
+
+Every frame, the game follows the same basic routine:
+
+1. Read what the player is doing.
+2. Read any multiplayer messages.
+3. Update the match rules.
+4. Draw the result.
+
+For example, if a player right-clicks a tree with villagers selected:
+
+1. Input code understands the click as a gather command.
+2. The command is applied to the selected villagers.
+3. The villagers find a path to the tree.
+4. The simulation moves them closer each frame.
+5. Once close enough, they gather wood.
+6. When full, they walk to a drop-off building.
+7. The player receives wood.
+8. The renderer draws each visible step.
+
+### 30.4 Why `GameState` matters so much
+
+`GameState` is the central place where the match lives.
+
+It contains things like:
+
+- which game mode is active
+- whether the game is in menu, playing, paused, victory, or defeat
+- every map tile
+- every unit
+- every building
+- every projectile
+- each player's resources
+- campaign progress
+- AI timers
+- fog of war
+- hero possession state
+
+If you want to know what is currently true in the game, look for it in `GameState` or in data connected directly to it.
+
+### 30.5 Why the code uses fixed-size arrays
+
+The game stores units, buildings, and projectiles in fixed-size arrays.
+
+That means the game reserves space for a maximum number of objects, such as 256 units or 128 buildings. Each slot has an `active` flag that says whether that slot is currently being used.
+
+Simple analogy:
+
+- Imagine a parking lot with 256 spaces for units.
+- A unit exists when a parking space is marked active.
+- When a unit dies, that parking space becomes available again.
+
+This is common in C games because it is predictable, fast, and simple to reason about.
+
+### 30.6 How the map works
+
+The map is a 64 by 64 grid of tiles.
+
+Each tile can represent terrain or resources, such as:
+
+- grass
+- water
+- forest
+- gold
+- stone
+- berries
+- road
+- desert
+- farm
+
+Some tiles can be walked on. Some cannot. For example, water and forest block movement, while grass and roads are passable.
+
+The game also uses the tile grid to decide where buildings can be placed. A building usually occupies more than one tile, so placement checks the full footprint.
+
+### 30.7 Why there are multiple coordinate systems
+
+The game uses different coordinate systems because different jobs need different measurements.
+
+Tile coordinates are good for map rules:
+
+- "This unit is near tile 10, 12."
+- "Can a building fit here?"
+- "Is this tile blocked?"
+
+World coordinates are good for smooth movement:
+
+- "This unit is moving from pixel position A to pixel position B."
+- "Move a little closer this frame."
+
+Isometric screen coordinates are good for drawing:
+
+- "Show the flat world as a tilted RTS view."
+
+Hero 3D coordinates are good for first-person mode:
+
+- "Place the same unit and building data into a simple 3D scene."
+
+### 30.8 How units move
+
+When a unit receives a move order, it usually does not walk in a straight line blindly. The game asks the pathfinding system to find a route through passable tiles.
+
+The pathfinding algorithm is A*.
+
+Beginner explanation:
+
+- A* looks at nearby tiles.
+- It avoids blocked tiles.
+- It estimates which route is likely shortest.
+- It builds a list of waypoints.
+- The unit follows those waypoints one by one.
+
+If many units are selected, the game gives them formation targets instead of sending every unit to the exact same spot. This helps prevent a crowd from stacking on one tile.
+
+### 30.9 How resources work
+
+The economy has four resources:
+
+- food
+- wood
+- gold
+- stone
+
+Villagers gather resources from map tiles or farms. They carry a limited amount. Once full, they return to the correct drop-off building.
+
+Simple examples:
+
+- Wood can go to a Town Center or Lumber Camp.
+- Food can go to a Town Center or Mill.
+- Gold and stone can go to a Town Center or Mining Camp.
+
+The game checks affordability before building, training, researching, or advancing age. If the player cannot afford something, the action is rejected.
+
+### 30.10 How buildings work
+
+Buildings have three main roles:
+
+- unlock actions, such as training units or researching upgrades
+- support the economy, such as drop-off buildings and farms
+- defend or control space, such as towers, walls, gates, and castles
+
+Most buildings start as incomplete foundations. Villagers must construct them. Once complete, the building can perform its full role.
+
+Example:
+
+1. Player places a Barracks.
+2. Resources are deducted.
+3. A foundation appears.
+4. Villagers build it over time.
+5. Once complete, the Barracks can train infantry.
+
+### 30.11 How unit training works
+
+Training means creating new units from a building.
+
+The building must be complete, must support that unit type, and must not be busy researching. The player also needs enough resources and population space.
+
+Example:
+
+- Town Center trains Villagers and Scouts.
+- Barracks trains infantry.
+- Archery Range trains ranged units.
+- Stable trains cavalry.
+- Siege Workshop trains siege units.
+
+The production queue has limited space, so a building cannot queue unlimited units.
+
+### 30.12 How combat works
+
+Combat follows a clear flow:
+
+1. A unit gets a target.
+2. The unit checks whether the target is valid.
+3. If too far away, the unit moves closer.
+4. If close enough, the unit attacks after its cooldown is ready.
+5. Damage is calculated.
+6. If HP reaches zero, the target begins dying or is destroyed.
+
+Some units have bonus damage against certain targets. This creates counterplay.
+
+Examples:
+
+- Spearmen are strong against cavalry.
+- Skirmishers are strong against archers.
+- Siege units are strong against buildings.
+- Scouts are strong against monks.
+
+Ranged attacks use projectiles. A projectile travels toward the target and applies damage when it arrives.
+
+### 30.13 How upgrades work
+
+Technologies improve units, buildings, or economy behavior.
+
+The important idea is that upgrades are stored as unlocked flags for each player. When an upgrade finishes, the game refreshes stats for that player's units and buildings.
+
+This keeps the logic easier to manage:
+
+- Start with base stats.
+- Check which upgrades are unlocked.
+- Apply the matching bonuses.
+
+### 30.14 How ages work
+
+Ages are progression stages.
+
+The game starts in Dark Age. Players can advance through:
+
+- Feudal
+- Castle
+- Imperial
+
+Advancing age costs resources and takes time. Higher ages unlock more buildings, units, and technologies.
+
+Beginner analogy:
+
+- Dark Age is the early-game toolbox.
+- Feudal adds basic military and economy expansion.
+- Castle adds stronger units and advanced buildings.
+- Imperial unlocks the late-game power options.
+
+### 30.15 How the AI works
+
+The AI is rule-based. It does not use machine learning.
+
+It follows practical rules such as:
+
+- keep villagers working
+- gather the resources it needs most
+- build houses before population blocks production
+- build military buildings as the game progresses
+- train an army
+- attack when the army is large enough
+
+This makes the AI understandable and predictable. If the AI behaves strangely, the cause is usually in one of its rules or thresholds.
+
+### 30.16 How campaign missions work
+
+Campaign missions are scripted directly in C.
+
+That means each mission can set up:
+
+- starting resources
+- starting units
+- starting buildings
+- mission objective
+- enemy behavior
+- timed events
+- victory or defeat conditions
+
+This is flexible for a small project, but changing campaign content usually requires editing code.
+
+### 30.17 How sandbox mode should be understood
+
+Sandbox mode is not only for casual play. It is also a testing environment.
+
+It gives the player many resources, high age, large population cap, and many available systems. This makes it useful for testing:
+
+- combat
+- buildings
+- upgrades
+- healing
+- siege
+- restoration actions
+- large unit groups
+
+If a developer wants to quickly check whether a mechanic works, sandbox is usually the fastest place to try it.
+
+### 30.18 How hero possession fits into the RTS
+
+Hero possession temporarily changes the player's viewpoint and control style.
+
+Normal RTS mode:
+
+- player selects units
+- player gives commands
+- units follow simulation rules
+
+Hero possession:
+
+- player directly controls one eligible unit
+- camera switches to a first-person style
+- movement, attack, block, and dodge become direct actions
+
+The same match still exists underneath. The mode is a temporary alternate control layer over the same simulation state.
+
+### 30.19 How multiplayer works
+
+Multiplayer sends commands, not the full game world.
+
+For example, when a player orders units to move, the network sends a message like:
+
+- player id
+- command type
+- selected unit ids
+- target tile
+
+Each computer receives the command and applies it to its own local copy of the game.
+
+This is lighter than sending every unit position every frame, but it depends on each computer staying in sync. The current implementation is practical, but it does not yet include advanced safety systems like rollback, snapshots, or checksum-based correction.
+
+The most important beginner-friendly sentence is:
+
+- multiplayer sends "what the player asked for", not "the full result of what happened".
+
+Example:
+
+- The packet does not say "unit 5 is now at pixel 650,700".
+- The packet says "unit 5 was ordered to move to tile 20,22".
+- Each machine then moves unit 5 using its own local simulation.
+
+This is why the machines must agree on the starting map, unit ids, building ids, and command order.
+
+If those do not match, the same packet can produce different results on different machines.
+
+In this project, ENet is the delivery tool, while `NetPacket` is the game's custom message format. ENet carries the message; the RTS code decides what the message means.
+
+For the full explicit breakdown, read sections 18.10 through 18.41.
+
+### 30.20 How rendering should be understood
+
+Rendering means drawing the game.
+
+The renderer does not decide the gameplay rules. It reads the current game state and turns it into visuals.
+
+There are two main rendering paths:
+
+- normal 2D isometric RTS rendering
+- separate 3D rendering for hero possession
+
+This means a bug in how something looks may be in renderer code, while a bug in how something behaves is usually in core simulation code.
+
+### 30.21 How input becomes gameplay
+
+Input code translates player actions into game commands.
+
+Examples:
+
+- click a friendly unit: select it
+- right-click ground: move selected units
+- right-click tree with villagers: gather wood
+- click enemy: attack
+- press build hotkey: enter build mode
+- place a building: create foundation and assign builders
+
+This layer is important because the same mouse click can mean different things depending on what is selected and what was clicked.
+
+### 30.22 How to debug common issues
+
+If a unit does not move:
+
+- check whether the destination tile is passable
+- check whether pathfinding found a path
+- check whether the unit has a valid order
+- check whether another system is clearing the path
+
+If a villager does not gather:
+
+- check whether the target resource exists
+- check whether the villager can reach an adjacent tile
+- check whether the villager's carry amount is already full
+- check whether a valid drop-off building exists
+
+If a building cannot be placed:
+
+- check whether the tile footprint is buildable
+- check whether another building already occupies the space
+- check whether the player has enough resources
+- check whether the building requires a later age
+
+If multiplayer behaves differently on two machines:
+
+- check whether both sides started from the same seed
+- check whether both sides received the same commands
+- check whether a local-only action changed simulation state
+- check whether the behavior depends on timing or scanning order
+
+If the AI seems stuck:
+
+- check its resource counts
+- check whether villagers are idle or blocked
+- check whether it is saving for age-up
+- check whether it has the required buildings
+- check whether population cap is blocking training
+
+### 30.23 Suggested reading order for new contributors
+
+For a new developer, the easiest reading order is:
+
+1. Read this plain-English companion guide.
+2. Read sections 1, 2, and 3 to understand the architecture and `GameState`.
+3. Read section 25 to understand frame update order.
+4. Read section 28 to learn where each feature lives.
+5. Pick one gameplay system, such as resources or combat.
+6. Read that section and then open the matching source file.
+
+For a non-technical reader, the most useful sections are:
+
+- Beginner-friendly reading guide
+- 30.1 through 30.4 for the main idea
+- 30.9 through 30.18 for gameplay systems
+- 30.19 for multiplayer expectations
+- 30.22 for common debugging conversations
+
+### 30.24 Safe way to change the game
+
+When changing this project, make small changes and test one behavior at a time.
+
+Good examples:
+
+- Change one unit's cost, then test training that unit.
+- Change one gather rate, then test villager gathering.
+- Add one building rule, then test placement and construction.
+- Add one packet type, then test host and client behavior.
+
+Avoid changing many systems at once unless you already understand how they connect. In this codebase, a gameplay feature often touches multiple layers: input, simulation, UI, rendering, AI, and networking.
+
+### 30.25 One-sentence summary for each major area
+
+- `main.c`: starts the game and runs the frame loop.
+- `game.h`: defines the main data structures.
+- `game.c`: controls match setup, campaign flow, projectiles, and the simulation order.
+- `map.c`: creates and updates the tile map, resources, passability, and fog.
+- `pathfinding.c`: finds walkable routes.
+- `resources.c`: handles player resources, age advancement, and affordability.
+- `building.c`: handles placement, construction, production, research, and defensive buildings.
+- `unit_orders.c`: defines unit stats and assigns orders.
+- `unit_ai.c`: updates unit behavior every frame.
+- `ai.c`: controls the computer opponent.
+- `net.c`: sends and receives multiplayer commands.
+- `hero_possession.c`: controls the temporary first-person mode.
+- `osm_mapgen.c`: converts real-world map data into playable tiles.
+- `src/ui/input/`: turns clicks and keys into commands.
+- `src/ui/hud/`: draws menus, panels, resources, and overlays.
+- `src/ui/renderer/`: draws the world, units, buildings, effects, and hero view.
+
+### 30.26 Final beginner takeaway
+
+You do not need to understand the whole codebase at once. The game is built from understandable parts: input, state, rules, AI, networking, and rendering. Most bugs or features can be approached by asking three questions:
+
+1. Where is the data stored?
+2. Which function changes that data?
+3. Which renderer or UI code shows that data to the player?
+
+Answering those three questions will usually point you to the right file and the right system.

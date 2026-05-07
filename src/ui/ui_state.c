@@ -218,6 +218,35 @@ static void load_house_variant_textures(UIState *ui) {
       load_game_texture("assets/buildings/hero_castle/diffuse_0.png");
 }
 
+static void load_unit_textures(UIState *ui) {
+  if (!ui)
+    return;
+
+  ui->tex_units[UNIT_VILLAGER] =
+      load_game_texture("assets/units/villager_m.png");
+  ui->tex_units[UNIT_SCOUT] = load_game_texture("assets/units/scout.png");
+  ui->tex_units[UNIT_MILITIA] = load_game_texture("assets/units/militia.png");
+  ui->tex_units[UNIT_MAN_AT_ARMS] =
+      load_game_texture("assets/units/man_at_arms.png");
+  ui->tex_units[UNIT_SPEARMAN] =
+      load_game_texture("assets/units/spearman.png");
+  ui->tex_units[UNIT_ARCHER] = load_game_texture("assets/units/archer.png");
+  ui->tex_units[UNIT_SKIRMISHER] =
+      load_game_texture("assets/units/skirmisher.png");
+  ui->tex_units[UNIT_CAVALRY_ARCHER] =
+      load_game_texture("assets/units/cavalry_archer.png");
+  ui->tex_units[UNIT_KNIGHT] = load_game_texture("assets/units/knight.png");
+  ui->tex_units[UNIT_MONK] = load_game_texture("assets/units/monk.png");
+  ui->tex_units[UNIT_BATTERING_RAM] =
+      load_game_texture("assets/units/battering_ram.png");
+  ui->tex_units[UNIT_MANGONEL] =
+      load_game_texture("assets/units/mangonel.png");
+  ui->tex_units[UNIT_SCORPION] =
+      load_game_texture("assets/units/scorpion.png");
+  ui->tex_units[UNIT_BOMBARD_CANNON] =
+      load_game_texture("assets/units/bombard_cannon.png");
+}
+
 void ui_state_init(UIState *ui, GameState *gs) {
   memset(ui, 0, sizeof(UIState));
 
@@ -411,6 +440,7 @@ void ui_state_init(UIState *ui, GameState *gs) {
   ui->tex_land_grass[1] = load_game_texture("assets/ui/land_grass_1.png");
   ui->tex_land_grass[2] = load_game_texture("assets/ui/land_grass_2.png");
   ui->tex_land_grass[3] = load_game_texture("assets/ui/land_grass_3.png");
+  load_unit_textures(ui);
 
   ui->tex_env_trees[0] = load_game_texture("assets/buildings/tamil_tree_0.png");
   ui->tex_env_trees[1] = load_game_texture("assets/buildings/tamil_tree_1.png");
