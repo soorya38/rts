@@ -408,10 +408,6 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
         };
         Color tint = CLITERAL(Color){255, 255, 255, (unsigned char)alpha};
         DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, tint);
-
-        Color team = CLITERAL(Color){mc.r, mc.g, mc.b, (unsigned char)(alpha * 0.9f)};
-        DrawRectangle((int)(p.x - 5.0f * size_mult), (int)(p.y - 7.0f * size_mult),
-                      (int)(10.0f * size_mult), (int)(2.0f * size_mult), team);
     } else {
         float box_w = 8.0f * size_mult;
         float box_h = 8.0f * size_mult;
@@ -700,34 +696,6 @@ static int compare_entities(const void *a, const void *b) {
     return 0;
 }
 
-static bool is_unit_obscured(GameState *gs, Unit *u) {
-    Vector2 up = to_rvec2(world_to_iso(u->wx, u->wy));
-    float u_depth = (u->wx / (float)TILE_SIZE) + (u->wy / (float)TILE_SIZE);
-
-    for (int i = 0; i < MAX_BUILDINGS; i++) {
-        Building *b = &gs->buildings[i];
-        if (!b->active) continue;
-        float b_depth = (b->tx + b->tw / 2.0f) + (b->ty + b->th / 2.0f);
-        
-        // If building is behind the unit, it can't obscure it
-        if (b_depth < u_depth) continue; 
-        
-        float px = b->tx * TILE_SIZE, py = b->ty * TILE_SIZE;
-        float w = b->tw * TILE_SIZE, h = b->th * TILE_SIZE;
-        Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
-        
-        // Rough visual screen bounds for the building's texture
-        float screen_w = (b->tw + b->th) * 32.0f; 
-        float screen_h = screen_w * 0.5f + 100.0f;
-        Rectangle rect = { bc.x - screen_w * 0.5f, bc.y - screen_h + 16.0f, screen_w, screen_h };
-        
-        if (CheckCollisionPointRec((Vector2){up.x, up.y - 10.0f}, rect)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool forest_overlay_blocked_by_building(GameState *gs, int tx, int ty) {
     float tree_depth = (tx + 0.5f) + (ty + 0.5f);
     float px = tx * TILE_SIZE;
@@ -821,32 +789,6 @@ void renderer_draw_world(GameState *gs, UIState *ui){
             if(gs->map[y][x].fog[lp]!=FOG_HIDDEN)
                 if(gs->map[y][x].type == TILE_FOREST && !forest_overlay_blocked_by_building(gs, x, y))
                     draw_forest_overlay(gs, ui, x, y);
-
-    // Draw outlines for obscured units
-    for(int i=0;i<MAX_UNITS;i++){
-        Unit *u=&gs->units[i];
-        if(!u->active||u->state==US_DEAD) continue;
-        int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
-        if(!map_in_bounds(utx,uty)) continue;
-        FogState fs=gs->map[uty][utx].fog[lp];
-        if(u->player!=lp && fs!=FOG_VISIBLE) continue;
-        
-        if (is_unit_obscured(gs, u)) {
-            float size_mult = 1.0f;
-            if (u->type == UNIT_SCOUT) size_mult = 1.4f;
-            else if (u->type == UNIT_BATTERING_RAM) size_mult = 1.8f;
-            else if (u->type == UNIT_MANGONEL) size_mult = 1.6f;
-            else if (u->type == UNIT_SCORPION) size_mult = 1.5f;
-            else if (u->type == UNIT_BOMBARD_CANNON) size_mult = 1.7f;
-
-            float box_w = 8.0f * size_mult;
-            float box_h = 8.0f * size_mult;
-            float box_z = 10.0f * size_mult;
-            
-            Color oc = player_color_alpha(u->player, 180); 
-            draw_iso_box_outline(u->wx - box_w * 0.5f, u->wy - box_h * 0.5f, box_w, box_h, box_z, oc);
-        }
-    }
 
     free(entities);
 
