@@ -209,6 +209,14 @@ typedef struct {
 /* ─── Path cell ──────────────────────────────────────────────── */
 typedef struct { int x, y; } PathCell;
 
+typedef enum {
+    FORMATION_BOX = 0,
+    FORMATION_LINE,
+    FORMATION_COLUMN,
+    FORMATION_WEDGE,
+    FORMATION_COUNT
+} FormationType;
+
 /* ─── Unit types & stats ─────────────────────────────────────── */
 typedef enum {
     UNIT_VILLAGER=0, UNIT_SCOUT,
@@ -460,7 +468,8 @@ bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
                               const PathCell *reserved, int reserved_count,
                               int *out_tx, int *out_ty);
 void unit_compute_formation_targets(GameState *gs, int anchor_tx, int anchor_ty,
-                                    int unit_count, PathCell *out_targets);
+                                    int unit_count, FormationType formation,
+                                    PathCell *out_targets);
 void unit_give_move_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_gather_order(GameState *gs,Unit *u,int tx,int ty);
 void unit_give_dropoff_order(GameState *gs,Unit *u,int tx,int ty);

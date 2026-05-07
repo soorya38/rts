@@ -325,7 +325,8 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
     bool use_formation = (eu < 0 && eb < 0 && ub < 0 && repair_b < 0 && dropoff < 0 && !is_resource);
     if (use_formation) {
         int formation_count = ui->sel_count < 64 ? ui->sel_count : 64;
-        unit_compute_formation_targets(gs, ftx, fty, formation_count, formation_targets);
+        unit_compute_formation_targets(gs, ftx, fty, formation_count,
+                                       ui->formation, formation_targets);
     }
     bool plain_move = (eu < 0 && eb < 0 && ub < 0 && repair_b < 0 &&
                        dropoff < 0 && !is_resource);
@@ -356,6 +357,7 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
             pkt.type = PKT_MOVE;
             pkt.tx = ftx;
             pkt.ty = fty;
+            pkt.extra = (int32_t)ui->formation;
         }
 
         int uc = 0;

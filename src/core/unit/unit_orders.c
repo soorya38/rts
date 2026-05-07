@@ -92,21 +92,50 @@ bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
 }
 
 void unit_compute_formation_targets(GameState *gs, int anchor_tx, int anchor_ty,
-                                    int unit_count, PathCell *out_targets){
+                                    int unit_count, FormationType formation,
+                                    PathCell *out_targets){
     if(unit_count <= 0 || !out_targets) return;
 
-    int width = (int)ceilf(sqrtf((float)unit_count));
-    if(width < 1) width = 1;
-    if(width > 5) width = 5;
-    int height = (unit_count + width - 1) / width;
-    float center_col = (float)(width - 1) * 0.5f;
-    float center_row = (float)(height - 1) * 0.5f;
-
     for(int i=0;i<unit_count;i++){
-        int col = i % width;
-        int row = i / width;
-        int desired_tx = anchor_tx + (int)lroundf((float)col - center_col);
-        int desired_ty = anchor_ty + (int)lroundf((float)row - center_row);
+        int desired_tx = anchor_tx;
+        int desired_ty = anchor_ty;
+        switch(formation){
+            case FORMATION_LINE: {
+                float center = (float)(unit_count - 1) * 0.5f;
+                desired_tx = anchor_tx + (int)lroundf((float)i - center);
+                desired_ty = anchor_ty;
+            } break;
+            case FORMATION_COLUMN: {
+                float center = (float)(unit_count - 1) * 0.5f;
+                desired_tx = anchor_tx;
+                desired_ty = anchor_ty + (int)lroundf((float)i - center);
+            } break;
+            case FORMATION_WEDGE: {
+                int row = 0;
+                int first = 0;
+                while(first + row + 1 <= i){
+                    first += row + 1;
+                    row++;
+                }
+                int col = i - first;
+                float center = (float)row * 0.5f;
+                desired_tx = anchor_tx + (int)lroundf((float)col - center);
+                desired_ty = anchor_ty + row;
+            } break;
+            case FORMATION_BOX:
+            default: {
+                int width = (int)ceilf(sqrtf((float)unit_count));
+                if(width < 1) width = 1;
+                if(width > 5) width = 5;
+                int height = (unit_count + width - 1) / width;
+                int col = i % width;
+                int row = i / width;
+                float center_col = (float)(width - 1) * 0.5f;
+                float center_row = (float)(height - 1) * 0.5f;
+                desired_tx = anchor_tx + (int)lroundf((float)col - center_col);
+                desired_ty = anchor_ty + (int)lroundf((float)row - center_row);
+            } break;
+        }
         int tx = desired_tx;
         int ty = desired_ty;
 

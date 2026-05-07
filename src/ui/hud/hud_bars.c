@@ -12,6 +12,16 @@
 
 static const char *age_names[4]={"Dark Age","Feudal Age","Castle Age","Imperial Age"};
 
+static const char *formation_label(FormationType formation){
+    switch(formation){
+        case FORMATION_LINE:   return "Line";
+        case FORMATION_COLUMN: return "Column";
+        case FORMATION_WEDGE:  return "Wedge";
+        case FORMATION_BOX:
+        default:               return "Box";
+    }
+}
+
 static void draw_training_queue(Building *b, int x, int y, int fs10, int fs9){
     if(b->queue_len <= 0) return;
 
@@ -1132,6 +1142,23 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
             float frac=(float)u->hp/u->max_hp;
             DrawRectangle(pad+i*uw,by_start+(int)(50*sc),(int)(18*sc),(int)(3*sc),CLITERAL(Color){30,30,30,200});
             DrawRectangle(pad+i*uw,by_start+(int)(50*sc),(int)((18*sc)*frac),(int)(3*sc),frac>0.5f?CLITERAL(Color){50,200,60,255}:CLITERAL(Color){210,50,40,255});
+        }
+        int fx = panel_w - pad - (int)(252 * sc);
+        int fy = by_start + (int)(12 * sc);
+        int fw = (int)(58 * sc);
+        int fh = (int)(28 * sc);
+        int fgap = (int)(6 * sc);
+        DrawText("FORMATION", fx, fy - (int)(10 * sc), fs10, CLITERAL(Color){180,165,120,220});
+        for(int f=0; f<FORMATION_COUNT; f++){
+            int bx = fx + f * (fw + fgap);
+            bool active = ui->formation == (FormationType)f;
+            snprintf(buf, sizeof(buf), "%s%s", active ? "*" : "", formation_label((FormationType)f));
+            if(draw_button(buf, bx, fy, fw, fh, true)){
+                ui->formation = (FormationType)f;
+                char msg[64];
+                snprintf(msg, sizeof(msg), "Formation: %s", formation_label(ui->formation));
+                game_set_alert(gs, msg);
+            }
         }
     }
     if(ui->sel_count>=1){

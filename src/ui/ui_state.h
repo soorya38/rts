@@ -34,6 +34,7 @@ typedef struct {
   bool build_panel_open;
   bool menu_start_hover;
   bool rally_mode;
+  FormationType formation;
   bool move_marker_active;
   float move_marker_tx;
   float move_marker_ty;
