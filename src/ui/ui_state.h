@@ -63,6 +63,7 @@ typedef struct {
   Texture2D tex_watch_towers[4];
   Texture2D tex_monasteries[4];
   Texture2D tex_castles[4];
+  Texture2D tex_walls[4];
   Texture2D tex_land_grass[4];
 
   /* 3D Assets */

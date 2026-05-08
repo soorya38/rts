@@ -761,7 +761,7 @@ static void sandbox_setup_bases(GameState *gs){
 
     for(int p=0;p<gs->num_players;p++){
         gs->res[p].pop_cap = POP_CAP_MAX;
-        gs->res[p].age = 3; // Start in Imperial Age so the cities look glorious
+        gs->res[p].age = 0;
     }
 
     // Spawn some villagers inside P0

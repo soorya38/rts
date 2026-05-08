@@ -359,6 +359,10 @@ void ui_state_init(UIState *ui, GameState *gs) {
   ui->tex_castles[1] = load_game_texture("assets/buildings/tamil_castle.png");
   ui->tex_castles[2] = load_game_texture("assets/buildings/tamil_castle.png");
   ui->tex_castles[3] = load_game_texture("assets/buildings/tamil_castle.png");
+  ui->tex_walls[0] = load_game_texture("assets/buildings/wall_age_0.png");
+  ui->tex_walls[1] = load_game_texture("assets/buildings/wall_age_1.png");
+  ui->tex_walls[2] = load_game_texture("assets/buildings/wall_age_2.png");
+  ui->tex_walls[3] = load_game_texture("assets/buildings/wall_age_3.png");
 
   ui->mdl_town_centers[0] =
       load_game_model("assets/buildings/tamil_town_center.obj");
@@ -480,6 +484,8 @@ void ui_state_deinit(UIState *ui) {
     UnloadTexture(ui->tex_monasteries[i]);
   for (int i = 0; i < 4; i++)
     UnloadTexture(ui->tex_castles[i]);
+  for (int i = 0; i < 4; i++)
+    UnloadTexture(ui->tex_walls[i]);
   UnloadTexture(ui->tex_hero_house_diffuse);
   UnloadTexture(ui->tex_hero_town_center_diffuse);
   UnloadTexture(ui->tex_hero_stable_diffuse);
@@ -686,6 +692,10 @@ Texture2D ui_get_building_texture(const UIState *ui, BldType type, int age) {
   case BLD_CASTLE:
     if (ui->tex_castles[age].id != 0)
       tex = ui->tex_castles[age];
+    break;
+  case BLD_WALL:
+    if (ui->tex_walls[age].id != 0)
+      tex = ui->tex_walls[age];
     break;
   default:
     break;

@@ -77,6 +77,36 @@ static void draw_wall_piece(GameState *gs, Building *b, Color mc, Color dc){
     }
 }
 
+static void draw_wall_sprite_tinted(Texture2D tex, float tx, float ty, Color tint){
+    float cx = (tx + 0.5f) * TILE_SIZE;
+    float cy = (ty + 0.5f) * TILE_SIZE;
+    Vector2 center = to_rvec2(world_to_iso(cx, cy));
+    const float target_w = 74.0f;
+    const float target_h = 88.0f;
+    Rectangle src = {0.0f, 0.0f, (float)tex.width, (float)tex.height};
+    Rectangle dst = {
+        center.x - target_w * 0.5f,
+        center.y - target_h + 34.0f,
+        target_w,
+        target_h
+    };
+    DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, tint);
+}
+
+static void draw_wall_sprite(Texture2D tex, Building *b){
+    draw_wall_sprite_tinted(tex, (float)b->tx, (float)b->ty, WHITE);
+}
+
+static void draw_wall_ghost_sprite(UIState *ui, BldType type, int age, int tx, int ty, bool valid){
+    if (type != BLD_WALL) return;
+    Texture2D tex = ui_get_building_texture(ui, type, age);
+    if (tex.id == 0) return;
+    Color tint = valid
+        ? CLITERAL(Color){180, 255, 200, 165}
+        : CLITERAL(Color){255, 170, 170, 165};
+    draw_wall_sprite_tinted(tex, (float)tx, (float)ty, tint);
+}
+
 static void draw_projectiles(GameState *gs){
     for(int i=0;i<MAX_PROJECTILES;i++){
         Projectile *p = &gs->projectiles[i];
@@ -223,7 +253,11 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     bool is_monastery = (b->type == BLD_MONASTERY);
     bool is_castle = (b->type == BLD_CASTLE);
     if (building_is_walllike(b->type)) {
-        draw_wall_piece(gs, b, mc, dc);
+        if (b->type == BLD_WALL && tex.id != 0) {
+            draw_wall_sprite(tex, b);
+        } else {
+            draw_wall_piece(gs, b, mc, dc);
+        }
     } else if (tex.id != 0) {
         /* Town Centers and age-variant building art need normalized draw boxes
            because the age sprites are much larger source images than the old assets. */
@@ -617,9 +651,11 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
             }
         }
 
-        if(!building_is_walllike(gs->build_mode.type)){
-            int age = 0;
-            if (lp >= 0 && lp < NUM_PLAYERS) age = gs->res[lp].age;
+        int age = 0;
+        if (lp >= 0 && lp < NUM_PLAYERS) age = gs->res[lp].age;
+        if(building_is_walllike(gs->build_mode.type)){
+            draw_wall_ghost_sprite(ui, gs->build_mode.type, age, tx, ty, valid);
+        } else {
             Texture2D tex = ui_get_building_texture(ui, gs->build_mode.type, age);
             if(tex.id != 0){
                 float sc, y_offset = h * 0.4f;
