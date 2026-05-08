@@ -20,10 +20,10 @@ int main(void){
     /* On Android the window is always full-screen; pass 0x0 so Raylib
        reads the actual device resolution and avoid the resizable flag. */
     TraceLog(LOG_INFO, "RTS >> platform=ANDROID calling InitWindow(0,0)");
-    InitWindow(0, 0, "RTS Game");
+    InitWindow(0, 0, "Sangora");
 #else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
-    InitWindow(SCREEN_W, SCREEN_H, "Age of Empires II \u2013 Raylib Edition");
+    InitWindow(SCREEN_W, SCREEN_H, "Sangora");
 #endif
     TraceLog(LOG_INFO, "RTS >> InitWindow done. screen=%dx%d",
              GetScreenWidth(), GetScreenHeight());

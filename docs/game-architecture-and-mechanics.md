@@ -1,7 +1,7 @@
-# RTS Game Architecture and Mechanics Reference
+# Sangora Architecture and Mechanics Reference
 
 
- RTS Game Architecture and Mechanics Reference
+ Sangora Architecture and Mechanics Reference
 
 This document describes the game exactly as it is implemented in this repository. It is intended to be a full technical and gameplay reference for anyone who needs to understand:
 
@@ -135,7 +135,7 @@ The loop order each frame is:
 Important runtime details:
 
 - Desktop initializes a resizable raylib window with MSAA.
-- Android uses `InitWindow(0, 0, "RTS Game")` so raylib adopts the device resolution.
+- Android uses `InitWindow(0, 0, "Sangora")` so raylib adopts the device resolution.
 - Audio is initialized once at startup.
 - `ESC` is not bound to raylib's default quit behavior; the game handles it manually.
 - `dt` is capped at `0.05f` to avoid a spiral-of-death on slow frames.

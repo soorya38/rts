@@ -376,10 +376,9 @@ void draw_menu(GameState *gs, UIState *ui){
     }
 
     /* ── Title ── */
-    const char *t1="AGE OF EMPIRES II"; const char *t2="Raylib Edition";
-    int f1=(int)(48*sc), f2=(int)(22*sc);
+    const char *t1="SANGORA";
+    int f1=(int)(48*sc);
     DrawText(t1,sw/2-MeasureText(t1,f1)/2,sh/2-(int)(155*sc),f1,CLITERAL(Color){220,185,40,255});
-    DrawText(t2,sw/2-MeasureText(t2,f2)/2,sh/2-(int)(100*sc),f2,CLITERAL(Color){170,155,110,255});
     DrawRectangle(sw/2-120,sh/2-(int)(72*sc),240,2,CLITERAL(Color){130,110,60,200});
 
     int lfs=(int)(12*sc);
