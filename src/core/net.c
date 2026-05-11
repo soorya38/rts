@@ -229,7 +229,8 @@ void net_update(GameState *gs) {
                 enet_packet_destroy(event.packet);
                 break;
             case ENET_EVENT_TYPE_DISCONNECT:
-                printf("ENet disconnected.\n");
+            case ENET_EVENT_TYPE_DISCONNECT_TIMEOUT:
+                printf("ENet disconnected (type=%d).\n", event.type);
                 // If Host, find which peer disconnected
                 if (g_local_player_id == 0) {
                     for(int i=0; i<NUM_PLAYERS-1; i++) {
@@ -241,7 +242,7 @@ void net_update(GameState *gs) {
                     net_send_packet(&lsp);
                 }
                 if (peer_count == 0 && g_local_player_id != 0) g_net_connected = false;
-                enet_packet_destroy(event.packet); // wait, event.packet might be null on disconnect? ENet docs say so
+                /* event.packet is NULL for disconnect events — do NOT destroy */
                 break;
             case ENET_EVENT_TYPE_NONE:
                 break;

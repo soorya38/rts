@@ -181,8 +181,8 @@ void map_init(GameState *gs, int *start_x, int *start_y, int num_players){
         gs->map[y][x].resource_amt = 0;
         gs->map[y][x].building_id  = -1;
         gs->map[y][x].variant      = (uint8_t)(rng_next()%4);
-        gs->map[y][x].fog[0]       = FOG_HIDDEN;
-        gs->map[y][x].fog[1]       = FOG_HIDDEN;
+        for(int p=0;p<NUM_PLAYERS;p++)
+            gs->map[y][x].fog[p]   = FOG_HIDDEN;
     }
 
     /* ── Randomise start slots ────────────────────────────────────

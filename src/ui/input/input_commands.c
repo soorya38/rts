@@ -590,8 +590,7 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
                 pkt.target_id = ui->sel_building;
                 net_dispatch_packet(gs, &pkt);
             } else {
-                map_clear_building(gs, b->tx, b->ty, b->tw, b->th); 
-                b->active = false; 
+                building_sell(gs, ui->sel_building);
             }
             ui->sel_building = -1; 
         }
@@ -600,6 +599,92 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         for (int i = 0; i < ui->sel_count; i++) {
             Unit *u = &gs->units[ui->sel_units[i]];
             u->state = US_IDLE; u->path_len = 0;
+        }
+    }
+
+    /* ── Idle villager cycling (Period / '.' key) ────────────── */
+    if (IsKeyPressed(KEY_PERIOD)) {
+        int lp = net_get_local_player();
+        int start = ui->idle_villager_last + 1;
+        int found = -1;
+        /* Search from last index forward, wrapping around */
+        for (int pass = 0; pass < 2 && found < 0; pass++) {
+            int begin = (pass == 0) ? start : 0;
+            int end   = (pass == 0) ? MAX_UNITS : start;
+            for (int i = begin; i < end; i++) {
+                Unit *u = &gs->units[i];
+                if (u->active && u->player == lp && u->type == UNIT_VILLAGER &&
+                    u->state == US_IDLE && u->state != US_DEAD && u->state != US_DYING) {
+                    found = i;
+                    break;
+                }
+            }
+        }
+        if (found >= 0) {
+            clear_selection(gs, ui);
+            ui->sel_count = 1;
+            ui->sel_units[0] = found;
+            gs->units[found].selected = true;
+            ui->idle_villager_last = found;
+            /* Center camera on the villager */
+            Unit *u = &gs->units[found];
+            Vec2 iso = world_to_iso(u->wx, u->wy);
+            ui->camera.target = (Vector2){iso.x, iso.y};
+            game_set_alert(gs, "Idle Villager selected.");
+        } else {
+            game_set_alert(gs, "No idle villagers.");
+        }
+    }
+
+    /* ── Select all military (Ctrl+Shift+A) ─────────────────── */
+    if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyDown(KEY_LEFT_SHIFT) && IsKeyPressed(KEY_A)) {
+        int lp = net_get_local_player();
+        clear_selection(gs, ui);
+        ui->sel_count = 0;
+        for (int i = 0; i < MAX_UNITS && ui->sel_count < MAX_UNITS; i++) {
+            Unit *u = &gs->units[i];
+            if (!u->active || u->player != lp) continue;
+            if (u->state == US_DEAD || u->state == US_DYING) continue;
+            if (u->type == UNIT_VILLAGER) continue;
+            u->selected = true;
+            ui->sel_units[ui->sel_count++] = i;
+        }
+        if (ui->sel_count > 0) {
+            char msg[48];
+            snprintf(msg, sizeof(msg), "%d military units selected.", ui->sel_count);
+            game_set_alert(gs, msg);
+        } else {
+            game_set_alert(gs, "No military units available.");
+        }
+    }
+
+    /* ── Game speed controls (+/- keys) ──────────────────────── */
+    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) {  /* + key */
+        gs->game_speed = clampf(gs->game_speed + 0.5f, 0.5f, 3.0f);
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Speed: %.1fx", gs->game_speed);
+        game_set_alert(gs, msg);
+    }
+    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) {  /* - key */
+        gs->game_speed = clampf(gs->game_speed - 0.5f, 0.5f, 3.0f);
+        char msg[32];
+        snprintf(msg, sizeof(msg), "Speed: %.1fx", gs->game_speed);
+        game_set_alert(gs, msg);
+    }
+
+    /* ── Attack-move (A key when military selected, not building) ── */
+    if (IsKeyPressed(KEY_A) && !IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_LEFT_SHIFT)) {
+        bool has_military = false;
+        bool has_villager = false;
+        for (int i = 0; i < ui->sel_count; i++) {
+            Unit *u = &gs->units[ui->sel_units[i]];
+            if (u->type == UNIT_VILLAGER) has_villager = true;
+            else has_military = true;
+        }
+        /* Only activate attack-move if military units selected, no villagers with A key for building */
+        if (has_military && !has_villager) {
+            ui->attack_move_mode = true;
+            game_set_alert(gs, "Attack-move: click a destination.");
         }
     }
 }

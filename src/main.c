@@ -61,7 +61,8 @@ int main(void){
         net_update(gs);
 
         /* Update */
-        game_update(gs,dt);
+        float sim_dt = dt * gs->game_speed;
+        game_update(gs, sim_dt);
 
         if (last_phase == PHASE_MENU && gs->phase == PHASE_PLAYING) {
             ui_center_on_tc(ui, gs);

@@ -224,7 +224,7 @@ static int ai_count_units(GameState *gs, UnitType type){
     int count = 0;
     for(int i=0; i<MAX_UNITS; i++){
         Unit *u = &gs->units[i];
-        if(!u->active || u->player != AI || u->state == US_DEAD) continue;
+        if(!u->active || u->player != AI || u->state == US_DEAD || u->state == US_DYING) continue;
         if(type >= 0 && u->type != type) continue;
         count++;
     }

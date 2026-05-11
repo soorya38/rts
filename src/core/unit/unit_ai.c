@@ -635,11 +635,19 @@ void unit_update(GameState *gs, Unit *u, float dt){
             }
             break;
         case US_MOVING:
-            if(u->path_idx>=u->path_len){
+            if(u->attack_move && !u->stance_manual && u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
+                int e=auto_find_enemy_unit(gs,u);
+                if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
+                else {
+                    int b=auto_find_enemy_bld(gs,u);
+                    if(b>=0){u->target_bld=b;u->state=US_ATTACKING;}
+                }
+            }
+            if(u->state == US_MOVING && u->path_idx>=u->path_len){
                 if(u->gather_tx>=0)           u->state=US_GATHERING;
                 else if(u->build_id>=0)       u->state=US_BUILDING;
                 else if(u->target_unit>=0||u->target_bld>=0) u->state=US_ATTACKING;
-                else                           u->state=US_IDLE;
+                else                           { u->state=US_IDLE; u->attack_move = false; }
             }
             break;
         case US_GATHERING: unit_do_gather(gs,u,dt); break;
@@ -668,6 +676,7 @@ int unit_count_military(GameState *gs, int player){
     for(int i=0;i<MAX_UNITS;i++){
         Unit *u=&gs->units[i];
         if(!u->active||u->player!=player) continue;
+        if(u->state==US_DEAD||u->state==US_DYING) continue;
         if(u->type!=UNIT_VILLAGER) c++;
     }
     return c;

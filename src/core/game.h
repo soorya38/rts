@@ -266,6 +266,7 @@ typedef struct {
     int       target_unit;      /* -1 = none */
     int       target_bld;       /* -1 = none */
     bool      stance_manual;    /* false = auto, true = manual */
+    bool      attack_move;      /* true = attack-move order (engage enemies en route) */
 
     bool      selected;
     float     anim_timer;
@@ -387,6 +388,7 @@ typedef struct {
     GameMode   mode;
     GamePhase  phase;
     float      game_time;
+    float      game_speed;       /* simulation speed multiplier (1.0 = normal) */
 
     Tile       map[MAP_H][MAP_W];
     Unit       units[MAX_UNITS];

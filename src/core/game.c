@@ -562,6 +562,7 @@ static void game_init_match(GameState *gs, uint32_t seed, int num_players, GameM
 
     gs->phase        = PHASE_PLAYING;
     gs->game_time    = 0.0f;
+    gs->game_speed   = 1.0f;
     gs->ai_phase     = 0;
     gs->ai_timer     = 0.0f;
     gs->ai_attack_cd = 90.0f;
@@ -1003,6 +1004,7 @@ void game_init(GameState *gs){
     memset(gs, 0, sizeof(GameState));
     gs->mode = GAME_MODE_STANDARD;
     gs->phase = PHASE_MENU;
+    gs->game_speed = 1.0f;
     /* We don't setup the game here anymore. Setup happens when "Start" is clicked. */
     /* For Solo Campaign, we'll call game_init_started_game(gs, time(NULL)) */
 }

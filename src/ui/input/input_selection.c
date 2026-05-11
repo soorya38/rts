@@ -8,6 +8,12 @@
 #include "net.h"
 #include "hud_common.h"   /* HUD_TOP_H, HUD_BOT_H, MINI_SIZE */
 
+/* ─── Double-click detection ──────────────────────────────── */
+static double s_last_click_time = 0.0;
+static Vector2 s_last_click_pos = {-9999, -9999};
+#define DOUBLE_CLICK_TIME  0.35f
+#define DOUBLE_CLICK_DIST  16.0f
+
 /* ─── Selection helpers ───────────────────────────────────── */
 bool point_in_unit(Unit *u, Vector2 wp) {
     Vector2 p = to_rvec2(world_to_iso(u->wx, u->wy));
@@ -306,6 +312,36 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
     int tx = (int)(cart.x / TILE_SIZE), ty = (int)(cart.y / TILE_SIZE);
     if (!map_in_bounds(tx, ty)) return;
 
+    /* ── Attack-move mode: units move to destination and auto-attack
+     *    any enemy they can see along the way. We implement this by
+     *    issuing a move order with stance_manual=false (aggressive idle)
+     *    so units will engage enemies automatically while walking. ── */
+    if (ui->attack_move_mode) {
+        ui->attack_move_mode = false;
+        int lp = net_get_local_player();
+        int ftx = tx, fty = ty;
+        map_find_passable_near(gs, tx, ty, &ftx, &fty);
+
+        PathCell formation_targets[64];
+        int move_count = ui->sel_count < 64 ? ui->sel_count : 64;
+        unit_compute_formation_targets(gs, ftx, fty, move_count, ui->formation, formation_targets);
+
+        for (int i = 0; i < ui->sel_count; i++) {
+            Unit *u = &gs->units[ui->sel_units[i]];
+            if (!u->active || u->player != lp || u->type == UNIT_VILLAGER) continue;
+            u->stance_manual = false;  /* aggressive: attack enemies seen en route */
+            u->attack_move = true;
+            int ntx = (i < 64) ? formation_targets[i].x : ftx;
+            int nty = (i < 64) ? formation_targets[i].y : fty;
+            unit_give_move_order(gs, u, ntx, nty);
+        }
+        ui->move_marker_active = true;
+        ui->move_marker_tx = (float)ftx;
+        ui->move_marker_ty = (float)fty;
+        ui->move_marker_start = gs->game_time;
+        return;
+    }
+
     int eu = find_enemy_unit_at(gs, world);
     int eb = (eu < 0) ? find_enemy_building_at(gs, ui, world) : -1;
     int ub = find_unfinished_building_at(gs, ui, world);
@@ -436,6 +472,13 @@ void handle_left_down(GameState *gs, UIState *ui) {
     /* Always set box_selecting; Android will clear is_box flag in handle_left_up */
     ui->box_selecting = true;
     ui->box_start = mp;
+
+    /* If attack-move mode is active and we click in world, handle immediately on press */
+    if (ui->attack_move_mode && !over_hud) {
+        Vector2 we = GetScreenToWorld2D(mp, ui->camera);
+        issue_command_at(gs, ui, we);  /* attack_move_mode is cleared inside */
+        ui->box_selecting = false;
+    }
 }
 
 /* ─── Left-click release ──────────────────────────────────── */
@@ -480,8 +523,44 @@ void handle_left_up(GameState *gs, UIState *ui) {
     for (int i = 0; i < ui->sel_count; i++)
         if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) { has_villagers = true; break; }
 
+    /* ── Double-click: select all same-type units visible on screen ── */
+    double now = GetTime();
+    float click_dx = fabsf(mp.x - s_last_click_pos.x);
+    float click_dy = fabsf(mp.y - s_last_click_pos.y);
+    bool is_double_click = (now - s_last_click_time) < DOUBLE_CLICK_TIME &&
+                           click_dx < DOUBLE_CLICK_DIST && click_dy < DOUBLE_CLICK_DIST;
+    s_last_click_time = now;
+    s_last_click_pos  = mp;
+
     if (fu >= 0) {
         if (!shift && click_reactivates_selected_hero(gs, ui, fu)) return;
+
+        /* Double-click: select all same-type friendly units on screen */
+        if (is_double_click) {
+            UnitType target_type = gs->units[fu].type;
+            int lp = net_get_local_player();
+            clear_selection(gs, ui);
+            /* Get screen bounds in world space */
+            Vector2 tl = GetScreenToWorld2D((Vector2){0, 0}, ui->camera);
+            Vector2 br = GetScreenToWorld2D((Vector2){(float)GetScreenWidth(), (float)GetScreenHeight()}, ui->camera);
+            float x0 = tl.x < br.x ? tl.x : br.x;
+            float x1 = tl.x > br.x ? tl.x : br.x;
+            float y0 = tl.y < br.y ? tl.y : br.y;
+            float y1 = tl.y > br.y ? tl.y : br.y;
+            for (int i = 0; i < MAX_UNITS && ui->sel_count < MAX_UNITS; i++) {
+                Unit *u = &gs->units[i];
+                if (!u->active || u->player != lp || u->state == US_DEAD || u->state == US_DYING) continue;
+                if (u->type != target_type) continue;
+                if (rect_intersects_unit(u, x0, y0, x1, y1)) select_unit(gs, ui, i);
+            }
+            char msg[48];
+            snprintf(msg, sizeof(msg), "%d %ss selected.", ui->sel_count,
+                     unit_name(target_type));
+            game_set_alert(gs, msg);
+            ui->sel_tile_x = -1; ui->sel_tile_y = -1;
+            return;
+        }
+
         /* Clicked a friendly unit → select it */
         if (!shift) clear_selection(gs, ui);
         select_unit(gs, ui, fu);

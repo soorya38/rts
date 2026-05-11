@@ -36,6 +36,8 @@ typedef struct {
   bool rally_mode;
   FormationType formation;
   bool move_marker_active;
+  int idle_villager_last;    /* last idle villager index for cycling */
+  bool attack_move_mode;     /* true = next click is an attack-move */
   float move_marker_tx;
   float move_marker_ty;
   float move_marker_start;
