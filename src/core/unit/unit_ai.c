@@ -102,15 +102,44 @@ static void resolve_unit_overlap(GameState *gs, Unit *a, Unit *b){
     }
 }
 
+/* ─── Spatial grid for efficient unit separation ───────────── */
+#define SEP_CELL_CAP 12  /* max units tracked per cell */
+static int sep_grid[MAP_H][MAP_W][SEP_CELL_CAP];
+static int sep_count[MAP_H][MAP_W];
+
 static void unit_apply_separation(GameState *gs){
-    for(int pass=0; pass<4; pass++){
+    /* Build spatial grid */
+    memset(sep_count, 0, sizeof(sep_count));
+    for(int i=0;i<MAX_UNITS;i++){
+        Unit *u = &gs->units[i];
+        if(!u->active || u->state == US_DEAD || u->state == US_DYING) continue;
+        int gx = clampi((int)(u->wx / TILE_SIZE), 0, MAP_W - 1);
+        int gy = clampi((int)(u->wy / TILE_SIZE), 0, MAP_H - 1);
+        if(sep_count[gy][gx] < SEP_CELL_CAP)
+            sep_grid[gy][gx][sep_count[gy][gx]++] = i;
+    }
+
+    /* Resolve overlaps using only neighboring cells (2 passes for convergence) */
+    for(int pass=0; pass<2; pass++){
         for(int i=0;i<MAX_UNITS;i++){
             Unit *a = &gs->units[i];
             if(!a->active || a->state == US_DEAD || a->state == US_DYING) continue;
-            for(int j=i+1;j<MAX_UNITS;j++){
-                Unit *b = &gs->units[j];
-                if(!b->active || b->state == US_DEAD || b->state == US_DYING) continue;
-                resolve_unit_overlap(gs, a, b);
+            int gx = clampi((int)(a->wx / TILE_SIZE), 0, MAP_W - 1);
+            int gy = clampi((int)(a->wy / TILE_SIZE), 0, MAP_H - 1);
+            for(int dy=-1; dy<=1; dy++){
+                int ny = gy + dy;
+                if(ny < 0 || ny >= MAP_H) continue;
+                for(int dx=-1; dx<=1; dx++){
+                    int nx = gx + dx;
+                    if(nx < 0 || nx >= MAP_W) continue;
+                    for(int k=0; k<sep_count[ny][nx]; k++){
+                        int j = sep_grid[ny][nx][k];
+                        if(j <= i) continue;  /* avoid double-checking pairs */
+                        Unit *b = &gs->units[j];
+                        if(!b->active || b->state == US_DEAD || b->state == US_DYING) continue;
+                        resolve_unit_overlap(gs, a, b);
+                    }
+                }
             }
         }
     }

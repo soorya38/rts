@@ -1,5 +1,5 @@
 CC      = gcc
-CFLAGS  = -std=c11 -Wall -Wextra -O2 -g
+CFLAGS  = -std=c11 -Wall -Wextra -O3 -ffast-math -g
 DEFINES = -DRTS_HAS_CURL=1
 TARGET  = rts
 

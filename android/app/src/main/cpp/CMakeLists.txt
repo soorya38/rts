@@ -43,6 +43,9 @@ target_compile_definitions(rts PRIVATE
     PLATFORM_ANDROID=1   # explicit platform flag for our ifdefs
 )
 
+# Aggressive optimization for mobile performance
+target_compile_options(rts PRIVATE -O3 -ffast-math)
+
 
 # ──────────────────────────────────────────────────────────────
 # CRITICAL: Force the linker to export ANativeActivity_onCreate.

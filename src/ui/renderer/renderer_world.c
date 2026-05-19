@@ -215,8 +215,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     Color mc=player_color(b->player);
     Color dc=player_color_dark(b->player);
     int lp = net_get_local_player();
-    bool hovered = false;
-    for (int i = 0; i < MAX_BUILDINGS; i++) if (&gs->buildings[i] == b && ui->hover_building == i) hovered = true;
+    bool hovered = (ui->hover_building == b->id);
 
     if(!b->complete){
         draw_shadow(px + w * 0.5f, py + h * 0.5f, w * 0.8f, h * 0.8f);
@@ -405,6 +404,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
 /* ─── Unit rendering ─────────────────────────────────────── */
 
 static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
+    (void)gs;
     if(u->state==US_DEAD) return;
     float wx=u->wx, wy=u->wy;
     Vector2 p = to_rvec2(world_to_iso(wx, wy));
@@ -425,8 +425,7 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
         DrawEllipse((int)p.x,(int)p.y, (10 + pulse) * size_mult, (5 + pulse * 0.5f) * size_mult, CLITERAL(Color){80,220,100,140});
     }
 
-    bool u_hovered = false;
-    for (int i = 0; i < MAX_UNITS; i++) if (&gs->units[i] == u && ui->hover_unit == i) u_hovered = true;
+    bool u_hovered = (ui->hover_unit == u->id);
     if (u_hovered && !u->selected) DrawEllipseLines((int)p.x, (int)p.y, 11 * size_mult, 6 * size_mult, C_HOVER);
 
     Texture2D tex = {0};
@@ -824,20 +823,51 @@ static bool forest_overlay_blocked_by_building(GameState *gs, int tx, int ty) {
     return false;
 }
 
+/* ─── Viewport frustum culling ────────────────────────────── */
+static void compute_visible_tile_range(UIState *ui, int *x0, int *y0, int *x1, int *y1) {
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
+    Vector2 s0 = GetScreenToWorld2D((Vector2){0, 0}, ui->camera);
+    Vector2 s1 = GetScreenToWorld2D((Vector2){(float)sw, 0}, ui->camera);
+    Vector2 s2 = GetScreenToWorld2D((Vector2){0, (float)sh}, ui->camera);
+    Vector2 s3 = GetScreenToWorld2D((Vector2){(float)sw, (float)sh}, ui->camera);
+    Vec2 c0 = iso_to_world(s0.x, s0.y);
+    Vec2 c1 = iso_to_world(s1.x, s1.y);
+    Vec2 c2 = iso_to_world(s2.x, s2.y);
+    Vec2 c3 = iso_to_world(s3.x, s3.y);
+    float min_x = fminf(fminf(c0.x, c1.x), fminf(c2.x, c3.x));
+    float max_x = fmaxf(fmaxf(c0.x, c1.x), fmaxf(c2.x, c3.x));
+    float min_y = fminf(fminf(c0.y, c1.y), fminf(c2.y, c3.y));
+    float max_y = fmaxf(fmaxf(c0.y, c1.y), fmaxf(c2.y, c3.y));
+    int pad = 5; /* generous padding for sprites that overshoot their tile */
+    *x0 = clampi((int)(min_x / TILE_SIZE) - pad, 0, MAP_W - 1);
+    *y0 = clampi((int)(min_y / TILE_SIZE) - pad, 0, MAP_H - 1);
+    *x1 = clampi((int)(max_x / TILE_SIZE) + pad, 0, MAP_W - 1);
+    *y1 = clampi((int)(max_y / TILE_SIZE) + pad, 0, MAP_H - 1);
+}
+
 void renderer_draw_world(GameState *gs, UIState *ui){
     int lp = net_get_local_player();
-    for(int y=0;y<MAP_H;y++)
-        for(int x=0;x<MAP_W;x++)
+
+    /* Compute visible tile range — only draw what the camera sees */
+    int vx0, vy0, vx1, vy1;
+    compute_visible_tile_range(ui, &vx0, &vy0, &vx1, &vy1);
+
+    /* Draw only visible tiles */
+    for(int y=vy0;y<=vy1;y++)
+        for(int x=vx0;x<=vx1;x++)
             if(gs->map[y][x].fog[lp]!=FOG_HIDDEN) draw_tile(gs, ui, x, y);
 
-    // Collect all renderable entities for depth sorting
-    RenderEntity *entities = malloc(sizeof(RenderEntity) * (MAX_BUILDINGS + MAX_UNITS));
+    /* Collect renderable entities – static to avoid per-frame allocation */
+    static RenderEntity entities[MAX_BUILDINGS + MAX_UNITS];
     int entity_count = 0;
 
     for(int i=0;i<MAX_BUILDINGS;i++){
         Building *b=&gs->buildings[i];
         if(!b->active) continue;
         int bx=b->tx+b->tw/2, by=b->ty+b->th/2;
+        /* Frustum cull buildings outside viewport */
+        if(bx < vx0 - 3 || bx > vx1 + 3 || by < vy0 - 3 || by > vy1 + 3) continue;
         if(gs->map[clampi(by,0,MAP_H-1)][clampi(bx,0,MAP_W-1)].fog[lp]==FOG_HIDDEN) continue;
         
         entities[entity_count].type = 0;
@@ -850,6 +880,8 @@ void renderer_draw_world(GameState *gs, UIState *ui){
         Unit *u=&gs->units[i];
         if(!u->active||u->state==US_DEAD) continue;
         int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
+        /* Frustum cull units outside viewport */
+        if(utx < vx0 - 1 || utx > vx1 + 1 || uty < vy0 - 1 || uty > vy1 + 1) continue;
         if(!map_in_bounds(utx,uty)) continue;
         FogState fs=gs->map[uty][utx].fog[lp];
         if(u->player!=lp && fs!=FOG_VISIBLE) continue;
@@ -872,20 +904,19 @@ void renderer_draw_world(GameState *gs, UIState *ui){
         }
     }
 
-    // Re-draw forest canopies on top so tree crowns can overlap nearby buildings.
-    for(int y=0;y<MAP_H;y++)
-        for(int x=0;x<MAP_W;x++)
+    // Re-draw forest canopies on top (frustum-culled)
+    for(int y=vy0;y<=vy1;y++)
+        for(int x=vx0;x<=vx1;x++)
             if(gs->map[y][x].fog[lp]!=FOG_HIDDEN)
                 if(gs->map[y][x].type == TILE_FOREST && !forest_overlay_blocked_by_building(gs, x, y))
                     draw_forest_overlay(gs, ui, x, y);
-
-    free(entities);
 
     draw_move_target_marker(gs, ui);
     draw_projectiles(gs);
     draw_selected_rally_point(gs, ui);
     
-    for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++) draw_fog(gs,x,y);
+    /* Draw fog only for visible tiles */
+    for(int y=vy0;y<=vy1;y++) for(int x=vx0;x<=vx1;x++) draw_fog(gs,x,y);
 
     draw_build_grid(gs, ui);
     draw_build_ghost(gs, ui);

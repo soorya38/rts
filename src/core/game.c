@@ -1141,6 +1141,10 @@ void game_update(GameState *gs, float dt){
         game_update_campaign(gs, sim_dt);
     }
 
-    /* Fog of war */
-    map_update_fog(gs);
+    /* Fog of war – throttled to ~5 Hz for performance */
+    gs->fog_update_timer -= sim_dt;
+    if(gs->fog_update_timer <= 0.0f){
+        map_update_fog(gs);
+        gs->fog_update_timer = 0.2f;
+    }
 }

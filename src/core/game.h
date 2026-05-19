@@ -408,7 +408,7 @@ typedef struct {
     float      ai_timer;
     float      ai_attack_cd;
     int        ai_attack_count;
-
+    float      fog_update_timer;  /* throttle fog recalculations */
     int        num_players;     /* Active players in this match (2-4) */
 
     /* Alert banner */
