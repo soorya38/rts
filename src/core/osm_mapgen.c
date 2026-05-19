@@ -598,28 +598,53 @@ static int try_place_near(GameState *gs, int player, BldType type, int cx, int c
 }
 
 static void place_gameplay(GameState *gs, int num_players, int *start_x, int *start_y) {
-    /* Pick spawn points in opposing corners, ensuring passable terrain */
-    int corners[4][2] = {{8,8}, {MAP_W-8,8}, {8,MAP_H-8}, {MAP_W-8,MAP_H-8}};
-    int chosen[4] = {0, 3, 1, 2};
+    if (num_players <= 4) {
+        int corners[4][2] = {{8,8}, {MAP_W-8,8}, {8,MAP_H-8}, {MAP_W-8,MAP_H-8}};
+        int chosen[4] = {0, 3, 1, 2};
 
-    for (int p = 0; p < num_players && p < 4; p++) {
-        int cx = corners[chosen[p]][0];
-        int cy = corners[chosen[p]][1];
-        for (int r = 0; r < 15; r++) {
-            for (int dy = -r; dy <= r; dy++) {
-                for (int dx = -r; dx <= r; dx++) {
-                    int tx = cx+dx, ty = cy+dy;
-                    if (!map_in_bounds(tx, ty)) continue;
-                    TileType t = gs->map[ty][tx].type;
-                    if (t == TILE_GRASS || t == TILE_DESERT || t == TILE_ROAD) {
-                        start_x[p] = tx; start_y[p] = ty;
-                        goto found;
+        for (int p = 0; p < num_players; p++) {
+            int cx = corners[chosen[p]][0];
+            int cy = corners[chosen[p]][1];
+            for (int r = 0; r < 15; r++) {
+                for (int dy = -r; dy <= r; dy++) {
+                    for (int dx = -r; dx <= r; dx++) {
+                        int tx = cx+dx, ty = cy+dy;
+                        if (!map_in_bounds(tx, ty)) continue;
+                        TileType t = gs->map[ty][tx].type;
+                        if (t == TILE_GRASS || t == TILE_DESERT || t == TILE_ROAD) {
+                            start_x[p] = tx; start_y[p] = ty;
+                            goto found;
+                        }
                     }
                 }
             }
+            start_x[p] = cx; start_y[p] = cy;
+            found:;
         }
-        start_x[p] = cx; start_y[p] = cy;
-        found:;
+    } else {
+        float angle_offset = rng_frac() * 2.0f * 3.14159265f;
+        for (int p = 0; p < num_players; p++) {
+            float angle = angle_offset + (2.0f * 3.14159265f * p) / num_players;
+            int cx = 32 + (int)(20.0f * cosf(angle));
+            int cy = 32 + (int)(20.0f * sinf(angle));
+            cx = clampi(cx, 8, MAP_W - 9);
+            cy = clampi(cy, 8, MAP_H - 9);
+            for (int r = 0; r < 15; r++) {
+                for (int dy = -r; dy <= r; dy++) {
+                    for (int dx = -r; dx <= r; dx++) {
+                        int tx = cx+dx, ty = cy+dy;
+                        if (!map_in_bounds(tx, ty)) continue;
+                        TileType t = gs->map[ty][tx].type;
+                        if (t == TILE_GRASS || t == TILE_DESERT || t == TILE_ROAD) {
+                            start_x[p] = tx; start_y[p] = ty;
+                            goto found_circ;
+                        }
+                    }
+                }
+            }
+            start_x[p] = cx; start_y[p] = cy;
+            found_circ:;
+        }
     }
 
     /* Clear spawn zones */

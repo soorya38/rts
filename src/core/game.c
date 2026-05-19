@@ -557,7 +557,7 @@ void game_update_projectiles(GameState *gs, float dt){
 static void game_init_match(GameState *gs, uint32_t seed, int num_players, GameMode mode){
     memset(gs, 0, sizeof(GameState));
     gs->mode = mode;
-    gs->num_players = (num_players < 1) ? 1 : (num_players > 4 ? 4 : num_players);
+    gs->num_players = (num_players < 1) ? 1 : (num_players > 8 ? 8 : num_players);
     _rng = seed;
 
     gs->phase        = PHASE_PLAYING;

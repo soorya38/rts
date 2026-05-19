@@ -554,9 +554,10 @@ void draw_age_bar(GameState *gs){
                 DrawText(">", arrow_x, bar_y + (bar_th - fs9)/2, fs9, arrow_col);
         }
 
-        /* Player label: "You" for local player, "P1"/"P2" etc. for others */
         int lp = net_get_local_player();
-        const char *plbl = (p == lp) ? "You" : (p == 0 ? "P1" : p == 1 ? "P2" : p == 2 ? "P3" : "P4");
+        char plbl_buf[16];
+        snprintf(plbl_buf, sizeof(plbl_buf), "P%d", p + 1);
+        const char *plbl = (p == lp) ? "You" : plbl_buf;
         int plbl_w = MeasureText(plbl, fs8);
         int label_x = panel_x + panel_w_full - pad_x - plbl_w;
         /* Small player label on the right side of the row */

@@ -22,7 +22,7 @@ typedef struct { float x, y; } Vec2;
 #define MAX_BUILDINGS   128
 #define MAX_PROJECTILES 128
 #define ASTAR_PATH_CAP  300         /* max A* path nodes (avoids conflict with Windows MAX_PATH) */
-#define NUM_PLAYERS     4
+#define NUM_PLAYERS     8
 #define POP_CAP_MAX     200
 #define HOUSE_VARIANT_COUNT 16
 #define HERO_POSSESSION_DURATION 22.0f

@@ -25,14 +25,22 @@
 #define C_FARM_T    CLITERAL(Color){155, 125,  55, 255}
 #define C_FARM_S    CLITERAL(Color){135, 105,  45, 255}
 
-#define C_P1_MAIN   CLITERAL(Color){ 30, 110, 220, 255}
-#define C_P1_DARK   CLITERAL(Color){ 15,  70, 160, 255}
-#define C_AI_MAIN   CLITERAL(Color){210,  50,  40, 255}
-#define C_AI_DARK   CLITERAL(Color){150,  25,  20, 255}
-#define C_P2_MAIN   CLITERAL(Color){ 40, 180,  60, 255}
+#define C_P0_MAIN   CLITERAL(Color){ 30, 110, 220, 255} /* Blue */
+#define C_P0_DARK   CLITERAL(Color){ 15,  70, 160, 255}
+#define C_P1_MAIN   CLITERAL(Color){210,  50,  40, 255} /* Red */
+#define C_P1_DARK   CLITERAL(Color){150,  25,  20, 255}
+#define C_P2_MAIN   CLITERAL(Color){ 40, 180,  60, 255} /* Green */
 #define C_P2_DARK   CLITERAL(Color){ 20, 120,  30, 255}
-#define C_P3_MAIN   CLITERAL(Color){230, 210,  30, 255}
+#define C_P3_MAIN   CLITERAL(Color){230, 210,  30, 255} /* Yellow */
 #define C_P3_DARK   CLITERAL(Color){170, 150,  15, 255}
+#define C_P4_MAIN   CLITERAL(Color){235, 120,  30, 255} /* Orange */
+#define C_P4_DARK   CLITERAL(Color){170,  80,  15, 255}
+#define C_P5_MAIN   CLITERAL(Color){160,  40, 210, 255} /* Purple */
+#define C_P5_DARK   CLITERAL(Color){110,  20, 150, 255}
+#define C_P6_MAIN   CLITERAL(Color){ 30, 200, 200, 255} /* Cyan */
+#define C_P6_DARK   CLITERAL(Color){ 15, 140, 140, 255}
+#define C_P7_MAIN   CLITERAL(Color){140, 140, 140, 255} /* Gray */
+#define C_P7_DARK   CLITERAL(Color){ 90,  90,  90, 255}
 
 #define C_HP_GREEN  CLITERAL(Color){ 50, 200,  60, 255}
 #define C_HP_YELLOW CLITERAL(Color){220, 200,  20, 255}
@@ -44,18 +52,26 @@
 #define C_FOG_HID   CLITERAL(Color){  0,   0,   0, 235}
 
 Color player_color(int p) {
-    if (p == 0) return C_P1_MAIN;
-    if (p == 1) return C_AI_MAIN;
+    if (p == 0) return C_P0_MAIN;
+    if (p == 1) return C_P1_MAIN;
     if (p == 2) return C_P2_MAIN;
     if (p == 3) return C_P3_MAIN;
-    return C_AI_MAIN;
+    if (p == 4) return C_P4_MAIN;
+    if (p == 5) return C_P5_MAIN;
+    if (p == 6) return C_P6_MAIN;
+    if (p == 7) return C_P7_MAIN;
+    return C_P1_MAIN;
 }
 Color player_color_dark(int p) {
-    if (p == 0) return C_P1_DARK;
-    if (p == 1) return C_AI_DARK;
+    if (p == 0) return C_P0_DARK;
+    if (p == 1) return C_P1_DARK;
     if (p == 2) return C_P2_DARK;
     if (p == 3) return C_P3_DARK;
-    return C_AI_DARK;
+    if (p == 4) return C_P4_DARK;
+    if (p == 5) return C_P5_DARK;
+    if (p == 6) return C_P6_DARK;
+    if (p == 7) return C_P7_DARK;
+    return C_P1_DARK;
 }
 Color player_color_alpha(int p, unsigned char a){
     Color c=player_color(p); c.a=a; return c;

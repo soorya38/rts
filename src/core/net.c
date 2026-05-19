@@ -32,7 +32,7 @@ bool net_host_create(int port) {
     ENetAddress address;
     address.host = ENET_HOST_ANY;
     address.port = port;
-    client_or_server = enet_host_create(&address, 3, 2, 0, 0); // Up to 3 clients 
+    client_or_server = enet_host_create(&address, NUM_PLAYERS - 1, 2, 0, 0); // Up to 7 clients 
     for(int i=0; i<NUM_PLAYERS-1; i++) peers[i] = NULL;
     peer_count = 0;
     if (client_or_server == NULL) {

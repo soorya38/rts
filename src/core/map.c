@@ -190,44 +190,55 @@ void map_init(GameState *gs, int *start_x, int *start_y, int num_players){
      * separated, but no longer glued to fixed corners.
      *   0: top-left   1: top-right   2: bottom-left   3: bottom-right
      * ─────────────────────────────────────────────────────────── */
-    int quad_x[4], quad_y[4];
-    for(int i=0; i<4; i++) pick_quadrant_start(i, &quad_x[i], &quad_y[i]);
+    if (num_players <= 4) {
+        int quad_x[4], quad_y[4];
+        for(int i=0; i<4; i++) pick_quadrant_start(i, &quad_x[i], &quad_y[i]);
 
-    int chosen_quads[4] = {0, 3, 1, 2};
-    if(num_players <= 1){
-        chosen_quads[0] = (int)(rng_next() % 4);
-    } else if(num_players == 2){
-        if((rng_next() & 1u) == 0u){
-            chosen_quads[0] = 0; chosen_quads[1] = 3;
+        int chosen_quads[4] = {0, 3, 1, 2};
+        if(num_players <= 1){
+            chosen_quads[0] = (int)(rng_next() % 4);
+        } else if(num_players == 2){
+            if((rng_next() & 1u) == 0u){
+                chosen_quads[0] = 0; chosen_quads[1] = 3;
+            } else {
+                chosen_quads[0] = 1; chosen_quads[1] = 2;
+            }
+            if((rng_next() & 1u) != 0u){
+                int tmp = chosen_quads[0];
+                chosen_quads[0] = chosen_quads[1];
+                chosen_quads[1] = tmp;
+            }
+        } else if(num_players == 3){
+            int quads[4] = {0, 1, 2, 3};
+            for(int i=3; i>0; i--){
+                int j = (int)(rng_next() % (uint32_t)(i + 1));
+                int tmp = quads[i]; quads[i] = quads[j]; quads[j] = tmp;
+            }
+            chosen_quads[0] = quads[0];
+            chosen_quads[1] = quads[1];
+            chosen_quads[2] = quads[2];
         } else {
-            chosen_quads[0] = 1; chosen_quads[1] = 2;
+            int quads[4] = {0, 1, 2, 3};
+            for(int i=3; i>0; i--){
+                int j = (int)(rng_next() % (uint32_t)(i + 1));
+                int tmp = quads[i]; quads[i] = quads[j]; quads[j] = tmp;
+            }
+            for(int i=0; i<4; i++) chosen_quads[i] = quads[i];
         }
-        if((rng_next() & 1u) != 0u){
-            int tmp = chosen_quads[0];
-            chosen_quads[0] = chosen_quads[1];
-            chosen_quads[1] = tmp;
-        }
-    } else if(num_players == 3){
-        int quads[4] = {0, 1, 2, 3};
-        for(int i=3; i>0; i--){
-            int j = (int)(rng_next() % (uint32_t)(i + 1));
-            int tmp = quads[i]; quads[i] = quads[j]; quads[j] = tmp;
-        }
-        chosen_quads[0] = quads[0];
-        chosen_quads[1] = quads[1];
-        chosen_quads[2] = quads[2];
-    } else {
-        int quads[4] = {0, 1, 2, 3};
-        for(int i=3; i>0; i--){
-            int j = (int)(rng_next() % (uint32_t)(i + 1));
-            int tmp = quads[i]; quads[i] = quads[j]; quads[j] = tmp;
-        }
-        for(int i=0; i<4; i++) chosen_quads[i] = quads[i];
-    }
 
-    for(int i=0; i<num_players; i++){
-        start_x[i] = quad_x[chosen_quads[i]];
-        start_y[i] = quad_y[chosen_quads[i]];
+        for(int i=0; i<num_players; i++){
+            start_x[i] = quad_x[chosen_quads[i]];
+            start_y[i] = quad_y[chosen_quads[i]];
+        }
+    } else {
+        float angle_offset = rng_frac() * 2.0f * 3.14159265f;
+        for(int i=0; i<num_players; i++){
+            float angle = angle_offset + (2.0f * 3.14159265f * i) / num_players;
+            start_x[i] = 32 + (int)(20.0f * cosf(angle));
+            start_y[i] = 32 + (int)(20.0f * sinf(angle));
+            start_x[i] = clampi(start_x[i], 8, MAP_W - 9);
+            start_y[i] = clampi(start_y[i], 8, MAP_H - 9);
+        }
     }
 
     const int SAFE_R = 10;     /* tiles to keep clear of random features */
