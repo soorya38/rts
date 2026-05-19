@@ -1,5 +1,13 @@
 /*=============================================================
- * game.c  –  Game initialisation and master update tick
+ * game.c  –  Game initialisation, campaign logic, and master
+ *             update tick
+ *
+ * This is the top-level game logic coordinator.  It owns:
+ *   - Match initialisation (standard, campaign, sandbox, OSM)
+ *   - Campaign mission state machines and win/loss checks
+ *   - Damage application (units and buildings)
+ *   - Projectile lifecycle
+ *   - The master update loop that ticks all subsystems
  *=============================================================*/
 #include "game.h"
 #include <string.h>
@@ -11,7 +19,7 @@
 uint32_t _rng = 12345;
 
 /* Forward declare the building init helper from building.c */
-void buildings_init_player(GameState *gs,int player,int tc_tx,int tc_ty);
+void buildings_init_player(GameState *gs, int player, int tc_tx, int tc_ty);
 
 #define CAMPAIGN_MISSION_COUNT 6
 
@@ -51,23 +59,26 @@ static bool campaign_place_ready_near_tc(GameState *gs, int player, BldType type
     return false;
 }
 
-static int game_count_player_buildings(GameState *gs, int player, BldType type, bool complete_only){
+static int game_count_player_buildings(GameState *gs, int player,
+                                       BldType type, bool complete_only)
+{
     int count = 0;
-    for(int i=0; i<MAX_BUILDINGS; i++){
-        Building *b = &gs->buildings[i];
-        if(!b->active || b->player != player || b->type != type) continue;
-        if(complete_only && !b->complete) continue;
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *bld = &gs->buildings[i];
+        if (!bld->active || bld->player != player || bld->type != type) continue;
+        if (complete_only && !bld->complete) continue;
         count++;
     }
     return count;
 }
 
-static int game_count_player_units(GameState *gs, int player, UnitType type){
+static int game_count_player_units(GameState *gs, int player, UnitType type)
+{
     int count = 0;
-    for(int i=0; i<MAX_UNITS; i++){
-        Unit *u = &gs->units[i];
-        if(!u->active || u->player != player || u->type != type) continue;
-        if(u->state == US_DEAD || u->state == US_DYING) continue;
+    for (int i = 0; i < MAX_UNITS; i++) {
+        Unit *unit = &gs->units[i];
+        if (!unit->active || unit->player != player || unit->type != type) continue;
+        if (unit->state == US_DEAD || unit->state == US_DYING) continue;
         count++;
     }
     return count;
@@ -411,71 +422,102 @@ static void game_update_campaign(GameState *gs, float dt){
     }
 }
 
-static void game_handle_tc_destroyed(GameState *gs, int defeated_player){
-    int lp = net_get_local_player();
+/* Check if the local player has won or lost after a TC is destroyed. */
+static void game_handle_tc_destroyed(GameState *gs, int defeated_player)
+{
+    int local_player = net_get_local_player();
+
+    /* Check which players still have a town center. */
     bool has_tc[NUM_PLAYERS] = {false};
-    for(int i=0; i<MAX_BUILDINGS; i++){
-        Building *eb = &gs->buildings[i];
-        if(eb->active && eb->type == BLD_TOWN_CENTER) has_tc[eb->player] = true;
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *bld = &gs->buildings[i];
+        if (bld->active && bld->type == BLD_TOWN_CENTER) {
+            has_tc[bld->player] = true;
+        }
     }
-    if(defeated_player == lp){
+
+    if (defeated_player == local_player) {
         game_set_alert(gs, "DEFEATED...");
         gs->phase = PHASE_DEFEAT;
         return;
     }
-    if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 3){
+
+    /* Campaign missions 3-4 have special TC-destruction handling. */
+    if (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 3) {
         game_set_alert(gs, "The outpost is crippled. Finish off the raider Padai Veedu.");
         return;
     }
-    if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 4){
+    if (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission == 4) {
         game_set_alert(gs, "The enemy center falls back from the ford, but the battle is not over.");
         return;
     }
+
+    /* Victory when no enemy TCs remain. */
     bool any_enemy_tc = false;
-    for(int p=0; p<NUM_PLAYERS; p++){
-        if(p != lp && has_tc[p]) { any_enemy_tc = true; break; }
+    for (int p = 0; p < NUM_PLAYERS; p++) {
+        if (p != local_player && has_tc[p]) {
+            any_enemy_tc = true;
+            break;
+        }
     }
-    if(!any_enemy_tc){
+    if (!any_enemy_tc) {
         game_set_alert(gs, "VICTORY!");
         gs->phase = PHASE_VICTORY;
     }
 }
 
-bool game_damage_unit(GameState *gs, int target_unit, int dmg){
-    if(target_unit < 0 || target_unit >= MAX_UNITS) return false;
-    Unit *t = &gs->units[target_unit];
-    if(!t->active || t->state == US_DEAD || t->state == US_DYING) return false;
-    if(hero_possession_controls_unit(gs, target_unit)){
-        if(gs->hero.dodge_timer > 0.0f){
-            dmg = (int)ceilf((float)dmg * 0.25f);
-        } else if(gs->hero.block_timer > 0.0f && gs->hero.stamina > 0.0f &&
-                  gs->hero.phase == HERO_POSSESSION_ACTIVE){
-            dmg = (int)ceilf((float)dmg * 0.55f);
+/* Hero possession damage reduction multipliers. */
+static const float HERO_DODGE_DAMAGE_MULT = 0.25f;
+static const float HERO_BLOCK_DAMAGE_MULT = 0.55f;
+static const float DEATH_ANIMATION_DURATION = 0.8f;
+
+bool game_damage_unit(GameState *gs, int target_id, int damage)
+{
+    if (target_id < 0 || target_id >= MAX_UNITS) return false;
+
+    Unit *target = &gs->units[target_id];
+    if (!target->active || target->state == US_DEAD || target->state == US_DYING) {
+        return false;
+    }
+
+    /* Hero possession grants dodge/block damage reduction. */
+    if (hero_possession_controls_unit(gs, target_id)) {
+        if (gs->hero.dodge_timer > 0.0f) {
+            damage = (int)ceilf((float)damage * HERO_DODGE_DAMAGE_MULT);
+        } else if (gs->hero.block_timer > 0.0f &&
+                   gs->hero.stamina > 0.0f &&
+                   gs->hero.phase == HERO_POSSESSION_ACTIVE) {
+            damage = (int)ceilf((float)damage * HERO_BLOCK_DAMAGE_MULT);
         }
-        gs->hero.shake = 0.85f; // Violent shake when hit
-        gs->hero.blur = 0.65f;
+        gs->hero.shake       = 0.85f;
+        gs->hero.blur        = 0.65f;
         gs->hero.impact_timer = 0.35f;
     }
-    if(dmg < 1) dmg = 1;
-    t->hp -= dmg;
-    if(t->hp <= 0){
-        t->state = US_DYING;
-        t->death_timer = 0.8f;
+
+    if (damage < 1) damage = 1;
+    target->hp -= damage;
+
+    if (target->hp <= 0) {
+        target->state       = US_DYING;
+        target->death_timer = DEATH_ANIMATION_DURATION;
         return false;
     }
     return true;
 }
 
-bool game_damage_building(GameState *gs, int target_bld, int dmg){
-    if(target_bld < 0 || target_bld >= MAX_BUILDINGS) return false;
-    Building *b = &gs->buildings[target_bld];
-    if(!b->active) return false;
-    b->hp -= dmg;
-    if(b->hp <= 0){
-        int defeated_player = b->player;
-        bool was_tc = (b->type == BLD_TOWN_CENTER);
-        building_destroy(gs, target_bld);
-        if(was_tc && gs->mode != GAME_MODE_SANDBOX){
+bool game_damage_building(GameState *gs, int target_id, int damage)
+{
+    if (target_id < 0 || target_id >= MAX_BUILDINGS) return false;
+
+    Building *bld = &gs->buildings[target_id];
+    if (!bld->active) return false;
+
+    bld->hp -= damage;
+    if (bld->hp <= 0) {
+        int defeated_player = bld->player;
+        bool was_tc = (bld->type == BLD_TOWN_CENTER);
+        building_destroy(gs, target_id);
+        if (was_tc && gs->mode != GAME_MODE_SANDBOX) {
             game_handle_tc_destroyed(gs, defeated_player);
         }
         return false;
@@ -483,81 +525,108 @@ bool game_damage_building(GameState *gs, int target_bld, int dmg){
     return true;
 }
 
-bool unit_uses_projectiles(UnitType type){
-    return type == UNIT_ARCHER || type == UNIT_SKIRMISHER || type == UNIT_CAVALRY_ARCHER ||
-           type == UNIT_MANGONEL || type == UNIT_SCORPION ||
-           type == UNIT_BOMBARD_CANNON;
+/* ── Projectile helpers ────────────────────────────────────── */
+
+bool unit_uses_projectiles(UnitType type)
+{
+    return type == UNIT_ARCHER         || type == UNIT_SKIRMISHER     ||
+           type == UNIT_CAVALRY_ARCHER || type == UNIT_MANGONEL       ||
+           type == UNIT_SCORPION       || type == UNIT_BOMBARD_CANNON;
 }
 
-bool building_uses_projectiles(BldType type){
+bool building_uses_projectiles(BldType type)
+{
     return type == BLD_WATCH_TOWER || type == BLD_TOWN_CENTER || type == BLD_CASTLE;
 }
 
 void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,
-                           float sx, float sy, float ex, float ey,
-                           int target_unit, int target_bld, int dmg,
-                           float duration, float arc_height){
-    for(int i=0;i<MAX_PROJECTILES;i++){
-        Projectile *p = &gs->projectiles[i];
-        if(p->active) continue;
-        p->active = true;
-        p->owner_player = owner_player;
-        p->type = type;
-        p->target_unit = target_unit;
-        p->target_bld = target_bld;
-        p->damage = dmg;
-        p->sx = sx;
-        p->sy = sy;
-        p->ex = ex;
-        p->ey = ey;
-        p->elapsed = 0.0f;
-        p->duration = duration;
-        p->arc_height = arc_height;
+                           float start_x, float start_y,
+                           float end_x, float end_y,
+                           int target_unit, int target_bld, int damage,
+                           float duration, float arc_height)
+{
+    for (int i = 0; i < MAX_PROJECTILES; i++) {
+        Projectile *proj = &gs->projectiles[i];
+        if (proj->active) continue;
+
+        proj->active       = true;
+        proj->owner_player = owner_player;
+        proj->type         = type;
+        proj->target_unit  = target_unit;
+        proj->target_bld   = target_bld;
+        proj->damage       = damage;
+        proj->sx           = start_x;
+        proj->sy           = start_y;
+        proj->ex           = end_x;
+        proj->ey           = end_y;
+        proj->elapsed      = 0.0f;
+        proj->duration     = duration;
+        proj->arc_height   = arc_height;
         return;
     }
 }
 
-static void damage_units_in_radius(GameState *gs, int owner_player, float cx, float cy,
-                                   float radius_px, int damage, int skip_unit){
-    for(int i=0;i<MAX_UNITS;i++){
-        Unit *t = &gs->units[i];
-        if(i == skip_unit) continue;
-        if(!t->active || t->player == owner_player || t->state == US_DEAD || t->state == US_DYING) continue;
-        float d = dist2f(cx, cy, t->wx, t->wy);
-        if(d > radius_px) continue;
-        int splash = damage - (int)(d / 18.0f);
-        if(splash < 1) splash = 1;
-        game_damage_unit(gs, i, splash);
+/* Splash radius multipliers for stone projectiles (mangonels, etc). */
+static const float SPLASH_RADIUS_VS_UNIT = 1.35f;
+static const float SPLASH_RADIUS_VS_BLD  = 1.5f;
+static const float SPLASH_FALLOFF_DIVISOR = 18.0f;
+
+static void damage_units_in_radius(GameState *gs, int owner_player,
+                                   float center_x, float center_y,
+                                   float radius_px, int damage, int skip_unit)
+{
+    for (int i = 0; i < MAX_UNITS; i++) {
+        if (i == skip_unit) continue;
+        Unit *unit = &gs->units[i];
+        if (!unit->active || unit->player == owner_player ||
+            unit->state == US_DEAD || unit->state == US_DYING) continue;
+
+        float dist = dist2f(center_x, center_y, unit->wx, unit->wy);
+        if (dist > radius_px) continue;
+
+        /* Damage falls off linearly with distance. */
+        int splash_dmg = damage - (int)(dist / SPLASH_FALLOFF_DIVISOR);
+        if (splash_dmg < 1) splash_dmg = 1;
+        game_damage_unit(gs, i, splash_dmg);
     }
 }
 
-void game_update_projectiles(GameState *gs, float dt){
-    for(int i=0;i<MAX_PROJECTILES;i++){
-        Projectile *p = &gs->projectiles[i];
-        if(!p->active) continue;
-        p->elapsed += dt;
-        if(p->elapsed < p->duration) continue;
-        if(p->target_unit >= 0){
-            game_damage_unit(gs, p->target_unit, p->damage);
-            if(p->type == PROJ_STONE){
-                damage_units_in_radius(gs, p->owner_player, p->ex, p->ey,
-                                       TILE_SIZE * 1.35f, p->damage / 2, p->target_unit);
+void game_update_projectiles(GameState *gs, float dt)
+{
+    for (int i = 0; i < MAX_PROJECTILES; i++) {
+        Projectile *proj = &gs->projectiles[i];
+        if (!proj->active) continue;
+
+        proj->elapsed += dt;
+        if (proj->elapsed < proj->duration) continue;
+
+        /* Projectile has arrived — apply damage. */
+        if (proj->target_unit >= 0) {
+            game_damage_unit(gs, proj->target_unit, proj->damage);
+            if (proj->type == PROJ_STONE) {
+                damage_units_in_radius(gs, proj->owner_player, proj->ex, proj->ey,
+                                       TILE_SIZE * SPLASH_RADIUS_VS_UNIT,
+                                       proj->damage / 2, proj->target_unit);
             }
-        } else if(p->target_bld >= 0){
-            game_damage_building(gs, p->target_bld, p->damage);
-            if(p->type == PROJ_STONE){
-                damage_units_in_radius(gs, p->owner_player, p->ex, p->ey,
-                                       TILE_SIZE * 1.5f, p->damage / 2, -1);
+        } else if (proj->target_bld >= 0) {
+            game_damage_building(gs, proj->target_bld, proj->damage);
+            if (proj->type == PROJ_STONE) {
+                damage_units_in_radius(gs, proj->owner_player, proj->ex, proj->ey,
+                                       TILE_SIZE * SPLASH_RADIUS_VS_BLD,
+                                       proj->damage / 2, -1);
             }
         }
-        p->active = false;
+        proj->active = false;
     }
 }
 
-static void game_init_match(GameState *gs, uint32_t seed, int num_players, GameMode mode){
+/* Shared initialisation for all game modes. */
+static void game_init_match(GameState *gs, uint32_t seed,
+                            int num_players, GameMode mode)
+{
     memset(gs, 0, sizeof(GameState));
-    gs->mode = mode;
-    gs->num_players = (num_players < 1) ? 1 : (num_players > 8 ? 8 : num_players);
+    gs->mode        = mode;
+    gs->num_players = clampi(num_players, 1, 8);
     _rng = seed;
 
     gs->phase        = PHASE_PLAYING;
@@ -567,13 +636,18 @@ static void game_init_match(GameState *gs, uint32_t seed, int num_players, GameM
     gs->ai_timer     = 0.0f;
     gs->ai_attack_cd = 90.0f;
 
+    static const int START_FOOD  = 200;
+    static const int START_WOOD  = 200;
+    static const int START_GOLD  = 100;
+    static const int START_POP   = 5;
+
     for (int i = 0; i < gs->num_players; i++) {
-        gs->res[i].amount[RES_FOOD]  = 200;
-        gs->res[i].amount[RES_WOOD]  = 200;
-        gs->res[i].amount[RES_GOLD]  = 100;
+        gs->res[i].amount[RES_FOOD]  = START_FOOD;
+        gs->res[i].amount[RES_WOOD]  = START_WOOD;
+        gs->res[i].amount[RES_GOLD]  = START_GOLD;
         gs->res[i].amount[RES_STONE] = 0;
         gs->res[i].age               = 0;
-        gs->res[i].pop_cap           = 5;
+        gs->res[i].pop_cap           = START_POP;
     }
 }
 
@@ -782,12 +856,16 @@ static void sandbox_setup_bases(GameState *gs){
     map_update_fog(gs);
 }
 
-void game_set_alert(GameState *gs, const char *msg){
-    snprintf(gs->alert,sizeof(gs->alert),"%s",msg);
-    gs->alert_timer=3.5f;
+static const float ALERT_DISPLAY_DURATION = 3.5f;
+
+void game_set_alert(GameState *gs, const char *msg)
+{
+    snprintf(gs->alert, sizeof(gs->alert), "%s", msg);
+    gs->alert_timer = ALERT_DISPLAY_DURATION;
 }
 
-void game_init_started_game(GameState *gs, uint32_t seed, int num_players) {
+void game_init_started_game(GameState *gs, uint32_t seed, int num_players)
+{
     game_init_match(gs, seed, num_players, GAME_MODE_STANDARD);
     game_setup_random_starts(gs);
 }
@@ -1095,56 +1173,59 @@ void game_sandbox_heal_selection(GameState *gs, int player, int building_id,
     game_set_alert(gs, "Sandbox: restored the current selection.");
 }
 
-/* ─── Master update ────────────────────────────────────────── */
-void game_update(GameState *gs, float dt){
-    if(gs->phase!=PHASE_PLAYING) return;
+/* ── Master update ─────────────────────────────────────────── */
 
-    gs->game_time+=dt;
+static const int   MIN_POP_CAP       = 5;
+static const float FOG_UPDATE_INTERVAL = 0.2f;  /* ~5 Hz */
 
-    /* Alert countdown */
-    if(gs->alert_timer>0) gs->alert_timer-=dt;
+void game_update(GameState *gs, float dt)
+{
+    if (gs->phase != PHASE_PLAYING) return;
 
-    if(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_briefing_open) return;
+    gs->game_time += dt;
+
+    if (gs->alert_timer > 0) {
+        gs->alert_timer -= dt;
+    }
+
+    /* Campaign briefing pauses simulation until dismissed. */
+    if (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_briefing_open) return;
 
     hero_possession_update(gs, dt);
     float sim_dt = dt * hero_possession_time_scale(gs);
 
-    /* Update pop caps */
+    /* Recalculate population caps from current buildings. */
     for (int i = 0; i < gs->num_players; i++) {
         if (gs->mode == GAME_MODE_SANDBOX) {
             gs->res[i].pop_cap = POP_CAP_MAX;
         } else {
             gs->res[i].pop_cap = pop_cap_from_buildings(gs, i);
-            if (gs->res[i].pop_cap < 5) gs->res[i].pop_cap = 5;
+            if (gs->res[i].pop_cap < MIN_POP_CAP) {
+                gs->res[i].pop_cap = MIN_POP_CAP;
+            }
         }
     }
 
-    /* Age advancement timers */
-    res_update_age_advance(gs,sim_dt);
-
-    /* Units */
-    units_update_all(gs,sim_dt);
-
-    /* Buildings */
-    buildings_update_all(gs,sim_dt);
-
-    /* Projectiles */
+    res_update_age_advance(gs, sim_dt);
+    units_update_all(gs, sim_dt);
+    buildings_update_all(gs, sim_dt);
     game_update_projectiles(gs, sim_dt);
 
-    /* AI - only in singleplayer */
+    /* AI runs only in singleplayer, non-sandbox, and for the
+       final campaign mission (mission 5). */
     if (!g_net_active && gs->mode != GAME_MODE_SANDBOX &&
         !(gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission < 5)) {
-        ai_update(gs,sim_dt);
+        ai_update(gs, sim_dt);
     }
 
     if (gs->mode == GAME_MODE_CAMPAIGN) {
         game_update_campaign(gs, sim_dt);
     }
 
-    /* Fog of war – throttled to ~5 Hz for performance */
+    /* Fog of war — throttled to ~5 Hz for performance. */
     gs->fog_update_timer -= sim_dt;
-    if(gs->fog_update_timer <= 0.0f){
+    if (gs->fog_update_timer <= 0.0f) {
         map_update_fog(gs);
-        gs->fog_update_timer = 0.2f;
+        gs->fog_update_timer = FOG_UPDATE_INTERVAL;
     }
 }
