@@ -1,42 +1,59 @@
 /*=============================================================
- * building.c  –  Building placement, construction, production
+ * building.c  –  Building placement, construction, production,
+ *                 and technology research
+ *
+ * Manages the lifecycle of buildings: placement on the map,
+ * construction progress, unit training queues, combat (tower/
+ * castle auto-attack), technology research, and destruction.
  *=============================================================*/
 #include "game.h"
 #include <stdio.h>
 
-static uint8_t building_choose_variant(int slot, int player, BldType type, int tx, int ty){
-    if(type != BLD_HOUSE) return 0;
+/* Deterministic visual variant for houses (other buildings use variant 0). */
+static uint8_t building_choose_variant(int slot, int player, BldType type, int tx, int ty)
+{
+    if (type != BLD_HOUSE) return 0;
     unsigned int seed = (unsigned int)(slot * 37 + player * 53 + tx * 97 + ty * 131 + 17);
     return (uint8_t)(seed % HOUSE_VARIANT_COUNT);
 }
 
-static void building_apply_combat_stats(Building *b){
-    b->attack_dmg = 0;
-    b->attack_range = 0.0f;
-    b->attack_cd = 1.5f;
-    b->attack_timer = 0.0f;
-    if(b->type == BLD_TOWN_CENTER){
-        b->attack_dmg = 5;
-        b->attack_range = 6.0f;
-    } else if(b->type == BLD_WATCH_TOWER){
-        b->attack_dmg = 6;
-        b->attack_range = 8.0f;
-    } else if(b->type == BLD_CASTLE){
-        b->attack_dmg = 8;
-        b->attack_range = 8.0f;
+static const float DEFAULT_ATTACK_COOLDOWN = 1.5f;
+
+/* Set base combat stats for defensive buildings (TC, tower, castle). */
+static void building_apply_combat_stats(Building *bld)
+{
+    bld->attack_dmg   = 0;
+    bld->attack_range = 0.0f;
+    bld->attack_cd    = DEFAULT_ATTACK_COOLDOWN;
+    bld->attack_timer = 0.0f;
+
+    if (bld->type == BLD_TOWN_CENTER) {
+        bld->attack_dmg   = 5;
+        bld->attack_range = 6.0f;
+    } else if (bld->type == BLD_WATCH_TOWER) {
+        bld->attack_dmg   = 6;
+        bld->attack_range = 8.0f;
+    } else if (bld->type == BLD_CASTLE) {
+        bld->attack_dmg   = 8;
+        bld->attack_range = 8.0f;
     }
 }
 
-static void building_apply_arrow_upgrades(GameState *gs, Building *b){
-    if(!gs || !b || b->attack_dmg <= 0) return;
-    int atk_bonus = 0;
-    int range_bonus = 0;
-    PlayerRes *pr = &gs->res[b->player];
-    if(pr->tech_unlocked[TECH_FORGED_ARROWS]){ atk_bonus += 1; range_bonus += 1; }
-    if(pr->tech_unlocked[TECH_BODKIN_ARROW]) { atk_bonus += 1; range_bonus += 1; }
-    if(pr->tech_unlocked[TECH_BRACER])       { atk_bonus += 1; range_bonus += 1; }
-    b->attack_dmg += atk_bonus;
-    b->attack_range += (float)range_bonus;
+/* Apply arrow-line tech bonuses to a defensive building. */
+static void building_apply_arrow_upgrades(GameState *gs, Building *bld)
+{
+    if (!gs || !bld || bld->attack_dmg <= 0) return;
+
+    int atk_bonus   = 0;
+    int range_bonus  = 0;
+    PlayerRes *pr = &gs->res[bld->player];
+
+    if (pr->tech_unlocked[TECH_FORGED_ARROWS]) { atk_bonus += 1; range_bonus += 1; }
+    if (pr->tech_unlocked[TECH_BODKIN_ARROW])   { atk_bonus += 1; range_bonus += 1; }
+    if (pr->tech_unlocked[TECH_BRACER])         { atk_bonus += 1; range_bonus += 1; }
+
+    bld->attack_dmg   += atk_bonus;
+    bld->attack_range += (float)range_bonus;
 }
 
 static bool unit_is_siege_target(UnitType type){
@@ -115,46 +132,64 @@ bool building_supports_rally(BldType type){
     }
 }
 
-int building_place(GameState *gs, int player, BldType type, int tx, int ty){
-    int w=building_tw(type), h=building_th(type);
-    if(!map_is_buildable(gs,tx,ty,w,h)) { printf("building_place failed: map_is_buildable\n"); return -1; }
-    if(gs->res[player].age < building_age_required(type)) {
-        printf("building_place failed: requires Feudal Age\n"); return -1;
-    }
-    Cost c=building_cost(type);
-    if(!res_can_afford(&gs->res[player],c)) { printf("building_place failed: res_can_afford\n"); return -1; }
+int building_place(GameState *gs, int player, BldType type, int tx, int ty)
+{
+    int width  = building_tw(type);
+    int height = building_th(type);
 
-    /* Find free slot BEFORE deducting resources to avoid leaking on failure */
+    if (!map_is_buildable(gs, tx, ty, width, height)) {
+        printf("building_place failed: map not buildable\n");
+        return -1;
+    }
+    if (gs->res[player].age < building_age_required(type)) {
+        printf("building_place failed: age requirement not met\n");
+        return -1;
+    }
+
+    Cost cost = building_cost(type);
+    if (!res_can_afford(&gs->res[player], cost)) {
+        printf("building_place failed: insufficient resources\n");
+        return -1;
+    }
+
+    /* Find a free slot BEFORE deducting resources to avoid leaking on failure. */
     int slot = -1;
-    for(int i=0;i<MAX_BUILDINGS;i++){
-        if(!gs->buildings[i].active){ slot=i; break; }
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        if (!gs->buildings[i].active) { slot = i; break; }
     }
-    if(slot < 0) { printf("building_place failed: no slots\n"); return -1; }
+    if (slot < 0) {
+        printf("building_place failed: no free slots\n");
+        return -1;
+    }
 
-    res_deduct(&gs->res[player],c);
+    res_deduct(&gs->res[player], cost);
 
-    Building *b=&gs->buildings[slot];
-    memset(b,0,sizeof(Building));
-    b->active       = true;
-    b->id           = slot;
-    b->player       = player;
-    b->type         = type;
-    b->variant      = building_choose_variant(slot, player, type, tx, ty);
-    b->tx           = tx; b->ty=ty;
-    b->tw           = w;  b->th=h;
-    b->max_hp       = building_max_hp(type);
-    b->hp           = 1;
-    b->construction = 0.0f;
-    b->complete     = false;
-    b->queue_len    = 0;
-    b->train_timer  = 0.0f;
-    b->rally_tx     = tx+w/2;
-    b->rally_ty     = ty+h+1;
-    b->active_tech  = TECH_NONE;
-    b->tech_timer   = 0.0f;
-    building_refresh_upgrades(gs, b);
-    map_place_building(gs,tx,ty,w,h,slot);
-    if(slot >= gs->bld_count) gs->bld_count=slot+1;
+    Building *bld = &gs->buildings[slot];
+    memset(bld, 0, sizeof(Building));
+    bld->active       = true;
+    bld->id           = slot;
+    bld->player       = player;
+    bld->type         = type;
+    bld->variant      = building_choose_variant(slot, player, type, tx, ty);
+    bld->tx           = tx;
+    bld->ty           = ty;
+    bld->tw           = width;
+    bld->th           = height;
+    bld->max_hp       = building_max_hp(type);
+    bld->hp           = 1;      /* Starts at 1 HP; rises with construction. */
+    bld->construction = 0.0f;
+    bld->complete     = false;
+    bld->queue_len    = 0;
+    bld->train_timer  = 0.0f;
+    bld->rally_tx     = tx + width / 2;
+    bld->rally_ty     = ty + height + 1;
+    bld->active_tech  = TECH_NONE;
+    bld->tech_timer   = 0.0f;
+
+    building_refresh_upgrades(gs, bld);
+    map_place_building(gs, tx, ty, width, height, slot);
+    if (slot >= gs->bld_count) gs->bld_count = slot + 1;
+
     printf("building_place success: bid=%d\n", slot);
     return slot;
 }
@@ -204,14 +239,18 @@ void building_destroy(GameState *gs, int bid){
     b->selected = false;
 }
 
-void building_sell(GameState *gs, int bid){
-    Building *b = &gs->buildings[bid];
-    if(!b->active) return;
-    Cost cost = building_cost(b->type);
-    res_add(&gs->res[b->player], RES_FOOD, (int)(cost.food * 0.95f));
-    res_add(&gs->res[b->player], RES_WOOD, (int)(cost.wood * 0.95f));
-    res_add(&gs->res[b->player], RES_GOLD, (int)(cost.gold * 0.95f));
-    res_add(&gs->res[b->player], RES_STONE, (int)(cost.stone * 0.95f));
+static const float SELL_REFUND_RATIO = 0.95f;
+
+void building_sell(GameState *gs, int bid)
+{
+    Building *bld = &gs->buildings[bid];
+    if (!bld->active) return;
+
+    Cost cost = building_cost(bld->type);
+    res_add(&gs->res[bld->player], RES_FOOD,  (int)(cost.food  * SELL_REFUND_RATIO));
+    res_add(&gs->res[bld->player], RES_WOOD,  (int)(cost.wood  * SELL_REFUND_RATIO));
+    res_add(&gs->res[bld->player], RES_GOLD,  (int)(cost.gold  * SELL_REFUND_RATIO));
+    res_add(&gs->res[bld->player], RES_STONE, (int)(cost.stone * SELL_REFUND_RATIO));
     building_destroy(gs, bid);
 }
 
@@ -243,20 +282,30 @@ int building_queued_population(const Building *b){
     return b ? b->queue_len : 0;
 }
 
-void building_enqueue_unit(GameState *gs, Building *b, UnitType ut){
-    if(b->queue_len>=BQUEUE_CAP) return;
-    if(!b->complete) return;
-    if(b->active_tech != TECH_NONE) return;
-    if(!building_can_train_unit(b->type, ut)) return;
-    if(ut == UNIT_BOMBARD_CANNON &&
-       !gs->res[b->player].tech_unlocked[TECH_CANNON_EMPLACEMENTS]) return;
-    if(gs->res[b->player].age < unit_age_required(ut)) return;
-    Cost c=unit_cost(ut);
-    if(!res_can_afford(&gs->res[b->player],c)) return;
-    if(gs->res[b->player].population + building_queued_population(b) >= gs->res[b->player].pop_cap) return;
-    res_deduct(&gs->res[b->player],c);
-    b->queue[b->queue_len++]=ut;
-    if(b->queue_len==1) b->train_timer=building_train_time(ut);
+void building_enqueue_unit(GameState *gs, Building *bld, UnitType unit_type)
+{
+    if (bld->queue_len >= BQUEUE_CAP)      return;
+    if (!bld->complete)                     return;
+    if (bld->active_tech != TECH_NONE)      return;
+    if (!building_can_train_unit(bld->type, unit_type)) return;
+
+    /* Bombard cannon requires the cannon emplacement tech. */
+    if (unit_type == UNIT_BOMBARD_CANNON &&
+        !gs->res[bld->player].tech_unlocked[TECH_CANNON_EMPLACEMENTS]) return;
+
+    if (gs->res[bld->player].age < unit_age_required(unit_type)) return;
+
+    Cost cost = unit_cost(unit_type);
+    if (!res_can_afford(&gs->res[bld->player], cost)) return;
+
+    int pending_pop = gs->res[bld->player].population + building_queued_population(bld);
+    if (pending_pop >= gs->res[bld->player].pop_cap) return;
+
+    res_deduct(&gs->res[bld->player], cost);
+    bld->queue[bld->queue_len++] = unit_type;
+    if (bld->queue_len == 1) {
+        bld->train_timer = building_train_time(unit_type);
+    }
 }
 
 
@@ -715,23 +764,28 @@ void building_start_tech(GameState *gs, Building *b, TechType t) {
     b->tech_timer = tech_time(t);
 }
 
-void buildings_update_all(GameState *gs, float dt){
-    for(int i=0;i<MAX_BUILDINGS;i++)
-        building_update(gs,&gs->buildings[i],dt);
+void buildings_update_all(GameState *gs, float dt)
+{
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        building_update(gs, &gs->buildings[i], dt);
+    }
 }
 
-int building_find(GameState *gs, int player, BldType type, bool complete_only){
-    for(int i=0;i<MAX_BUILDINGS;i++){
-        Building *b=&gs->buildings[i];
-        if(!b->active||b->player!=player||b->type!=type) continue;
-        if(complete_only&&!b->complete) continue;
+int building_find(GameState *gs, int player, BldType type, bool complete_only)
+{
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *bld = &gs->buildings[i];
+        if (!bld->active || bld->player != player || bld->type != type) continue;
+        if (complete_only && !bld->complete) continue;
         return i;
     }
     return -1;
 }
 
-/* ── Public init helper (called from game_init) ─────────────── */
-void buildings_init_player(GameState *gs, int player, int tc_tx, int tc_ty){
-    building_place_ready(gs,player,BLD_TOWN_CENTER,tc_tx,tc_ty);
-    gs->res[player].pop_cap=pop_cap_from_buildings(gs,player);
+/* Called from game_init to place the starting town center and
+   set the initial population cap for a player. */
+void buildings_init_player(GameState *gs, int player, int tc_tx, int tc_ty)
+{
+    building_place_ready(gs, player, BLD_TOWN_CENTER, tc_tx, tc_ty);
+    gs->res[player].pop_cap = pop_cap_from_buildings(gs, player);
 }
