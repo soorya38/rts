@@ -1,5 +1,8 @@
 /*=============================================================
- * main.c  –  Entry point, window init, game loop
+ * main.c  –  Entry point, window initialisation, game loop
+ *
+ * Owns the top-level lifecycle: create window → allocate state →
+ * run input/update/render loop → tear down.
  *=============================================================*/
 #include "game.h"
 #include "raylib.h"
@@ -9,17 +12,66 @@
 #include "ui_state.h"
 
 /* Forward declarations from other modules */
-void game_init(GameState *gs);
-void game_update(GameState *gs, float dt);
+void game_init(GameState *game);
+void game_update(GameState *game, float dt);
 
-int main(void){
-    /* ── Window ── */
+/* Prevent a single long frame from snowballing into further long
+   frames (the "spiral of death").  50 ms ≈ 20 FPS floor. */
+static const float MAX_FRAME_DT = 0.05f;
+
+static const Color CLEAR_COLOR = {10, 10, 10, 255};
+
+/* Keep the FPS counter visible regardless of window size. */
+static const int FPS_RIGHT_MARGIN = 70;
+static const int FPS_TOP_MARGIN   = 4;
+
+/*──────────────────────────────────────────────────────────────
+ * Render – draw the world and HUD for the current frame.
+ *──────────────────────────────────────────────────────────────*/
+static void render_frame(GameState *game, UIState *ui)
+{
+    BeginDrawing();
+    ClearBackground(CLEAR_COLOR);
+
+    bool in_gameplay = (game->phase == PHASE_PLAYING  ||
+                        game->phase == PHASE_PAUSED   ||
+                        game->phase == PHASE_VICTORY  ||
+                        game->phase == PHASE_DEFEAT);
+
+    if (in_gameplay) {
+        bool show_isometric_world =
+            (game->hero.phase == HERO_POSSESSION_OFF      ||
+             game->hero.phase == HERO_POSSESSION_ENTERING ||
+             game->hero.phase == HERO_POSSESSION_EXITING);
+
+        if (show_isometric_world) {
+            BeginMode2D(ui->camera);
+                renderer_draw_world(game, ui);
+            EndMode2D();
+        }
+
+        if (game->hero.phase != HERO_POSSESSION_OFF) {
+            renderer_draw_hero_possession(game, ui);
+        }
+    }
+
+    hud_draw(game, ui);
+    DrawFPS(GetScreenWidth() - FPS_RIGHT_MARGIN, FPS_TOP_MARGIN);
+    EndDrawing();
+}
+
+/*──────────────────────────────────────────────────────────────
+ * Entry point
+ *──────────────────────────────────────────────────────────────*/
+int main(void)
+{
     TraceLog(LOG_INFO, "RTS >> main() entered");
 
+    /* ── Window ─────────────────────────────────────────────── */
 #if defined(PLATFORM_ANDROID) || defined(ANDROID)
-    /* On Android the window is always full-screen; pass 0x0 so Raylib
-       reads the actual device resolution and avoid the resizable flag. */
-    TraceLog(LOG_INFO, "RTS >> platform=ANDROID calling InitWindow(0,0)");
+    /* On Android the window is always full-screen; pass 0×0 so
+       Raylib reads the actual device resolution. */
+    TraceLog(LOG_INFO, "RTS >> platform=ANDROID, InitWindow(0, 0)");
     InitWindow(0, 0, "Sangora");
 #else
     SetConfigFlags(FLAG_MSAA_4X_HINT | FLAG_WINDOW_RESIZABLE);
@@ -28,79 +80,63 @@ int main(void){
     TraceLog(LOG_INFO, "RTS >> InitWindow done. screen=%dx%d",
              GetScreenWidth(), GetScreenHeight());
     InitAudioDevice();
+    SetExitKey(KEY_NULL); /* Don't quit on ESC */
 
-    SetExitKey(KEY_NULL);   /* Don't quit on ESC */
-
-    /* ── Game state ── */
+    /* ── Allocate core state ────────────────────────────────── */
     TraceLog(LOG_INFO, "RTS >> allocating GameState (%zu bytes)", sizeof(GameState));
-    GameState *gs = malloc(sizeof(GameState));
+    GameState *game = malloc(sizeof(GameState));
+
     TraceLog(LOG_INFO, "RTS >> allocating UIState  (%zu bytes)", sizeof(UIState));
     UIState *ui = malloc(sizeof(UIState));
-    if (!gs || !ui) {
-        TraceLog(LOG_ERROR, "RTS >> malloc FAILED: gs=%p ui=%p", (void*)gs, (void*)ui);
+
+    if (!game || !ui) {
+        TraceLog(LOG_ERROR, "RTS >> malloc FAILED: game=%p ui=%p",
+                 (void *)game, (void *)ui);
         CloseWindow();
         return 1;
     }
+
     TraceLog(LOG_INFO, "RTS >> calling game_init");
-    game_init(gs);
+    game_init(game);
+
     TraceLog(LOG_INFO, "RTS >> calling ui_state_init");
-    ui_state_init(ui, gs);
+    ui_state_init(ui, game);
+
     TraceLog(LOG_INFO, "RTS >> init complete, entering game loop");
 
-    GamePhase last_phase = gs->phase;
+    GamePhase previous_phase = game->phase;
 
-    /* ── Main loop ── */
-    while(!WindowShouldClose()){
-        float dt=GetFrameTime();
-        if(dt>0.05f) dt=0.05f;   /* cap dt to avoid spiral of death */
-
-        /* Input */
-        input_update(gs, ui);
-
-        /* Network */
-        net_update(gs);
-
-        /* Update */
-        float sim_dt = dt * gs->game_speed;
-        game_update(gs, sim_dt);
-
-        if (last_phase == PHASE_MENU && gs->phase == PHASE_PLAYING) {
-            ui_center_on_tc(ui, gs);
-        }
-        last_phase = gs->phase;
-
-        /* Render */
-        BeginDrawing();
-        ClearBackground((Color){10,10,10,255});
-
-        if(gs->phase==PHASE_PLAYING || gs->phase==PHASE_PAUSED ||
-           gs->phase==PHASE_VICTORY || gs->phase==PHASE_DEFEAT){
-            if(gs->hero.phase == HERO_POSSESSION_OFF ||
-               gs->hero.phase == HERO_POSSESSION_ENTERING ||
-               gs->hero.phase == HERO_POSSESSION_EXITING){
-                BeginMode2D(ui->camera);
-                    renderer_draw_world(gs, ui);
-                EndMode2D();
-            }
-            if(gs->hero.phase != HERO_POSSESSION_OFF){
-                renderer_draw_hero_possession(gs, ui);
-            }
+    /* ── Main loop ──────────────────────────────────────────── */
+    while (!WindowShouldClose()) {
+        float dt = GetFrameTime();
+        if (dt > MAX_FRAME_DT) {
+            dt = MAX_FRAME_DT;
         }
 
-        /* HUD / overlay (screen-space) */
-        hud_draw(gs, ui);
+        input_update(game, ui);
+        net_update(game);
 
-        /* FPS counter – use actual screen width so it stays visible on any device */
-        DrawFPS(GetScreenWidth()-70, 4);
+        float sim_dt = dt * game->game_speed;
+        game_update(game, sim_dt);
 
-        EndDrawing();
+        /* Re-centre camera when transitioning from menu to gameplay. */
+        if (previous_phase == PHASE_MENU && game->phase == PHASE_PLAYING) {
+            ui_center_on_tc(ui, game);
+        }
+        previous_phase = game->phase;
+
+        render_frame(game, ui);
     }
 
+    /* ── Cleanup ────────────────────────────────────────────── */
     net_deinit();
     ui_state_deinit(ui);
-    if (IsAudioDeviceReady()) CloseAudioDevice();
+    if (IsAudioDeviceReady()) {
+        CloseAudioDevice();
+    }
     CloseWindow();
-    free(gs);
+
+    free(game);
     free(ui);
     return 0;
 }

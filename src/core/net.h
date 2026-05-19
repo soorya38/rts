@@ -1,49 +1,54 @@
 #pragma once
+/*=============================================================
+ * net.h  –  Multiplayer networking interface (ENet-based)
+ *
+ * Provides a thin wrapper over ENet for lockstep-style
+ * multiplayer.  Commands are serialised as NetPacket structs
+ * and broadcast to all peers reliably.
+ *=============================================================*/
 
 #include <stdbool.h>
 #include <stdint.h>
 
-/* ── Windows compatibility ──────────────────────────────────────────────────
- * ENet includes winsock2.h → windows.h, which in turn includes:
- *   wingdi.h   → declares Rectangle() ← conflicts with Raylib's Rectangle typedef
- *   winuser.h  → declares CloseWindow(), ShowCursor(), DrawText() ← conflict
- *   winscard.h → pulls in ole2.h → oleidl.h → needs LPMSG (from winuser.h)
- *
- * Fix:
- *   WIN32_LEAN_AND_MEAN  → tells windows.h to skip winscard.h/OLE/COM entirely
- *   NOGDI                → also skip wingdi.h (Rectangle conflict)
- *   NOUSER               → also skip winuser.h (CloseWindow etc.)
- *   With WIN32_LEAN_AND_MEAN the NOUSER/LPMSG cascade never starts.
- *
- * These defines are Windows-only no-ops elsewhere.
- */
+/* ── Windows compatibility ─────────────────────────────────────
+ * ENet pulls in winsock2.h → windows.h, which declares symbols
+ * that collide with Raylib (Rectangle, CloseWindow, DrawText).
+ * WIN32_LEAN_AND_MEAN + NOGDI + NOUSER prevent those headers
+ * from being included.  These are no-ops on other platforms.
+ * ────────────────────────────────────────────────────────────── */
 #ifdef _WIN32
-  #define WIN32_LEAN_AND_MEAN   /* skip OLE/COM/winscard cascade */
-  #define NOGDI                 /* skip wingdi.h  → no Rectangle() conflict */
-  #define NOUSER                /* skip winuser.h → no CloseWindow/ShowCursor/DrawText */
+  #define WIN32_LEAN_AND_MEAN
+  #define NOGDI
+  #define NOUSER
 #endif
+
 #include "enet.h"
+
 #ifdef _WIN32
   #undef WIN32_LEAN_AND_MEAN
   #undef NOGDI
   #undef NOUSER
-  /* winmm's PlaySound macro collides with raylib's PlaySound() API. */
+  /* winmm's PlaySound macro collides with Raylib's PlaySound(). */
   #ifdef PlaySound
     #undef PlaySound
   #endif
 #endif
 
-/* Multiplayer states */
-extern bool g_net_active;
-extern int  g_local_player_id; // 0 for Host, 1-3 for Clients, -1 for none
-extern bool g_net_connected;
+/* ── Multiplayer state ─────────────────────────────────────── */
 
-static inline int net_get_local_player() {
+extern bool g_net_active;          /* True when hosting or connected    */
+extern int  g_local_player_id;     /* 0 = host, 1-7 = client, -1 = N/A */
+extern bool g_net_connected;       /* True once handshake is complete   */
+
+static inline int net_get_local_player(void)
+{
     return (g_local_player_id < 0) ? 0 : g_local_player_id;
 }
 
 int net_get_peer_count(void);
 int net_get_max_players(void);
+
+/* ── Packet types ──────────────────────────────────────────── */
 
 typedef enum {
     PKT_SYNC_SEED = 0,
@@ -63,20 +68,26 @@ typedef enum {
     PKT_SET_RALLY
 } PacketType;
 
+/* ── Packet structure (wire format) ────────────────────────── */
+
+#define NET_MAX_UNITS_PER_PACKET 64
+
 #pragma pack(push, 1)
 typedef struct {
-    uint8_t  type;
-    uint8_t  player;
-    uint16_t unit_count;     // How many units involved
-    uint16_t units[64];      // Array of unit IDs (max 64 per order)
-    int32_t  tx;             // Target X or Map X
-    int32_t  ty;             // Target Y or Map Y
-    int32_t  target_id;      // Target unit/bld ID
-    int32_t  extra;          // Use for BldType, UnitType, etc.
+    uint8_t  type;           /* PacketType discriminator        */
+    uint8_t  player;         /* Issuing player ID               */
+    uint16_t unit_count;     /* Number of valid entries in units */
+    uint16_t units[NET_MAX_UNITS_PER_PACKET];
+    int32_t  tx;             /* Target tile X / map coordinate  */
+    int32_t  ty;             /* Target tile Y / map coordinate  */
+    int32_t  target_id;      /* Target unit or building ID      */
+    int32_t  extra;          /* Overloaded: BldType, UnitType, formation, etc. */
 } NetPacket;
 #pragma pack(pop)
 
 #include "game.h"
+
+/* ── Lifecycle ─────────────────────────────────────────────── */
 
 bool net_init(void);
 void net_deinit(void);

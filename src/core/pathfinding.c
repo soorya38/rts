@@ -1,92 +1,146 @@
 /*=============================================================
- * pathfinding.c  –  A* on the MAP_W × MAP_H grid
+ * pathfinding.c  –  A* pathfinding on the MAP_W × MAP_H grid
+ *
+ * Uses static workspace arrays (not stack-allocated) to avoid
+ * overflowing Android's ~1 MB game-thread stack when the AI
+ * issues many pathfind() calls in a single frame.
  *=============================================================*/
 #include "game.h"
 
-#define CELLS (MAP_W * MAP_H)
+#define GRID_CELL_COUNT (MAP_W * MAP_H)
 
-/* 8-directional */
-static const int DX[8] = { 0, 1, 0,-1,  1, 1,-1,-1};
-static const int DY[8] = {-1, 0, 1, 0, -1, 1, 1,-1};
-static const float DC[8] = {1,1,1,1, 1.414f,1.414f,1.414f,1.414f};
+/* 8-directional movement: cardinal + diagonal */
+static const int DIRECTION_DX[8] = {  0,  1,  0, -1,   1,  1, -1, -1 };
+static const int DIRECTION_DY[8] = { -1,  0,  1,  0,  -1,  1,  1, -1 };
+static const float DIRECTION_COST[8] = {
+    1.0f, 1.0f, 1.0f, 1.0f,                /* cardinal */
+    1.414f, 1.414f, 1.414f, 1.414f          /* diagonal */
+};
+static const int FIRST_DIAGONAL_DIR = 4;
 
-int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
+/* Octile-distance heuristic for 8-directional grids.
+   Consistent with DIRECTION_COST so A* remains admissible. */
+static float octile_heuristic(int ax, int ay, int bx, int by)
+{
+    int dx = abs(bx - ax);
+    int dy = abs(by - ay);
+    return (dx > dy)
+        ? (0.414f * (float)dy + (float)dx)
+        : (0.414f * (float)dx + (float)dy);
+}
+
+/*──────────────────────────────────────────────────────────────
+ * pathfind  –  find a path from (start_x, start_y) to
+ *              (goal_x, goal_y), writing up to max_len waypoints
+ *              into `out`.  Returns the number of waypoints, or
+ *              0 if no path exists.
+ *
+ * The goal tile itself does NOT need to be passable — this
+ * allows units to pathfind toward gather/attack targets that
+ * occupy impassable tiles.
+ *──────────────────────────────────────────────────────────────*/
+int pathfind(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
              PathCell *out, int max_len)
 {
-    if (!map_in_bounds(sx,sy) || !map_in_bounds(ex,ey)) return 0;
-    if (sx==ex && sy==ey) return 0;
+    if (!map_in_bounds(start_x, start_y) || !map_in_bounds(goal_x, goal_y)) {
+        return 0;
+    }
+    if (start_x == goal_x && start_y == goal_y) {
+        return 0;
+    }
 
-    /* Static workspace – fine for single-threaded game */
-    static float  g[CELLS];
-    static int    from[CELLS];
-    static bool   closed[CELLS];
+    /* Static workspace avoids per-call heap allocation and stack overflow. */
+    static float  cost_so_far[GRID_CELL_COUNT];
+    static int    came_from[GRID_CELL_COUNT];
+    static bool   visited[GRID_CELL_COUNT];
 
-    for(int i=0;i<CELLS;i++){ g[i]=1e30f; from[i]=-1; closed[i]=false; }
+    for (int i = 0; i < GRID_CELL_COUNT; i++) {
+        cost_so_far[i] = 1e30f;
+        came_from[i]    = -1;
+        visited[i]      = false;
+    }
 
-    /* Static workspace – fine for single-threaded game.
-     * NOTE: PriorityQueue is 64KB — MUST be static, not on the stack.
-     *       Android's game thread stack is ~1MB and multiple pathfind()
-     *       calls during AI update would overflow it.
-     * NOTE: Named 'pq_open' not 'open' — Windows MinGW io.h declares
-     *       int open(...) which would conflict with a variable named 'open'. */
-    static PriorityQueue pq_open;
-    pq_init(&pq_open);
+    /* PriorityQueue is ~64 KB — must be static for the same
+       stack-safety reason noted above. */
+    static PriorityQueue open_set;
+    pq_init(&open_set);
 
-    int start = sy*MAP_W + sx;
-    int end   = ey*MAP_W + ex;
+    int start_cell = start_y * MAP_W + start_x;
+    int goal_cell  = goal_y  * MAP_W + goal_x;
 
-    g[start] = 0.0f;
-    pq_push(&pq_open, start, 0.0f);
+    cost_so_far[start_cell] = 0.0f;
+    pq_push(&open_set, start_cell, 0.0f);
 
-    while(!pq_empty(&pq_open)){
-        PQNode cur = pq_pop(&pq_open);
-        int c = cur.cell;
-        if(closed[c]) continue;
-        closed[c] = true;
-        if(c == end) break;
+    /* ── Expand nodes ──────────────────────────────────────── */
+    while (!pq_empty(&open_set)) {
+        PQNode current = pq_pop(&open_set);
+        int cell = current.cell;
 
-        int cx=c%MAP_W, cy=c/MAP_W;
+        if (visited[cell]) continue;
+        visited[cell] = true;
 
-        for(int d=0;d<8;d++){
-            int nx=cx+DX[d], ny=cy+DY[d];
-            if(!map_in_bounds(nx,ny)) continue;
-            int nc=ny*MAP_W+nx;
-            if(closed[nc]) continue;
+        if (cell == goal_cell) break;
 
-            /* Diagonal: both orthogonal neighbours must be passable */
-            if(d>=4){
-                if(!map_is_passable(gs,cx+DX[d],cy) ||
-                   !map_is_passable(gs,cx,cy+DY[d])) continue;
+        int cell_x = cell % MAP_W;
+        int cell_y = cell / MAP_W;
+
+        for (int dir = 0; dir < 8; dir++) {
+            int neighbor_x = cell_x + DIRECTION_DX[dir];
+            int neighbor_y = cell_y + DIRECTION_DY[dir];
+
+            if (!map_in_bounds(neighbor_x, neighbor_y)) continue;
+
+            int neighbor_cell = neighbor_y * MAP_W + neighbor_x;
+            if (visited[neighbor_cell]) continue;
+
+            /* Diagonal moves require both adjacent orthogonal
+               tiles to be passable (no corner-cutting). */
+            if (dir >= FIRST_DIAGONAL_DIR) {
+                bool side_a = map_is_passable(gs, cell_x + DIRECTION_DX[dir], cell_y);
+                bool side_b = map_is_passable(gs, cell_x, cell_y + DIRECTION_DY[dir]);
+                if (!side_a || !side_b) continue;
             }
 
-            /* Destination tile doesn't need to be passable (attack/gather) */
-            if(nc!=end && !map_is_passable(gs,nx,ny)) continue;
+            /* Goal tile doesn't need to be passable (attack/gather target). */
+            if (neighbor_cell != goal_cell && !map_is_passable(gs, neighbor_x, neighbor_y)) {
+                continue;
+            }
 
-            float ng = g[c] + DC[d];
-            if(ng < g[nc]){
-                g[nc]    = ng;
-                from[nc] = c;
-                /* Octile distance heuristic for 8-directional grids */
-                int dx = abs(ex - nx);
-                int dy = abs(ey - ny);
-                float h = (dx > dy) ? (0.414f * dy + dx) : (0.414f * dx + dy);
-                pq_push(&pq_open, nc, ng + h);
+            float tentative_cost = cost_so_far[cell] + DIRECTION_COST[dir];
+            if (tentative_cost < cost_so_far[neighbor_cell]) {
+                cost_so_far[neighbor_cell] = tentative_cost;
+                came_from[neighbor_cell]   = cell;
+                float priority = tentative_cost +
+                    octile_heuristic(neighbor_x, neighbor_y, goal_x, goal_y);
+                pq_push(&open_set, neighbor_cell, priority);
             }
         }
     }
 
-    if(from[end]<0 && end!=start) return 0;  /* no path */
-
-    /* Reconstruct */
-    static int tmp[CELLS];
-    int len=0;
-    for(int c=end; c!=start && c>=0 && len<CELLS; c=from[c])
-        tmp[len++]=c;
-
-    if(len>max_len) len=max_len;
-    for(int i=0;i<len;i++){
-        int c=tmp[len-1-i];
-        out[i]=(PathCell){c%MAP_W, c/MAP_W};
+    /* ── Reconstruct path ──────────────────────────────────── */
+    if (came_from[goal_cell] < 0 && goal_cell != start_cell) {
+        return 0; /* No path found */
     }
-    return len;
+
+    static int reversed_path[GRID_CELL_COUNT];
+    int path_length = 0;
+
+    for (int cell = goal_cell;
+         cell != start_cell && cell >= 0 && path_length < GRID_CELL_COUNT;
+         cell = came_from[cell])
+    {
+        reversed_path[path_length++] = cell;
+    }
+
+    if (path_length > max_len) {
+        path_length = max_len;
+    }
+
+    /* Write waypoints in forward order. */
+    for (int i = 0; i < path_length; i++) {
+        int cell = reversed_path[path_length - 1 - i];
+        out[i] = (PathCell){ cell % MAP_W, cell / MAP_W };
+    }
+
+    return path_length;
 }
