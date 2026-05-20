@@ -1,5 +1,10 @@
 /*=============================================================
- * input_commands.c  –  Hotkeys, build mode, master input_update
+ * input_commands.c  –  Hotkeys, build mode, hero possession
+ *                       controls, and the master input_update
+ *
+ * Coordinates keyboard/mouse/touch input and dispatches to the
+ * appropriate subsystem: build placement, rally points, hero
+ * movement, attack-move, and general hotkeys.
  *=============================================================*/
 #include "game.h"
 #include "ui_state.h"
@@ -7,6 +12,22 @@
 #include <stdio.h>
 #include "net.h"
 #include "hud_common.h"   /* HUD_TOP_H, HUD_BOT_H */
+
+/* ── Hero possession tuning ────────────────────────────────── */
+static const float HERO_MOUSE_SENS_YAW   = 0.0032f;
+static const float HERO_MOUSE_SENS_PITCH = 0.0024f;
+static const float HERO_PITCH_MIN        = -0.62f;
+static const float HERO_PITCH_MAX        =  0.48f;
+static const float HERO_SPEED_BOOST      = 1.15f;
+static const float HERO_BLOCK_SPEED_MULT = 0.42f;
+static const float HERO_DODGE_SPEED_MULT = 3.1f;
+static const float HERO_DODGE_DURATION   = 0.28f;
+static const float HERO_DODGE_COOLDOWN   = 1.1f;
+static const float HERO_DODGE_STAM_COST  = 24.0f;
+static const float HERO_BLOCK_DRAIN_RATE = 34.0f;
+static const float HERO_STAM_REGEN_RATE  = 20.0f;
+static const float HERO_MAX_STAMINA      = 100.0f;
+static const float HERO_RECOIL_SHAKE     = 0.15f;
 
 /* Forward declarations from input split files */
 extern void update_camera(GameState *gs, UIState *ui, float dt);
@@ -237,7 +258,8 @@ static void hero_perform_interact(GameState *gs, UIState *ui, Unit *u) {
     }
 }
 
-static void update_hero_possession_controls(GameState *gs, UIState *ui, float dt) {
+static void update_hero_possession_controls(GameState *gs, UIState *ui, float dt)
+{
     ui_sync_hero_possession(ui, gs);
     if (gs->hero.unit_id < 0 || gs->hero.unit_id >= MAX_UNITS) return;
 
@@ -250,64 +272,69 @@ static void update_hero_possession_controls(GameState *gs, UIState *ui, float dt
         return;
     }
 
+    /* Mouse-look */
     Vector2 md = GetMouseDelta();
-    gs->hero.yaw += md.x * 0.0032f;
-    gs->hero.pitch = clampf(gs->hero.pitch - md.y * 0.0024f, -0.62f, 0.48f);
+    gs->hero.yaw  += md.x * HERO_MOUSE_SENS_YAW;
+    gs->hero.pitch = clampf(gs->hero.pitch - md.y * HERO_MOUSE_SENS_PITCH,
+                            HERO_PITCH_MIN, HERO_PITCH_MAX);
     u->facing = gs->hero.yaw;
 
     if (gs->hero.phase != HERO_POSSESSION_ACTIVE) return;
 
-    float forward = 0.0f;
-    float strafe = 0.0f;
-    if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) forward += 1.0f;
+    /* Movement input */
+    float forward = 0.0f, strafe = 0.0f;
+    if (IsKeyDown(KEY_W) || IsKeyDown(KEY_UP))   forward += 1.0f;
     if (IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) forward -= 1.0f;
     if (IsKeyDown(KEY_D)) strafe += 1.0f;
     if (IsKeyDown(KEY_A)) strafe -= 1.0f;
 
+    /* Blocking drains stamina while held. */
     bool blocking = (IsMouseButtonDown(MOUSE_BUTTON_RIGHT) || IsKeyDown(KEY_Q)) &&
                     gs->hero.stamina > 1.0f && gs->hero.dodge_timer <= 0.0f;
     if (blocking) {
         gs->hero.block_timer = 0.12f;
-        gs->hero.stamina -= 34.0f * dt;
+        gs->hero.stamina -= HERO_BLOCK_DRAIN_RATE * dt;
         if (gs->hero.stamina < 0.0f) gs->hero.stamina = 0.0f;
-        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_Q)) ui_play_hero_block(ui);
+        if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT) || IsKeyPressed(KEY_Q))
+            ui_play_hero_block(ui);
     } else {
-        gs->hero.stamina += 20.0f * dt;
-        if (gs->hero.stamina > 100.0f) gs->hero.stamina = 100.0f;
+        gs->hero.stamina += HERO_STAM_REGEN_RATE * dt;
+        if (gs->hero.stamina > HERO_MAX_STAMINA) gs->hero.stamina = HERO_MAX_STAMINA;
     }
 
+    /* Dodge roll */
     bool dodge_pressed = IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_LEFT_SHIFT);
-    if (dodge_pressed && gs->hero.dodge_cooldown <= 0.0f && gs->hero.stamina >= 24.0f) {
-        gs->hero.dodge_timer = 0.28f;
-        gs->hero.dodge_cooldown = 1.1f;
-        gs->hero.stamina -= 24.0f;
+    if (dodge_pressed && gs->hero.dodge_cooldown <= 0.0f &&
+        gs->hero.stamina >= HERO_DODGE_STAM_COST) {
+        gs->hero.dodge_timer    = HERO_DODGE_DURATION;
+        gs->hero.dodge_cooldown = HERO_DODGE_COOLDOWN;
+        gs->hero.stamina       -= HERO_DODGE_STAM_COST;
         gs->hero.shake = 0.32f;
-        gs->hero.blur = 0.85f;
+        gs->hero.blur  = 0.85f;
         if (fabsf(forward) < 0.1f && fabsf(strafe) < 0.1f) forward = 1.0f;
     }
 
-    if (!blocking && (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_F))) {
+    /* Attack & interact */
+    if (!blocking && (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) || IsKeyPressed(KEY_F)))
         hero_perform_attack(gs, ui, u);
-    }
-    if (IsKeyPressed(KEY_E)) {
+    if (IsKeyPressed(KEY_E))
         hero_perform_interact(gs, ui, u);
-    }
 
-    float fx = cosf(gs->hero.yaw);
-    float fy = sinf(gs->hero.yaw);
-    float rx = -sinf(gs->hero.yaw);
-    float ry = cosf(gs->hero.yaw);
+    /* Apply movement in the hero's local frame. */
+    float fx = cosf(gs->hero.yaw),  fy = sinf(gs->hero.yaw);
+    float rx = -sinf(gs->hero.yaw), ry = cosf(gs->hero.yaw);
     float mx = fx * forward + rx * strafe;
     float my = fy * forward + ry * strafe;
     float mag = sqrtf(mx * mx + my * my);
     if (mag > 0.001f) {
         mx /= mag;
         my /= mag;
-        float speed = u->move_speed * 1.15f;
-        if (blocking) speed *= 0.42f;
-        if (gs->hero.dodge_timer > 0.0f) speed *= 3.1f;
+        float speed = u->move_speed * HERO_SPEED_BOOST;
+        if (blocking)                    speed *= HERO_BLOCK_SPEED_MULT;
+        if (gs->hero.dodge_timer > 0.0f) speed *= HERO_DODGE_SPEED_MULT;
         float step_x = mx * speed * dt;
         float step_y = my * speed * dt;
+        /* Axis-separated collision: try full step first, then 25% slide. */
         if (!hero_try_move(gs, u, step_x, 0.0f)) hero_try_move(gs, u, step_x * 0.25f, 0.0f);
         if (!hero_try_move(gs, u, 0.0f, step_y)) hero_try_move(gs, u, 0.0f, step_y * 0.25f);
         gs->hero.blur = fmaxf(gs->hero.blur, gs->hero.dodge_timer > 0.0f ? 0.65f : 0.18f);

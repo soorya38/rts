@@ -1,5 +1,10 @@
 /*=============================================================
- * hud_menus.c  –  Build menu panel, master hud_draw
+ * hud_menus.c  –  Build menu panel, map overview, master
+ *                  hud_draw dispatcher
+ *
+ * Draws the build-structure grid, full-screen map overview
+ * (with optional OSM overlay), and orchestrates all HUD
+ * sub-renderers.
  *=============================================================*/
 #include "game.h"
 #include "ui_state.h"
@@ -21,88 +26,127 @@ extern void draw_placement_bar(GameState *gs, UIState *ui);
 extern void draw_campaign_panel(GameState *gs, UIState *ui);
 extern void draw_campaign_briefing(GameState *gs, UIState *ui);
 
-static void draw_build_menu(GameState *gs, UIState *ui){
-    if(!ui->build_panel_open) return;
-    bool vil=false;
-    for(int i=0;i<ui->sel_count;i++)
-        if(gs->units[ui->sel_units[i]].type==UNIT_VILLAGER){vil=true;break;}
-    if(!vil){ui->build_panel_open=false;return;}
+/* ── Build menu ──────────────────────────────────────────── */
 
-    int mx=100, bw=116, bh=48, gap=6;
-    int lp = net_get_local_player();
-    int cur_age = gs->res[lp].age;
-    bool has_mill=(building_find(gs,lp,BLD_MILL,true)>=0);
-    bool is_feudal = (cur_age >= 1);
-    bool is_castle = (cur_age >= 2);
-    struct { BldType t; const char *n; Cost c; } items[]={
-        {BLD_HOUSE,        "House (H)\n25 Wood",         {0,25, 0,0}},
-        {BLD_MILL,         "Mill (M)\n100 Wood",         {0,100,0,0}},
-        {BLD_LUMBER_CAMP,  "Lumber (L)\n100 Wood",       {0,100,0,0}},
-        {BLD_MINING_CAMP,  "Mining (N)\n100 Wood",       {0,100,0,0}},
-        {BLD_BARRACKS,     "Barracks (R)\n175 Wood",     {0,175,0,0}},
-        {BLD_ARCHERY_RANGE,"Arch.Range (A)\n175 Wood",   {0,175,0,0}},
-        {BLD_STABLE,       "Stable (V)\n175 Wood",       {0,175,0,0}},
-        {BLD_BLACKSMITH,   "Smith (K)\n150 Wood",        {0,150,0,0}},
-        {BLD_MARKET,       "Market (Y)\n175 Wood",       {0,175,0,0}},
-        {BLD_FARM,         "Farm (F)\n60 Wood",          {0,60, 0,0}},
-        {BLD_WATCH_TOWER,  "Tower (T)\n125W 125S",       {0,125,0,125}},
-        {BLD_MONASTERY,    "Monastery (O)\n175W",        {0,175,0,0}},
-        {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",           {0,200,0,0}},
-        {BLD_UNIVERSITY,   "University (C)\n200W",       {0,200,0,0}},
-        {BLD_CASTLE,       "Castle (X)\n650S",           {0,0,  0,650}},
-        {BLD_WALL,         "Wall (U)\n20 Wood",          {0,20, 0,0}},
-        {BLD_GATE,         "Gate (J)\n35W 15S",          {0,35, 0,15}},
-    };
-    int n=(int)(sizeof(items)/sizeof(items[0]));
-    int rows = (n + 2) / 3;
-    int my = HUD_BOT_Y - (bh * rows + gap * (rows - 1) + 6);
-    float pw=(float)(bw*3+gap*2+16), ph=(float)(bh*rows+gap*(rows-1)+36);
+static const int BUILD_BTN_W   = 116;
+static const int BUILD_BTN_H   = 48;
+static const int BUILD_BTN_GAP = 6;
+static const int BUILD_COLS    = 3;
 
-    DrawRectangleRounded((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,CLITERAL(Color){18,14,8,245});
-#if RAYLIB_VERSION_MAJOR >= 5 && RAYLIB_VERSION_MINOR >= 5
-    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
-#elif RAYLIB_VERSION_MAJOR >= 5
-    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,1.0f,C_HUD_LINE);
-#else
-    DrawRectangleRoundedLines((Rectangle){(float)(mx-8),(float)(my-30),pw,ph},0.06f,6,C_HUD_LINE);
-#endif
-    DrawText("BUILD MENU  — select a structure",mx,my-22,12,CLITERAL(Color){200,180,100,255});
+static void draw_build_menu(GameState *gs, UIState *ui)
+{
+    if (!ui->build_panel_open) return;
 
-    for(int i=0;i<n;i++){
-        int col=i%3, row=i/3;
-        int bx=mx+col*(bw+gap), by=my+row*(bh+gap);
-        bool can=res_can_afford(&gs->res[lp],items[i].c);
-        bool prereq_ok=true;
-        if(items[i].t==BLD_FARM && !has_mill) prereq_ok=false;
-        /* Archery Range, Stable, Blacksmith, Market require Feudal Age */
-        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
-            items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
-            items[i].t==BLD_WATCH_TOWER) && !is_feudal) prereq_ok=false;
-        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP ||
-            items[i].t==BLD_UNIVERSITY || items[i].t==BLD_CASTLE) && !is_castle) prereq_ok=false;
-        bool clickable = can && prereq_ok;
-        bool pressed=draw_button(items[i].n,bx,by,bw,bh,clickable);
-        if(items[i].t==BLD_FARM && !has_mill)
-            DrawText("Needs Mill",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
-        if((items[i].t==BLD_ARCHERY_RANGE || items[i].t==BLD_STABLE ||
-            items[i].t==BLD_BLACKSMITH || items[i].t==BLD_MARKET ||
-            items[i].t==BLD_WATCH_TOWER) && !is_feudal)
-            DrawText("Feudal Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
-        if((items[i].t==BLD_MONASTERY || items[i].t==BLD_SIEGE_WORKSHOP ||
-            items[i].t==BLD_UNIVERSITY || items[i].t==BLD_CASTLE) && !is_castle)
-            DrawText("Castle Age",bx+4,by+bh-14,9,CLITERAL(Color){220,140,60,220});
-        if(pressed && clickable){
-            gs->build_mode.type=items[i].t;
-            gs->build_mode.active=true;
-            gs->build_mode.dragging=false;
-            ui->build_panel_open=false;
-            char msg[48];
-            snprintf(msg,sizeof(msg),"Placing: %s",building_name(items[i].t));
-            game_set_alert(gs,msg);
+    /* Only show when at least one villager is selected. */
+    bool has_villager = false;
+    for (int i = 0; i < ui->sel_count; i++) {
+        if (gs->units[ui->sel_units[i]].type == UNIT_VILLAGER) {
+            has_villager = true;
+            break;
         }
     }
+    if (!has_villager) { ui->build_panel_open = false; return; }
+
+    int lp      = net_get_local_player();
+    int cur_age = gs->res[lp].age;
+    bool has_mill  = (building_find(gs, lp, BLD_MILL, true) >= 0);
+    bool is_feudal = (cur_age >= 1);
+    bool is_castle = (cur_age >= 2);
+
+    struct { BldType t; const char *n; Cost c; } items[] = {
+        {BLD_HOUSE,         "House (H)\n25 Wood",       {0, 25,  0, 0}},
+        {BLD_MILL,          "Mill (M)\n100 Wood",       {0, 100, 0, 0}},
+        {BLD_LUMBER_CAMP,   "Lumber (L)\n100 Wood",     {0, 100, 0, 0}},
+        {BLD_MINING_CAMP,   "Mining (N)\n100 Wood",     {0, 100, 0, 0}},
+        {BLD_BARRACKS,      "Barracks (R)\n175 Wood",   {0, 175, 0, 0}},
+        {BLD_ARCHERY_RANGE, "Arch.Range (A)\n175 Wood", {0, 175, 0, 0}},
+        {BLD_STABLE,        "Stable (V)\n175 Wood",     {0, 175, 0, 0}},
+        {BLD_BLACKSMITH,    "Smith (K)\n150 Wood",      {0, 150, 0, 0}},
+        {BLD_MARKET,        "Market (Y)\n175 Wood",     {0, 175, 0, 0}},
+        {BLD_FARM,          "Farm (F)\n60 Wood",        {0, 60,  0, 0}},
+        {BLD_WATCH_TOWER,   "Tower (T)\n125W 125S",     {0, 125, 0, 125}},
+        {BLD_MONASTERY,     "Monastery (O)\n175W",      {0, 175, 0, 0}},
+        {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",          {0, 200, 0, 0}},
+        {BLD_UNIVERSITY,    "University (C)\n200W",     {0, 200, 0, 0}},
+        {BLD_CASTLE,        "Castle (X)\n650S",         {0, 0,   0, 650}},
+        {BLD_WALL,          "Wall (U)\n20 Wood",        {0, 20,  0, 0}},
+        {BLD_GATE,          "Gate (J)\n35W 15S",        {0, 35,  0, 15}},
+    };
+    int item_count = (int)(sizeof(items) / sizeof(items[0]));
+    int rows = (item_count + BUILD_COLS - 1) / BUILD_COLS;
+
+    int menu_x = 100;
+    int menu_y = HUD_BOT_Y - (BUILD_BTN_H * rows + BUILD_BTN_GAP * (rows - 1) + 6);
+    float panel_w = (float)(BUILD_BTN_W * BUILD_COLS + BUILD_BTN_GAP * (BUILD_COLS - 1) + 16);
+    float panel_h = (float)(BUILD_BTN_H * rows + BUILD_BTN_GAP * (rows - 1) + 36);
+
+    DrawRectangleRounded(
+        (Rectangle){(float)(menu_x - 8), (float)(menu_y - 30), panel_w, panel_h},
+        0.06f, 6, CLITERAL(Color){18, 14, 8, 245});
+#if RAYLIB_VERSION_MAJOR >= 5 && RAYLIB_VERSION_MINOR >= 5
+    DrawRectangleRoundedLines(
+        (Rectangle){(float)(menu_x - 8), (float)(menu_y - 30), panel_w, panel_h},
+        0.06f, 6, C_HUD_LINE);
+#elif RAYLIB_VERSION_MAJOR >= 5
+    DrawRectangleRoundedLines(
+        (Rectangle){(float)(menu_x - 8), (float)(menu_y - 30), panel_w, panel_h},
+        0.06f, 6, 1.0f, C_HUD_LINE);
+#else
+    DrawRectangleRoundedLines(
+        (Rectangle){(float)(menu_x - 8), (float)(menu_y - 30), panel_w, panel_h},
+        0.06f, 6, C_HUD_LINE);
+#endif
+    DrawText("BUILD MENU  — select a structure",
+             menu_x, menu_y - 22, 12, CLITERAL(Color){200, 180, 100, 255});
+
+    for (int i = 0; i < item_count; i++) {
+        int col = i % BUILD_COLS;
+        int row = i / BUILD_COLS;
+        int bx  = menu_x + col * (BUILD_BTN_W + BUILD_BTN_GAP);
+        int by  = menu_y + row * (BUILD_BTN_H + BUILD_BTN_GAP);
+
+        bool affordable = res_can_afford(&gs->res[lp], items[i].c);
+        bool prereq_ok  = true;
+        if (items[i].t == BLD_FARM && !has_mill) prereq_ok = false;
+        if ((items[i].t == BLD_ARCHERY_RANGE || items[i].t == BLD_STABLE ||
+             items[i].t == BLD_BLACKSMITH    || items[i].t == BLD_MARKET ||
+             items[i].t == BLD_WATCH_TOWER) && !is_feudal) prereq_ok = false;
+        if ((items[i].t == BLD_MONASTERY     || items[i].t == BLD_SIEGE_WORKSHOP ||
+             items[i].t == BLD_UNIVERSITY    || items[i].t == BLD_CASTLE) &&
+            !is_castle) prereq_ok = false;
+
+        bool clickable = affordable && prereq_ok;
+        bool pressed = draw_button(items[i].n, bx, by, BUILD_BTN_W, BUILD_BTN_H, clickable);
+
+        /* Show prerequisite hint below locked buttons. */
+        if (items[i].t == BLD_FARM && !has_mill)
+            DrawText("Needs Mill", bx + 4, by + BUILD_BTN_H - 14, 9,
+                     CLITERAL(Color){220, 140, 60, 220});
+        if ((items[i].t == BLD_ARCHERY_RANGE || items[i].t == BLD_STABLE ||
+             items[i].t == BLD_BLACKSMITH    || items[i].t == BLD_MARKET ||
+             items[i].t == BLD_WATCH_TOWER) && !is_feudal)
+            DrawText("Feudal Age", bx + 4, by + BUILD_BTN_H - 14, 9,
+                     CLITERAL(Color){220, 140, 60, 220});
+        if ((items[i].t == BLD_MONASTERY     || items[i].t == BLD_SIEGE_WORKSHOP ||
+             items[i].t == BLD_UNIVERSITY    || items[i].t == BLD_CASTLE) &&
+            !is_castle)
+            DrawText("Castle Age", bx + 4, by + BUILD_BTN_H - 14, 9,
+                     CLITERAL(Color){220, 140, 60, 220});
+
+        if (pressed && clickable) {
+            gs->build_mode.type     = items[i].t;
+            gs->build_mode.active   = true;
+            gs->build_mode.dragging = false;
+            ui->build_panel_open    = false;
+            char msg[48];
+            snprintf(msg, sizeof(msg), "Placing: %s", building_name(items[i].t));
+            game_set_alert(gs, msg);
+        }
+    }
+
     DrawText("[ESC] Cancel  |  H R A V K Y M L N F T O I C X U J",
-             mx,my+bh*rows+gap*(rows-1)+4,9,CLITERAL(Color){100,90,60,200});
+             menu_x, menu_y + BUILD_BTN_H * rows + BUILD_BTN_GAP * (rows - 1) + 4,
+             9, CLITERAL(Color){100, 90, 60, 200});
 }
 
 /* ─── TAB Map Overview ─────────────────────────────────────── */
@@ -354,45 +398,58 @@ static void draw_map_overview(GameState *gs, UIState *ui) {
              CLITERAL(Color){130, 120, 90, 220});
 }
 
-/* ─── Master HUD draw ─────────────────────────────────────── */
-void hud_draw(GameState *gs, UIState *ui){
-    if(gs->phase==PHASE_MENU){ draw_menu(gs, ui); return; }
-    if(gs->phase==PHASE_VICTORY||gs->phase==PHASE_DEFEAT){ draw_end_screen(gs, ui); return; }
+/* ── Master HUD draw ───────────────────────────────────────── */
 
-    if(gs->hero.phase != HERO_POSSESSION_OFF){
+void hud_draw(GameState *gs, UIState *ui)
+{
+    if (gs->phase == PHASE_MENU)    { draw_menu(gs, ui);       return; }
+    if (gs->phase == PHASE_VICTORY ||
+        gs->phase == PHASE_DEFEAT)  { draw_end_screen(gs, ui); return; }
+
+    /* Hero possession shows only the alert overlay. */
+    if (gs->hero.phase != HERO_POSSESSION_OFF) {
         draw_alert(gs, ui);
-        if(gs->phase==PHASE_PAUSED){
-            DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,100});
-            const char *pm="PAUSED  -  Press [P] to resume";
-            DrawText(pm,GetScreenWidth()/2-MeasureText(pm,22)/2,GetScreenHeight()/2-11,22,CLITERAL(Color){220,200,140,255});
+        if (gs->phase == PHASE_PAUSED) {
+            DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                          CLITERAL(Color){0, 0, 0, 100});
+            const char *pm = "PAUSED  -  Press [P] to resume";
+            DrawText(pm, GetScreenWidth() / 2 - MeasureText(pm, 22) / 2,
+                     GetScreenHeight() / 2 - 11, 22,
+                     CLITERAL(Color){220, 200, 140, 255});
         }
         return;
     }
 
+    /* Normal HUD layers. */
     draw_top_bar(gs, ui);
     draw_bottom_panel(gs, ui);
     draw_minimap(gs, ui);
     draw_age_bar(gs);
-    if(ui->build_panel_open) draw_build_menu(gs, ui);
-    if(gs->build_mode.active) draw_placement_bar(gs, ui);
+    if (ui->build_panel_open)  draw_build_menu(gs, ui);
+    if (gs->build_mode.active) draw_placement_bar(gs, ui);
     draw_campaign_panel(gs, ui);
     draw_alert(gs, ui);
     draw_campaign_briefing(gs, ui);
 
-    if(gs->phase==PHASE_PAUSED){
-        DrawRectangle(0,0,GetScreenWidth(),GetScreenHeight(),CLITERAL(Color){0,0,0,100});
-        const char *pm="PAUSED  –  Press [P] to resume";
-        DrawText(pm,GetScreenWidth()/2-MeasureText(pm,22)/2,GetScreenHeight()/2-11,22,CLITERAL(Color){220,200,140,255});
+    if (gs->phase == PHASE_PAUSED) {
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                      CLITERAL(Color){0, 0, 0, 100});
+        const char *pm = "PAUSED  –  Press [P] to resume";
+        DrawText(pm, GetScreenWidth() / 2 - MeasureText(pm, 22) / 2,
+                 GetScreenHeight() / 2 - 11, 22,
+                 CLITERAL(Color){220, 200, 140, 255});
     }
 
     /* TAB map overview */
     if (IsKeyDown(KEY_TAB)) draw_map_overview(gs, ui);
 
-    if(gs->mode == GAME_MODE_STANDARD ||
-       (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission >= 5)){
+    /* AI debug readout (standard mode or late campaign). */
+    if (gs->mode == GAME_MODE_STANDARD ||
+        (gs->mode == GAME_MODE_CAMPAIGN && gs->campaign_mission >= 5)) {
+        static const char *PHASE_NAMES[] = {"Gather", "Build", "Military", "Attack"};
         char dbuf[64];
-        const char *ap[]={"Gather","Build","Military","Attack"};
-        snprintf(dbuf,sizeof(dbuf),"AI: %s | mil: %d",ap[gs->ai_phase],unit_count_military(gs,1));
-        DrawText(dbuf,8,HUD_TOP_H+4,10,CLITERAL(Color){100,90,65,180});
+        snprintf(dbuf, sizeof(dbuf), "AI: %s | mil: %d",
+                 PHASE_NAMES[gs->ai_phase], unit_count_military(gs, 1));
+        DrawText(dbuf, 8, HUD_TOP_H + 4, 10, CLITERAL(Color){100, 90, 65, 180});
     }
 }
