@@ -1,5 +1,9 @@
 /*=============================================================
- * input_selection.c  –  Hit testing, selection helpers, left-click handlers
+ * input_selection.c  –  Hit testing, selection helpers,
+ *                       left-click and tap handlers
+ *
+ * Handles: unit/building hit detection, box/point selection,
+ * context-command dispatch, double-click, and hover.
  *=============================================================*/
 #include "game.h"
 #include "ui_state.h"
@@ -11,8 +15,8 @@
 /* ─── Double-click detection ──────────────────────────────── */
 static double s_last_click_time = 0.0;
 static Vector2 s_last_click_pos = {-9999, -9999};
-#define DOUBLE_CLICK_TIME  0.35f
-#define DOUBLE_CLICK_DIST  16.0f
+static const float DOUBLE_CLICK_TIME = 0.35f;
+static const float DOUBLE_CLICK_DIST = 16.0f;
 
 /* ─── Selection helpers ───────────────────────────────────── */
 bool point_in_unit(Unit *u, Vector2 wp) {
@@ -56,101 +60,82 @@ static bool click_reactivates_selected_hero(GameState *gs, UIState *ui, int uid)
     return false;
 }
 
-/* ─── World-hit testers ───────────────────────────────────── */
-static bool building_hit_info(GameState *gs, Building *b, UIState *ui, Vector2 wp,
-                              int *out_rank, float *out_dist2, float *out_depth_y) {
-    float bx = (float)b->tx * TILE_SIZE, by = (float)b->ty * TILE_SIZE;
-    float bw = (float)b->tw * TILE_SIZE, bh = (float)b->th * TILE_SIZE;
-    Vec2 c = iso_to_world(wp.x, wp.y);
-    bool in_footprint = (c.x >= bx && c.x <= bx + bw && c.y >= by && c.y <= by + bh);
+/* ── Building hit-test (sprite-aware) ─────────────────────── */
 
-    Vector2 p = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh * 0.5f));
+/* Per-building-type sprite dimensions for accurate hit detection.
+ * {target_width, target_height}.  0,0 = use generic fallback. */
+typedef struct { float w, h; } SpriteDims;
+static const SpriteDims BLD_SPRITE_DIMS[BLD_COUNT] = {
+    [BLD_TOWN_CENTER]   = {315.0f, 255.0f},
+    [BLD_HOUSE]         = {150.0f, 157.0f},
+    [BLD_MILL]          = {145.0f, 150.0f},
+    [BLD_LUMBER_CAMP]   = {165.0f, 135.0f},
+    [BLD_BARRACKS]      = {175.0f, 145.0f},
+    [BLD_ARCHERY_RANGE] = {180.0f, 175.0f},
+    [BLD_STABLE]        = {210.0f, 160.0f},
+    [BLD_BLACKSMITH]    = {170.0f, 150.0f},
+    [BLD_MARKET]        = {180.0f, 150.0f},
+    [BLD_MINING_CAMP]   = {180.0f, 145.0f},
+    [BLD_WATCH_TOWER]   = {170.0f, 250.0f},
+    [BLD_MONASTERY]     = {205.0f, 235.0f},
+};
+
+static bool building_hit_info(GameState *gs, Building *bld, UIState *ui, Vector2 wp,
+                              int *out_rank, float *out_dist2, float *out_depth_y)
+{
+    float bx = (float)bld->tx * TILE_SIZE;
+    float by = (float)bld->ty * TILE_SIZE;
+    float bw = (float)bld->tw * TILE_SIZE;
+    float bh = (float)bld->th * TILE_SIZE;
+
+    Vec2 click_world = iso_to_world(wp.x, wp.y);
+    bool in_footprint = (click_world.x >= bx && click_world.x <= bx + bw &&
+                         click_world.y >= by && click_world.y <= by + bh);
+
+    Vector2 center_iso = to_rvec2(world_to_iso(bx + bw * 0.5f, by + bh * 0.5f));
     float footprint_screen_w = bw + bh;
     float hit_w = footprint_screen_w * 0.40f;
-    float hit_h = 42.0f + (float)b->th * 6.0f;
+    float hit_h = 42.0f + (float)bld->th * 6.0f;
+
     int age = 0;
-    if (b->player >= 0 && b->player < NUM_PLAYERS) age = gs->res[b->player].age;
-    Texture2D tex = ui_get_building_texture(ui, b->type, age);
-    if (b->type == BLD_HOUSE) tex = ui_get_house_texture(ui, b->variant);
+    if (bld->player >= 0 && bld->player < NUM_PLAYERS) age = gs->res[bld->player].age;
+    Texture2D tex = ui_get_building_texture(ui, bld->type, age);
+    if (bld->type == BLD_HOUSE) tex = ui_get_house_texture(ui, bld->variant);
 
     if (tex.id != 0) {
         float sc;
-        if (b->type == BLD_TOWN_CENTER) {
-            float scale_x = 315.0f / (float)tex.width;
-            float scale_y = 255.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_HOUSE) {
-            float scale_x = 150.0f / (float)tex.width;
-            float scale_y = 157.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_MILL) {
-            float scale_x = 145.0f / (float)tex.width;
-            float scale_y = 150.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_LUMBER_CAMP) {
-            float scale_x = 165.0f / (float)tex.width;
-            float scale_y = 135.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_BARRACKS) {
-            float scale_x = 175.0f / (float)tex.width;
-            float scale_y = 145.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_ARCHERY_RANGE) {
-            float scale_x = 180.0f / (float)tex.width;
-            float scale_y = 175.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_STABLE) {
-            float scale_x = 210.0f / (float)tex.width;
-            float scale_y = 160.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_BLACKSMITH) {
-            float scale_x = 170.0f / (float)tex.width;
-            float scale_y = 150.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_MARKET) {
-            float scale_x = 180.0f / (float)tex.width;
-            float scale_y = 150.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_MINING_CAMP) {
-            float scale_x = 180.0f / (float)tex.width;
-            float scale_y = 145.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_WATCH_TOWER) {
-            float scale_x = 170.0f / (float)tex.width;
-            float scale_y = 250.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
-        } else if (b->type == BLD_MONASTERY) {
-            float scale_x = 205.0f / (float)tex.width;
-            float scale_y = 235.0f / (float)tex.height;
-            sc = scale_x < scale_y ? scale_x : scale_y;
+        const SpriteDims *dims = &BLD_SPRITE_DIMS[bld->type];
+        if (dims->w > 0.0f) {
+            float sx = dims->w / (float)tex.width;
+            float sy = dims->h / (float)tex.height;
+            sc = sx < sy ? sx : sy;
         } else {
-            float base_ratio = 1.25f / 4.0f;
-            float boost = 1.25f;
-            sc = (float)b->tw * base_ratio * boost;
+            sc = (float)bld->tw * (1.25f / 4.0f) * 1.25f;
         }
         float tw = tex.width * sc;
         float th = tex.height * sc;
-
         float sprite_hit_w = tw * 0.38f;
         float sprite_hit_h = th * 0.30f;
         if (sprite_hit_h > 86.0f) sprite_hit_h = 86.0f;
         if (sprite_hit_w > hit_w) hit_w = sprite_hit_w;
         if (sprite_hit_h > hit_h) hit_h = sprite_hit_h;
     } else {
-        float fallback_hit_w = footprint_screen_w * 0.46f;
-        float fallback_hit_h = 54.0f;
-        if (fallback_hit_w > hit_w) hit_w = fallback_hit_w;
-        if (fallback_hit_h > hit_h) hit_h = fallback_hit_h;
+        float fallback_w = footprint_screen_w * 0.46f;
+        float fallback_h = 54.0f;
+        if (fallback_w > hit_w) hit_w = fallback_w;
+        if (fallback_h > hit_h) hit_h = fallback_h;
     }
 
-    bool in_sprite_box = (wp.x >= p.x - hit_w / 2 && wp.x <= p.x + hit_w / 2 &&
-                          wp.y >= p.y - hit_h && wp.y <= p.y - 6.0f);
+    bool in_sprite_box = (wp.x >= center_iso.x - hit_w / 2 &&
+                          wp.x <= center_iso.x + hit_w / 2 &&
+                          wp.y >= center_iso.y - hit_h &&
+                          wp.y <= center_iso.y - 6.0f);
     if (!in_footprint && !in_sprite_box) return false;
 
     if (out_rank) *out_rank = in_footprint ? 2 : 1;
     if (out_dist2) {
-        float dx = wp.x - p.x;
-        float dy = wp.y - (in_footprint ? p.y : (p.y - hit_h * 0.55f));
+        float dx = wp.x - center_iso.x;
+        float dy = wp.y - (in_footprint ? center_iso.y : (center_iso.y - hit_h * 0.55f));
         *out_dist2 = dx * dx + dy * dy;
     }
     if (out_depth_y) {
