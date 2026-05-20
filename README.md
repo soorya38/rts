@@ -4,6 +4,59 @@ Sangora is a high-performance, single-threaded real-time strategy (RTS) game eng
 
 The engine has been architected and optimized to meet a target of 100 FPS on legacy mobile hardware through custom spatial partitioning, system throttling, and static memory allocation strategy.
 
+---
+
+## Engine Architecture & Technical Details
+
+Sangora has been engineered around strict constraints to achieve peak efficiency and platform determinism. Below are the key technical designs that govern the engine:
+
+### 1. Central Simulation Loop and Determinism
+- Strict Single-Threaded Logic: To guarantee deterministic execution across different operating systems and CPU architectures, the gameplay simulation runs entirely on a single thread. This eliminates race conditions, lock overhead, and scheduling discrepancies that lead to multiplayer desynchronisms.
+- Fixed-Delta Clamping: The game updates via a standard Euler integration pass. To protect the game physics and mechanics from fracturing during intense lag or frame-drops (the "spiral of death"), the simulation time-delta (`dt`) is strictly clamped to a maximum ceiling of `0.05f` seconds.
+- Precise Update Sequencing: Within each simulation frame, operations are executed in a strict chronological sequence to ensure predictability:
+  1. Decrement systemic and campaign timers.
+  2. Parse incoming ENet packets and populate the command queues.
+  3. Advance research and training progressions.
+  4. Perform unit path-following steps and state updates.
+  5. Run the O(N) spatial partitioning separation sweeps.
+  6. Calculate ballistic projectile travel curves and evaluate impact collisions.
+  7. Fire systemic intervals (such as Fog-of-War recalculation at 5Hz).
+
+### 2. High-Performance Mobile Optimization and Memory Management
+- Zero Dynamic Allocations (Memory Pooling): The engine performs zero memory allocations (`malloc`/`free`) during the runtime game loop. All major entities (Units, Buildings, Projectiles, Path nodes) reside in preallocated, contiguous static arrays configured within `GameState`. This eliminates heap fragmentation, prevents cache misses, and guarantees predictable performance on constrained devices.
+- Throttled Systems: Non-critical operations are deferred and run at dedicated, reduced frequencies. For instance, the multi-layered Fog-of-War rasterization is throttled to `FOG_UPDATE_INTERVAL = 0.2f` (5Hz), reducing the CPU burden by 83% compared to per-frame recalculations.
+- View-Frustum Culling: The render layer automatically computes bounding circles for isometric tiles, building models, and units, discarding render passes for any entity positioned outside the active screen viewport.
+
+### 3. RNG and Mathematical Desync Mitigation
+- 32-bit Xorshift PRNG: The engine implements a deterministic 32-bit Xorshift Pseudo-Random Number Generator to control random features (starting layouts, resource placements, and combat accuracy checks).
+  ```c
+  _rng ^= _rng << 13;
+  _rng ^= _rng >> 17;
+  _rng ^= _rng <<  5;
+  ```
+  During multiplayer initiation, the host seeds this generator and synchronizes it to all clients via `PKT_SYNC_SEED` to ensure parallel random choices across the network.
+- Floating-Point Alignment: To circumvent compile-time floating-point optimization differences (such as FMA operations) that cause desyncs, coordinate systems are strictly normalized, and speed variables are constrained to prevent precision accumulation drift.
+
+### 4. Hybrid 2D/3D Billboarding Pipeline
+- Standard View Projection: Conversions between 2D continuous world coordinates and tilted screen coordinates are performed via a strict 2:1 isometric transformation:
+  ```c
+  ScreenX = WorldX - WorldY
+  ScreenY = (WorldX + WorldY) * 0.5
+  ```
+- 3D Billboarding System: While the first-person Hero Possession view shifts the camera into a perspective frustum, standard 2D unit and building assets are rendered within the 3D space as billboards. The engine dynamically evaluates the angle between the possessed hero's camera position and the target sprite coordinates:
+  ```c
+  float dx = camera.position.x - sprite.position.x;
+  float dz = camera.position.z - sprite.position.z;
+  float angle = atan2f(dx, dz) * RAD2DEG;
+  ```
+  This rotates the 2D billboard texture to perfectly face the perspective view camera on every frame, preserving scale, vertical alignments, and rendering performance.
+
+### 5. Multiplayer Lockstep Protocol
+- Command Replication: Rather than sending large state snapshots of every unit and tile, the engine transmits compact, intent-based network payloads (`NetPacket`) through ENet's reliable channels.
+- Peer Connection Mapping: A robust star-topology connection map assigns unique ID coordinates to joining peers (`PKT_ID_ASSIGN`), establishing a centralized time-sync loop driven by the host.
+
+---
+
 ## Key Features
 
 ### Core Simulation and Mechanics
@@ -161,11 +214,3 @@ make android-deploy
 - Exit Possession: Escape or E
 
 ---
-
-## Optimization Blueprint
-
-To achieve 100 FPS performance on legacy devices, the engine enforces these paradigms:
-1. Zero Runtime Allocation: Memory is statically allocated in pool arrays at start. No malloc/free inside update loops prevents heap fragmentation.
-2. Spatial Separation Grid: Limits collision scans to adjacent grids only, turning a bottleneck O(N^2) process into an O(N) calculation.
-3. System Throttling: High-cost calculations (e.g. Fog-of-War recalculation, AI path-refresh polling) are throttled to run at 5Hz to 10Hz rather than every frame.
-4. View Frustum Culling: Bypasses sprite and geometry render submissions for any objects outside the screen viewport.
