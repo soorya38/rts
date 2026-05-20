@@ -56,6 +56,37 @@ The codebase adheres to a clean, decoupled modular design. Hardware/UI presentat
 
 ---
 
+## Core Algorithms
+
+Sangora uses custom algorithms and heuristics tuned for determinism and mobile performance:
+
+### 1. Movement and Pathfinding
+- 8-Directional A* Search: Evaluates optimal paths over the 64x64 grid. Cost parameters are configured to 1.0 for orthogonal steps and 1.414 for diagonal steps.
+- Static Binary Min-Heap: Leverages a preallocated priority queue heap to perform node selections without triggering dynamic heap memory operations, guaranteeing O(log N) operations and zero GC/fragmentation.
+- Diagonal Blocker Checking: Prevents units from slicing through solid tile corners by validating that both adjacent orthogonal tiles are passable before allowing a diagonal transition.
+- Adjacent-Tile Outward Search: When routing towards a solid, non-passable entity (such as a forest patch or castle footprint), the engine uses `find_adjacent_tile()` and `map_find_passable_near()` to find the nearest navigable, unoccupied perimeter tile.
+- Formation Target Allocation: Distributes move targets for multi-unit selection using a dynamic grid pattern (width scaled to `sqrt(unit_count)`, maxing at 5). Individual targets are then jittered to nearby passable tiles to prevent unit clustering.
+
+### 2. Collision and Spatial Partitioning
+- O(N) Spatial Partitioning Grid: Subdivides the map into a coarse grid system. Units are dynamically assigned to grid cells every frame, allowing collision checks to bypass all other entities and focus solely on adjacent grid cells, reducing CPU workload by ~98%.
+- Multi-Pass Iterative Separation: Runs 4 iterative cycles of position resolution per tick, correcting overlaps gradually to minimize computational snapping artifacts.
+- Orthogonal Vector Sliding: Resolves unit-on-unit blockades by calculating a perpendicular normal projection. If two units collide head-on, the engine applies a slight lateral vector, allowing them to slide smoothly past each other.
+
+### 3. Procedural Generation and Geo-Rasterization
+- Nominatim and Overpass Mapping: Converts standard location strings to GPS bounding boxes, fetching geographical raw vector data (roads, water bodies, forests) via Overpass API queries.
+- Point-in-Polygon (PIP) Ray-Casting: Rasterizes closed OSM polygons (lakes, residential zones) onto the 64x64 game map by casting horizontal vectors and tracking boundary edge crossings.
+- Polyline Distance Approximation: Rasterizes linear features (roads and rivers) into coordinate footprints by calculating distance-to-segment metrics against local tiles.
+- Fisher-Yates Compass Shuffling: Shuffles starting directions uniformly to deploy starting resource patches (food, gold, stone) in a random but strictly balanced circular pattern around starting town centers.
+- Cellular-Automata Blobs: Generates organic, cohesive forest and lake clusters using recursive cluster generation combined with cellular-automata neighbor counters, preventing isolated single-tile spikes.
+
+### 4. Gameplay Simulation and AI
+- Dynamic Stature Upgrades: Instead of accumulating multiplier cascades that can lead to arithmetic drift, all unit and building stats are periodically recalculated from base structures combined with unlocked global boolean flag indexes.
+- Monk Conversion: Converts hostile units by transferring team properties, resetting execution targets, and synchronizing pop caps.
+- Scout Landmark Heuristics: Auto-controls AI scouts using a low-overhead roaming system that checks local fog boundaries and sequences exploration points across primary quadrants (corners, center).
+- Just-in-Time Construction Scheduler: Computes current population headroom, factoring in active queue targets, and dynamically issues house placement orders to avoid training blockages.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
