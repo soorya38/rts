@@ -1,5 +1,12 @@
 /*=============================================================
- * renderer_world.c  –  Buildings, units, selection, ghost, master render
+ * renderer_world.c  –  Isometric world rendering: buildings,
+ *                       units, selection indicators, build ghost,
+ *                       projectiles, and the master render pass
+ *
+ * Draws the entire isometric game world by iterating visible
+ * tiles, buildings, units, and effects within the camera
+ * frustum.  Handles sprite scaling, wall connectivity, depth
+ * sorting, and the build-mode ghost overlay.
  *=============================================================*/
 #include "game.h"
 #include "ui_state.h"

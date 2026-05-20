@@ -1,5 +1,11 @@
 /*=============================================================
- * hud_overlays.c  –  Shared helpers, icons, alert, end/menu screens
+ * hud_overlays.c  –  Shared HUD helpers: icon drawing, buttons,
+ *                    tooltips, alerts, end/menu screens
+ *
+ * Provides the reusable drawing primitives that other HUD files
+ * depend on: resource icons (food/wood/gold/stone), the generic
+ * draw_button() widget, alert banners, and full-screen overlays
+ * (victory/defeat, campaign briefing, main menu).
  *=============================================================*/
 #include "game.h"
 #include "ui_state.h"
@@ -9,88 +15,110 @@
 #include <time.h>
 #include "net.h"
 
-/* ── Scaled icon helpers ─────────────────────────────────── */
-void draw_food_icon(UIState *ui, int x,int y){
+/* ── Scaled resource icons ───────────────────────────────── */
+
+/* Each icon helper draws either a loaded texture or a
+ * procedural fallback shape when assets are missing. */
+
+void draw_food_icon(UIState *ui, int x, int y)
+{
     if (ui->tex_ui_food.id != 0) {
         float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_food.width;
         DrawTextureEx(ui->tex_ui_food, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
     } else {
         int s = (int)(8 * hud_scale());
-        DrawCircle(x+s,y+s,s,CLITERAL(Color){50,170,40,255});
-        DrawCircle(x+s,y+s-1,(int)(s*0.55f),CLITERAL(Color){100,210,70,255});
+        DrawCircle(x + s, y + s, s, CLITERAL(Color){50, 170, 40, 255});
+        DrawCircle(x + s, y + s - 1, (int)(s * 0.55f), CLITERAL(Color){100, 210, 70, 255});
     }
 }
-void draw_wood_icon(UIState *ui, int x,int y){
+
+void draw_wood_icon(UIState *ui, int x, int y)
+{
     if (ui->tex_ui_wood.id != 0) {
         float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_wood.width;
         DrawTextureEx(ui->tex_ui_wood, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
     } else {
         int s = (int)(8 * hud_scale());
-        DrawRectangle(x+s/2,y+s/3,s/2,(int)(s*1.3f),CLITERAL(Color){120,75,25,255});
-        DrawRectangle(x+s/4,y+s/2,s,s/3,CLITERAL(Color){150,100,40,255});
+        DrawRectangle(x + s / 2, y + s / 3, s / 2, (int)(s * 1.3f), CLITERAL(Color){120, 75, 25, 255});
+        DrawRectangle(x + s / 4, y + s / 2, s, s / 3, CLITERAL(Color){150, 100, 40, 255});
     }
 }
-void draw_gold_icon(UIState *ui, int x,int y){
+
+void draw_gold_icon(UIState *ui, int x, int y)
+{
     if (ui->tex_ui_gold.id != 0) {
         float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_gold.width;
         DrawTextureEx(ui->tex_ui_gold, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
     } else {
         int s = (int)(8 * hud_scale());
-        DrawCircle(x+s,y+s,s,CLITERAL(Color){210,170,20,255});
-        DrawCircle(x+s,y+s-1,(int)(s*0.55f),CLITERAL(Color){240,210,60,255});
+        DrawCircle(x + s, y + s, s, CLITERAL(Color){210, 170, 20, 255});
+        DrawCircle(x + s, y + s - 1, (int)(s * 0.55f), CLITERAL(Color){240, 210, 60, 255});
     }
 }
-void draw_stone_icon(UIState *ui, int x,int y){
+
+void draw_stone_icon(UIState *ui, int x, int y)
+{
     if (ui->tex_ui_stone.id != 0) {
         float sc = (int)(24 * hud_scale()) / (float)ui->tex_ui_stone.width;
         DrawTextureEx(ui->tex_ui_stone, (Vector2){(float)x, (float)y - 4}, 0.0f, sc, WHITE);
     } else {
         int s = (int)(8 * hud_scale());
-        DrawCircle(x+s,y+s+1,s,CLITERAL(Color){155,148,138,255});
-        DrawCircle(x+s-1,y+s-1,(int)(s*0.55f),CLITERAL(Color){195,188,178,255});
+        DrawCircle(x + s, y + s + 1, s, CLITERAL(Color){155, 148, 138, 255});
+        DrawCircle(x + s - 1, y + s - 1, (int)(s * 0.55f), CLITERAL(Color){195, 188, 178, 255});
     }
 }
 
-bool draw_button(const char *label, int x, int y, int w, int h, bool enabled){
+/* ── Generic UI button widget ──────────────────────────── */
+
+bool draw_button(const char *label, int x, int y, int w, int h, bool enabled)
+{
     float sc = hud_scale();
     Vector2 mp = GetMousePosition();
-    /* Also check touch position for hit-testing */
-    bool hover = enabled && mp.x>=x && mp.x<=x+w && mp.y>=y && mp.y<=y+h;
+    bool hover = enabled && mp.x >= x && mp.x <= x + w && mp.y >= y && mp.y <= y + h;
+
+    /* Also check touch position for mobile hit-testing. */
     if (!hover && GetTouchPointCount() > 0) {
         Vector2 tp = GetTouchPosition(0);
-        hover = enabled && tp.x>=x && tp.x<=x+w && tp.y>=y && tp.y<=y+h;
+        hover = enabled && tp.x >= x && tp.x <= x + w && tp.y >= y && tp.y <= y + h;
     }
+
     Color bg = hover ? C_BTN_HOV : C_BTN_NORM;
-    if(!enabled) bg=CLITERAL(Color){30,25,15,200};
-    DrawRectangle(x,y,w,h,bg);
-    DrawRectangleLinesEx((Rectangle){(float)x,(float)y,(float)w,(float)h},1.5f,C_BTN_BORD);
-    Color tc = enabled ? C_HUD_TXT : CLITERAL(Color){100,90,60,255};
-    int fs=(int)(12*sc);
+    if (!enabled) bg = CLITERAL(Color){30, 25, 15, 200};
+    DrawRectangle(x, y, w, h, bg);
+    DrawRectangleLinesEx((Rectangle){(float)x, (float)y, (float)w, (float)h}, 1.5f, C_BTN_BORD);
+
+    Color tc = enabled ? C_HUD_TXT : CLITERAL(Color){100, 90, 60, 255};
+    int fs = (int)(12 * sc);
+
     const char *nl = strchr(label, '\n');
     if (nl) {
+        /* Two-line label: center each line independently. */
         int len1 = nl - label;
         char line1[64];
         if ((size_t)len1 >= sizeof(line1)) len1 = (int)sizeof(line1) - 1;
         strncpy(line1, label, len1);
         line1[len1] = '\0';
         const char *line2 = nl + 1;
-        
+
         int tw1 = MeasureText(line1, fs);
         int tw2 = MeasureText(line2, fs);
-        int total_h = fs * 2 + 2; 
+        int total_h = fs * 2 + 2;
         int start_y = y + (h - total_h) / 2;
-        
-        DrawText(line1, x + (w - tw1)/2, start_y, fs, tc);
-        DrawText(line2, x + (w - tw2)/2, start_y + fs + 2, fs, tc);
+        DrawText(line1, x + (w - tw1) / 2, start_y, fs, tc);
+        DrawText(line2, x + (w - tw2) / 2, start_y + fs + 2, fs, tc);
     } else {
-        int tw=MeasureText(label,fs);
-        DrawText(label,x+(w-tw)/2,y+(h-fs)/2,fs,tc);
+        int tw = MeasureText(label, fs);
+        DrawText(label, x + (w - tw) / 2, y + (h - fs) / 2, fs, tc);
     }
+
     return hover && (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) || IsGestureDetected(GESTURE_TAP));
 }
 
-void draw_tooltip(const char *text, int x, int y) {
-    int fs = (int)(11 * hud_scale()), tw = MeasureText(text, fs), th = fs + 6;
+void draw_tooltip(const char *text, int x, int y)
+{
+    int fs = (int)(11 * hud_scale());
+    int tw = MeasureText(text, fs);
+    int th = fs + 6;
     DrawRectangle(x, y, tw + 10, th, CLITERAL(Color){20, 18, 12, 230});
     DrawRectangleLines(x, y, tw + 10, th, C_HUD_LINE);
     DrawText(text, x + 5, y + 3, fs, C_HUD_TXT);

@@ -1,5 +1,12 @@
 /*=============================================================
- * osm_mapgen.c – Procedural RTS map from OpenStreetMap data
+ * osm_mapgen.c  –  Procedural RTS map from OpenStreetMap data
+ *
+ * Pipeline: (1) Geocode a location name via Nominatim →
+ * (2) Fetch nearby features from Overpass API → (3) Rasterize
+ * water/forest/road/sand polygons onto the tile grid →
+ * (4) Place starting buildings, resources, and neutral
+ * landmarks to produce a playable map.  Only compiled when
+ * RTS_HAS_CURL is defined; otherwise provides a stub.
  *=============================================================*/
 #include "game.h"
 #include "osm_mapgen.h"

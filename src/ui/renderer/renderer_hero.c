@@ -1,5 +1,11 @@
 /*=============================================================
- * renderer_hero.c - Cinematic first-person Hero Possession view
+ * renderer_hero.c  –  First-person Hero Possession renderer
+ *
+ * Draws the 3D perspective view when the player possesses a
+ * unit: terrain tiles, buildings (with GLTF model support),
+ * other units as simple 3D shapes, projectiles, the first-
+ * person weapon overlay, archer crosshair, and the HUD
+ * meters (stamina, HP, timer).
  *=============================================================*/
 #include "game.h"
 #include "hud_common.h"

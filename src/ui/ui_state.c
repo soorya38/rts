@@ -1,3 +1,12 @@
+/*=============================================================
+ * ui_state.c  –  UI state initialization, asset loading, and
+ *                 hero possession camera synchronization
+ *
+ * Owns the UIState lifecycle: loads all building/unit textures
+ * and 3D models (with multi-path fallbacks), generates
+ * procedural hero sound effects, and synchronizes the 2D
+ * camera with the hero possession 3D view.
+ *=============================================================*/
 #include "ui_state.h"
 #include "net.h"
 #include <math.h>

@@ -1,5 +1,12 @@
 /*=============================================================
- * hud_bars.c  –  Top resource bar, bottom panel, minimap
+ * hud_bars.c  –  Top resource bar, bottom selection panel,
+ *                 minimap, age progress, and training queue
+ *
+ * Draws: resource counters (food/wood/gold/stone/pop), the
+ * age-advance button, the bottom context panel (showing
+ * building controls, unit stats, or idle help), the tech
+ * research grid, formation picker, and the isometric minimap
+ * with fog-of-war and camera view indicator.
  *=============================================================*/
 #include "game.h"
 #include "ui_state.h"
