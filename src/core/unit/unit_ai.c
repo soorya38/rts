@@ -1,11 +1,15 @@
 /*=============================================================
- * unit_ai.c  –  Unit movement, gathering, building, combat
+ * unit_ai.c  –  Per-unit update logic: movement, gathering,
+ *                construction, combat, and auto-targeting
+ *
+ * Each unit's state machine is ticked here.  Also contains the
+ * spatial-grid-based separation pass that prevents overlapping.
  *=============================================================*/
 #include "game.h"
 #include "net.h"
 #include <stdio.h>
 
-#define UNIT_PERSONAL_SPACE 14.0f
+static const float UNIT_PERSONAL_SPACE = 14.0f;
 
 static ResType tile_to_res_ai(TileType t){
     switch(t){
@@ -348,9 +352,16 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
     }
 }
 
-/* ─── Combat ───────────────────────────────────────────────── */
-static float dist_to_unit(Unit *a,Unit *b){return dist2f(a->wx,a->wy,b->wx,b->wy)/TILE_SIZE;}
-static float dist_to_bld(Unit *u,Building *b){
+/* ── Combat helpers ───────────────────────────────────────── */
+
+static float dist_to_unit(Unit *a, Unit *b)
+{
+    return dist2f(a->wx, a->wy, b->wx, b->wy) / TILE_SIZE;
+}
+
+/* Distance from a unit to the nearest edge of a building's footprint. */
+static float dist_to_building(Unit *u, Building *b)
+{
     float bx1 = b->tx * TILE_SIZE;
     float by1 = b->ty * TILE_SIZE;
     float bx2 = bx1 + b->tw * TILE_SIZE;
@@ -360,13 +371,16 @@ static float dist_to_bld(Unit *u,Building *b){
     return sqrtf((u->wx - cx) * (u->wx - cx) + (u->wy - cy) * (u->wy - cy)) / TILE_SIZE;
 }
 
-static int auto_find_enemy_unit(GameState *gs,Unit *u){
-    float best=u->vision_range; int found=-1;
-    for(int i=0;i<MAX_UNITS;i++){
-        Unit *t=&gs->units[i];
-        if(!t->active||t->player==u->player||t->state==US_DEAD||t->state==US_DYING) continue;
-        float d=dist_to_unit(u,t);
-        if(d<best){best=d;found=i;}
+static int auto_find_enemy_unit(GameState *gs, Unit *unit)
+{
+    float best_dist = unit->vision_range;
+    int found = -1;
+    for (int i = 0; i < MAX_UNITS; i++) {
+        Unit *target = &gs->units[i];
+        if (!target->active || target->player == unit->player ||
+            target->state == US_DEAD || target->state == US_DYING) continue;
+        float d = dist_to_unit(unit, target);
+        if (d < best_dist) { best_dist = d; found = i; }
     }
     return found;
 }
@@ -440,13 +454,15 @@ static void unit_do_monk_support(GameState *gs, Unit *u, float dt){
         u->attack_timer = 0.75f;
     }
 }
-static int auto_find_enemy_bld(GameState *gs,Unit *u){
-    float best=u->vision_range; int found=-1;
-    for(int i=0;i<MAX_BUILDINGS;i++){
-        Building *b=&gs->buildings[i];
-        if(!b->active||b->player==u->player||!b->complete) continue;
-        float d=dist_to_bld(u,b);
-        if(d<best){best=d;found=i;}
+static int auto_find_enemy_building(GameState *gs, Unit *unit)
+{
+    float best_dist = unit->vision_range;
+    int found = -1;
+    for (int i = 0; i < MAX_BUILDINGS; i++) {
+        Building *bld = &gs->buildings[i];
+        if (!bld->active || bld->player == unit->player || !bld->complete) continue;
+        float d = dist_to_building(unit, bld);
+        if (d < best_dist) { best_dist = d; found = i; }
     }
     return found;
 }
@@ -463,13 +479,13 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
     if(u->target_unit<0&&u->target_bld<0){
         if(!u->stance_manual) {
             u->target_unit=auto_find_enemy_unit(gs,u);
-            if(u->target_unit<0) u->target_bld=auto_find_enemy_bld(gs,u);
+            if(u->target_unit<0) u->target_bld=auto_find_enemy_building(gs,u);
         }
         if(u->target_unit<0&&u->target_bld<0){u->state=US_IDLE;return;}
     }
     float dist=9999.0f;
     if(u->target_unit>=0) dist=dist_to_unit(u,&gs->units[u->target_unit]);
-    else                   dist=dist_to_bld(u,&gs->buildings[u->target_bld]);
+    else                   dist=dist_to_building(u,&gs->buildings[u->target_bld]);
 
     if(dist>u->attack_range){
         /* Path-retry cooldown: anim_timer doubles as a repathing gate for
@@ -658,7 +674,7 @@ void unit_update(GameState *gs, Unit *u, float dt){
                 int e=auto_find_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
                 else {
-                    int b=auto_find_enemy_bld(gs,u);
+                    int b=auto_find_enemy_building(gs,u);
                     if(b>=0){u->target_bld=b;u->state=US_ATTACKING;}
                 }
             }
@@ -668,7 +684,7 @@ void unit_update(GameState *gs, Unit *u, float dt){
                 int e=auto_find_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
                 else {
-                    int b=auto_find_enemy_bld(gs,u);
+                    int b=auto_find_enemy_building(gs,u);
                     if(b>=0){u->target_bld=b;u->state=US_ATTACKING;}
                 }
             }

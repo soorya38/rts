@@ -63,11 +63,27 @@ static inline PQNode pq_pop(PriorityQueue *q) {
 }
 
 /* ─── Math helpers ──────────────────────────────────────────── */
-static inline float clampf(float v,float lo,float hi){return v<lo?lo:v>hi?hi:v;}
-static inline int   clampi(int v,int lo,int hi){return v<lo?lo:v>hi?hi:v;}
-static inline float lerpf(float a,float b,float t){return a+(b-a)*t;}
-static inline float dist2f(float ax,float ay,float bx,float by){
-    float dx=bx-ax,dy=by-ay; return sqrtf(dx*dx+dy*dy);
+
+static inline float clampf(float val, float lo, float hi)
+{
+    return val < lo ? lo : val > hi ? hi : val;
+}
+
+static inline int clampi(int val, int lo, int hi)
+{
+    return val < lo ? lo : val > hi ? hi : val;
+}
+
+static inline float lerpf(float a, float b, float t)
+{
+    return a + (b - a) * t;
+}
+
+static inline float dist2f(float ax, float ay, float bx, float by)
+{
+    float dx = bx - ax;
+    float dy = by - ay;
+    return sqrtf(dx * dx + dy * dy);
 }
 
 /* ─── Isometric Math ──────────────────────────────────────── */
@@ -90,13 +106,26 @@ static inline Vec2 iso_to_world(float ix, float iy) {
     };
 }
 
-/* ─── RNG ────────────────────────────────────────────────────── */
+/* ─── RNG (xorshift32) ───────────────────────────────────────── */
 extern uint32_t _rng;
-static inline uint32_t rng_next(void){
-    _rng ^= _rng<<13; _rng ^= _rng>>17; _rng ^= _rng<<5; return _rng;
+
+static inline uint32_t rng_next(void)
+{
+    _rng ^= _rng << 13;
+    _rng ^= _rng >> 17;
+    _rng ^= _rng <<  5;
+    return _rng;
 }
-static inline int rng_range(int lo,int hi){return lo+(int)(rng_next()%(unsigned)(hi-lo+1));}
-static inline float rng_frac(void){return (rng_next()&0xFFFF)/65535.0f;}
+
+static inline int rng_range(int lo, int hi)
+{
+    return lo + (int)(rng_next() % (unsigned)(hi - lo + 1));
+}
+
+static inline float rng_frac(void)
+{
+    return (rng_next() & 0xFFFF) / 65535.0f;
+}
 
 /* ─── Tile / Map ─────────────────────────────────────────────── */
 typedef enum {
@@ -445,26 +474,31 @@ typedef struct { int food,wood,gold,stone; } Cost;
  * Function declarations — implemented in respective .c files
  * ────────────────────────────────────────────────────────────── */
 
-/* map.c */
-/* p1_x/p1_y and p2_x/p2_y receive the TC tile centres chosen for each player */
+/* ── map.c ─────────────────────────────────────────────────── */
+
 void map_init(GameState *gs, int *start_x, int *start_y, int num_players);
-bool map_in_bounds(int x,int y);
-bool map_is_passable(GameState *gs,int x,int y);
-bool map_is_buildable(GameState *gs,int x,int y,int w,int h);
-void map_place_building(GameState *gs,int tx,int ty,int w,int h,int bid);
-void map_clear_building(GameState *gs,int tx,int ty,int w,int h);
+bool map_in_bounds(int x, int y);
+bool map_is_passable(GameState *gs, int x, int y);
+bool map_is_buildable(GameState *gs, int tx, int ty, int width, int height);
+void map_place_building(GameState *gs, int tx, int ty, int width, int height, int bid);
+void map_clear_building(GameState *gs, int tx, int ty, int width, int height);
 void map_update_fog(GameState *gs);
-int  map_find_resource(GameState *gs,int player,ResType res,int near_tx,int near_ty,int *out_x,int *out_y);
-int  map_find_dropoff(GameState *gs,int player,ResType res,float wx,float wy,int *out_tx,int *out_ty);
-int  map_find_passable_near(GameState *gs, int tx, int ty, int *ox, int *oy);
+int  map_find_resource(GameState *gs, int player, ResType res,
+                       int near_tx, int near_ty, int *out_x, int *out_y);
+int  map_find_dropoff(GameState *gs, int player, ResType res,
+                      float wx, float wy, int *out_tx, int *out_ty);
+int  map_find_passable_near(GameState *gs, int tx, int ty, int *out_x, int *out_y);
 
-/* pathfinding.c */
-int pathfind(GameState *gs,int sx,int sy,int ex,int ey,PathCell *out,int max_len);
+/* ── pathfinding.c ─────────────────────────────────────────── */
 
-/* unit.c */
-void unit_init_stats(GameState *gs, Unit *u);
-void unit_refresh_upgrades(GameState *gs, Unit *u);
-int  unit_spawn(GameState *gs,int player,UnitType type,float wx,float wy);
+int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
+             PathCell *out, int max_len);
+
+/* ── unit.c ────────────────────────────────────────────────── */
+
+void unit_init_stats(GameState *gs, Unit *unit);
+void unit_refresh_upgrades(GameState *gs, Unit *unit);
+int  unit_spawn(GameState *gs, int player, UnitType type, float wx, float wy);
 bool unit_tile_occupied(GameState *gs, int tx, int ty);
 bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
                               const PathCell *reserved, int reserved_count,
@@ -472,78 +506,86 @@ bool unit_find_free_tile_near(GameState *gs, int desired_tx, int desired_ty,
 void unit_compute_formation_targets(GameState *gs, int anchor_tx, int anchor_ty,
                                     int unit_count, FormationType formation,
                                     PathCell *out_targets);
-void unit_give_move_order(GameState *gs,Unit *u,int tx,int ty);
-void unit_give_gather_order(GameState *gs,Unit *u,int tx,int ty);
-void unit_give_dropoff_order(GameState *gs,Unit *u,int tx,int ty);
-void unit_give_attack_order(GameState *gs,Unit *u,int target_unit,int target_bld);
+void unit_give_move_order(GameState *gs, Unit *unit, int tx, int ty);
+void unit_give_gather_order(GameState *gs, Unit *unit, int tx, int ty);
+void unit_give_dropoff_order(GameState *gs, Unit *unit, int tx, int ty);
+void unit_give_attack_order(GameState *gs, Unit *unit, int target_unit, int target_bld);
 void find_adjacent_tile(GameState *gs, int bx, int by, int bw, int bh,
-                        float ux, float uy, int *ox, int *oy);
-void unit_give_build_order(GameState *gs,Unit *u,int bld_id);
-void unit_update(GameState *gs,Unit *u,float dt);
-void units_update_all(GameState *gs,float dt);
-int  unit_find_idle_villager(GameState *gs,int player);
-int  unit_count_military(GameState *gs,int player);
+                        float ux, float uy, int *out_x, int *out_y);
+void unit_give_build_order(GameState *gs, Unit *unit, int bld_id);
+void unit_update(GameState *gs, Unit *unit, float dt);
+void units_update_all(GameState *gs, float dt);
+int  unit_find_idle_villager(GameState *gs, int player);
+int  unit_count_military(GameState *gs, int player);
 
-/* building.c */
-int  building_place(GameState *gs,int player,BldType type,int tx,int ty);
-int  building_place_ready(GameState *gs,int player,BldType type,int tx,int ty);
-void building_on_complete(GameState *gs, Building *b);
-void building_destroy(GameState *gs, int bid);
-void building_sell(GameState *gs, int bid);
-void building_update(GameState *gs,Building *b,float dt);
-void buildings_update_all(GameState *gs,float dt);
-int  building_find(GameState *gs,int player,BldType type,bool complete_only);
-void building_enqueue_unit(GameState *gs,Building *b,UnitType ut);
-int  building_queued_population(const Building *b);
-Cost building_cost(BldType t);
-int  building_tw(BldType t);
-int  building_th(BldType t);
-int  building_max_hp(BldType t);
-bool building_supports_rally(BldType type);
-float building_train_time(UnitType ut);
-Cost  unit_cost(UnitType ut);
-int   unit_age_required(UnitType t);
-int   building_age_required(BldType t);
-bool  building_can_train_unit(BldType bt, UnitType ut);
-const char* unit_name(UnitType t);
-const char* building_name(BldType t);
+/* ── building.c ────────────────────────────────────────────── */
 
-/* Technologies */
-Cost  tech_cost(TechType t);
-float tech_time(TechType t);
-int   tech_age_required(TechType t);
-const char* tech_name(TechType t);
-const char* tech_desc(TechType t);
-void  building_start_tech(GameState *gs, Building *b, TechType t);
+int   building_place(GameState *gs, int player, BldType type, int tx, int ty);
+int   building_place_ready(GameState *gs, int player, BldType type, int tx, int ty);
+void  building_on_complete(GameState *gs, Building *bld);
+void  building_destroy(GameState *gs, int bid);
+void  building_sell(GameState *gs, int bid);
+void  building_update(GameState *gs, Building *bld, float dt);
+void  buildings_update_all(GameState *gs, float dt);
+int   building_find(GameState *gs, int player, BldType type, bool complete_only);
+void  building_enqueue_unit(GameState *gs, Building *bld, UnitType unit_type);
+int   building_queued_population(const Building *bld);
+Cost  building_cost(BldType type);
+int   building_tw(BldType type);
+int   building_th(BldType type);
+int   building_max_hp(BldType type);
+bool  building_supports_rally(BldType type);
+float building_train_time(UnitType type);
+Cost  unit_cost(UnitType type);
+int   unit_age_required(UnitType type);
+int   building_age_required(BldType type);
+bool  building_can_train_unit(BldType bld_type, UnitType unit_type);
+const char *unit_name(UnitType type);
+const char *building_name(BldType type);
 
-static inline bool building_is_walllike(BldType type) {
+/* ── technologies ──────────────────────────────────────────── */
+
+Cost        tech_cost(TechType type);
+float       tech_time(TechType type);
+int         tech_age_required(TechType type);
+const char *tech_name(TechType type);
+const char *tech_desc(TechType type);
+void        building_start_tech(GameState *gs, Building *bld, TechType type);
+
+static inline bool building_is_walllike(BldType type)
+{
     return type == BLD_WALL || type == BLD_GATE;
 }
 
-static inline int get_wall_line_points(int x0, int y0, int x1, int y1, int *out_x, int *out_y, int max_pts) {
+/* Bresenham line rasterisation for wall/gate placement preview. */
+static inline int get_wall_line_points(int x0, int y0, int x1, int y1,
+                                      int *out_x, int *out_y, int max_pts)
+{
     int dx = (int)fabs((float)x1 - x0), sx = x0 < x1 ? 1 : -1;
     int dy = -(int)fabs((float)y1 - y0), sy = y0 < y1 ? 1 : -1;
-    int err = dx + dy, e2;
+    int err = dx + dy;
     int count = 0;
     while (count < max_pts) {
-        out_x[count] = x0; out_y[count] = y0;
+        out_x[count] = x0;
+        out_y[count] = y0;
         count++;
         if (x0 == x1 && y0 == y1) break;
-        e2 = 2 * err;
+        int e2 = 2 * err;
         if (e2 >= dy) { err += dy; x0 += sx; }
         if (e2 <= dx) { err += dx; y0 += sy; }
     }
     return count;
 }
 
-/* resources.c */
-bool  res_can_afford(PlayerRes *pr,Cost c);
-void  res_deduct(PlayerRes *pr,Cost c);
-void  res_add(PlayerRes *pr,ResType rt,int amt);
-void  res_update_age_advance(GameState *gs,float dt);
-bool  res_try_advance_age(GameState *gs,int player);
-Cost  age_advance_cost(int current_age);
-int   pop_cap_from_buildings(GameState *gs,int player);
+/* ── resources.c ───────────────────────────────────────────── */
+
+bool res_can_afford(PlayerRes *pr, Cost cost);
+void res_deduct(PlayerRes *pr, Cost cost);
+void res_add(PlayerRes *pr, ResType type, int amount);
+void res_update_age_advance(GameState *gs, float dt);
+bool res_try_advance_age(GameState *gs, int player);
+Cost age_advance_cost(int current_age);
+int  pop_cap_from_buildings(GameState *gs, int player);
 
 /* ai.c */
 void ai_update(GameState *gs,float dt);

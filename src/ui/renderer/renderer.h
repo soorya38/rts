@@ -1,28 +1,43 @@
 /*=============================================================
- * renderer.h  –  Internal renderer declarations (non-public)
+ * renderer.h  –  Internal renderer declarations
+ *
+ * Shared by all renderer_*.c files.  Not part of the public API.
  *=============================================================*/
 #pragma once
 #include "game.h"
 #include "ui_state.h"
 
-/* Iso primitives (renderer_fx.c) */
-void draw_iso_quad(float bx, float by, float bw, float bh, Color c);
-void draw_iso_box(float bx, float by, float bw, float bh, float h, Color top, Color left, Color right);
-void draw_iso_box_outline(float bx, float by, float bw, float bh, float h, Color c);
-void draw_hp_bar(float wx, float wy, float w, int hp, int max_hp, float above);
-void draw_construction(float px, float py, float w, float h, float prog, Color mc);
-void draw_shadow(float wx, float wy, float rw, float rh);
-void draw_flag(float fx, float fy, int player);
-void draw_smoke(float bx, float by, float time, int seed);
-Color player_color(int p);
-Color player_color_dark(int p);
-Color player_color_alpha(int p, unsigned char a);
+/* ── Isometric primitives (renderer_fx.c) ──────────────────── */
+
+void  draw_iso_quad(float world_x, float world_y,
+                    float width, float height, Color color);
+void  draw_iso_box(float world_x, float world_y,
+                   float width, float height, float elevation,
+                   Color top, Color left, Color right);
+void  draw_iso_box_outline(float world_x, float world_y,
+                           float width, float height, float elevation,
+                           Color color);
+void  draw_hp_bar(float world_x, float world_y, float bar_width,
+                  int hp, int max_hp, float vertical_offset);
+void  draw_construction(float world_x, float world_y,
+                        float width, float height,
+                        float progress, Color player_col);
+void  draw_shadow(float world_x, float world_y, float radius_w, float radius_h);
+void  draw_flag(float world_x, float world_y, int player_id);
+void  draw_smoke(float world_x, float world_y, float time, int seed);
+
+Color player_color(int player_id);
+Color player_color_dark(int player_id);
+Color player_color_alpha(int player_id, unsigned char alpha);
+
 extern const Color GRASS_COLS[4];
 
-/* Tile overlays (renderer_tiles.c) */
-void draw_forest_overlay(GameState *gs, UIState *ui, int x, int y);
+/* ── Tile overlays (renderer_tiles.c) ──────────────────────── */
 
-/* Colors (shared via defines used in each .c) */
+void draw_forest_overlay(GameState *gs, UIState *ui, int tile_x, int tile_y);
+
+/* ── Shared colour constants ───────────────────────────────── */
+
 #define C_SEL       CLITERAL(Color){ 80, 220, 100, 180}
 #define C_HOVER     CLITERAL(Color){255, 255, 255, 120}
 #define C_FOG_EXP   CLITERAL(Color){  0,   0,   0, 120}
