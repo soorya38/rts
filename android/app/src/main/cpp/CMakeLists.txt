@@ -17,6 +17,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(raylib)
 
+# stb_image_resize2.h uses NEON float16 intrinsics (vld1q_f16,
+# vcvt_f32_f16) that are not available on ARMv7.  Disable the
+# fp16 code path so Raylib builds on armeabi-v7a.
+target_compile_definitions(raylib PRIVATE STBIR_NO_FP16)
+
 # Absolute path to our game source tree
 set(RTS_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../../../src")
 
