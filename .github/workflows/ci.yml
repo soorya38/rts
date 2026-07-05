@@ -152,8 +152,8 @@ jobs:
                     -Isrc/ui/hud -Isrc/ui/input -Isrc/ai -Isrc/core/enet \
                     -I$(pwd)/raylib-install/include"
           LIBS="-L$(pwd)/raylib-install/lib -lraylib -lwinmm -lgdi32 -lopengl32 -lws2_32 -liphlpapi"
-          ${{ matrix.triple }}-clang -std=c11 -Wall -O2 -D_WIN32_WINNT=0x0601 \
-            $INCLUDES $SRCS -o rts-windows-${{ matrix.arch }}.exe $LIBS
+          ${{ matrix.triple }}-clang -std=c11 -Wall -O2 -pthread -D_WIN32_WINNT=0x0601 \
+            $INCLUDES $SRCS -o rts-windows-${{ matrix.arch }}.exe $LIBS -lpthread
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
