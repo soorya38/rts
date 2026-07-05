@@ -116,8 +116,19 @@ int main(void)
         input_update(game, ui);
         net_update(game);
 
-        float sim_dt = dt * game->game_speed;
-        game_update(game, sim_dt);
+        /* Apply a finished background OSM map generation (the
+           MENU→PLAYING transition below then recenters the camera). */
+        if (game_osm_status() == OSM_JOB_READY) {
+            game_osm_apply(game);
+        }
+
+        if (net_lockstep_active()) {
+            /* Multiplayer: fixed-timestep lockstep sim, paced and
+               gated by turn batches from the host. */
+            net_lockstep_pump(game, dt);
+        } else {
+            game_update(game, dt);
+        }
 
         /* Re-centre camera when transitioning from menu to gameplay. */
         if (previous_phase == PHASE_MENU && game->phase == PHASE_PLAYING) {

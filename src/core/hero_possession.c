@@ -84,6 +84,11 @@ bool hero_possession_can_start(const GameState *gs, int unit_id, int player)
 
 bool hero_possession_start(GameState *gs, int unit_id, int player)
 {
+    /* Possession is a local-only mode (direct input control); in
+       a lockstep match it would immediately desync the sims. */
+    extern bool g_net_active;
+    if (g_net_active) return false;
+
     if (!hero_possession_can_start(gs, unit_id, player)) return false;
 
     Unit *unit = &gs->units[unit_id];

@@ -246,6 +246,7 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
     Texture2D tex = ui_get_building_texture(ui, b->type, age);
     bool is_town_center = (b->type == BLD_TOWN_CENTER);
     bool is_house = (b->type == BLD_HOUSE);
+    bool is_farm = (b->type == BLD_FARM);
     if (is_house) tex = ui_get_house_texture(ui, b->variant);
     bool is_mill = (b->type == BLD_MILL);
     bool is_lumber_camp = (b->type == BLD_LUMBER_CAMP);
@@ -340,6 +341,12 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             float scale_x = monastery_target_width / (float)tex.width;
             float scale_y = monastery_target_height / (float)tex.height;
             sc = scale_x < scale_y ? scale_x : scale_y;
+        } else if (is_farm) {
+            const float farm_target_width = 185.0f;
+            const float farm_target_height = 185.0f;
+            float scale_x = farm_target_width / (float)tex.width;
+            float scale_y = farm_target_height / (float)tex.height;
+            sc = scale_x < scale_y ? scale_x : scale_y;
         } else if (is_castle) {
             const float castle_target_width = 285.0f;
             const float castle_target_height = 310.0f;
@@ -380,9 +387,25 @@ static void draw_building(GameState *gs, UIState *ui, Building *b){
             y_offset += 22.0f; /* monasteries need a moderate drop to keep their stairs on the footprint */
         } else if (is_castle) {
             y_offset += 72.0f; /* castle art has bottom padding; drop it so the visible base sits on the footprint */
+        } else if (is_farm) {
+            y_offset += 30.0f; /* drop it slightly to align with the ground */
         }
         Vector2 bc = to_rvec2(world_to_iso(px + w * 0.5f, py + h * 0.5f));
         DrawTextureEx(tex, (Vector2){bc.x - tw/2.0f, bc.y - th + y_offset}, 0.0f, sc, WHITE);
+    } else if (b->type == BLD_DOCK) {
+        /* Wooden pier: a low planked platform, a harbour hut, and a
+           player-coloured pennant. */
+        draw_iso_box(px + 2, py + 2, w - 4, h - 4, 7,
+                     CLITERAL(Color){124, 88, 52, 255},
+                     CLITERAL(Color){92, 64, 38, 255},
+                     CLITERAL(Color){78, 54, 32, 255});
+        draw_iso_box(px + w * 0.5f, py + h * 0.15f, w * 0.4f, h * 0.4f, 20,
+                     CLITERAL(Color){150, 112, 74, 255},
+                     CLITERAL(Color){110, 80, 50, 255},
+                     CLITERAL(Color){96, 68, 42, 255});
+        Vector2 fc = to_rvec2(world_to_iso(px + w * 0.72f, py + h * 0.30f));
+        DrawRectangle((int)fc.x, (int)(fc.y - 46), 2, 22, CLITERAL(Color){60,45,30,255});
+        DrawRectangle((int)fc.x + 2, (int)(fc.y - 46), 12, 8, mc);
     } else {
         draw_iso_box(px+2, py+2, w-4, h-4, 15, CLITERAL(Color){140,120,90,255}, dc, dc);
     }
@@ -425,6 +448,8 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
     else if (u->type == UNIT_MANGONEL) size_mult = 1.6f;
     else if (u->type == UNIT_SCORPION) size_mult = 1.5f;
     else if (u->type == UNIT_BOMBARD_CANNON) size_mult = 1.7f;
+    else if (u->type == UNIT_FISHING_SHIP) size_mult = 1.6f;
+    else if (u->type == UNIT_WAR_GALLEY) size_mult = 1.9f;
     draw_shadow(wx, wy, 10 * size_mult, 8 * size_mult);
 
     if(u->selected) {
@@ -452,6 +477,24 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
         };
         Color tint = CLITERAL(Color){255, 255, 255, (unsigned char)alpha};
         DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, tint);
+    } else if (unit_is_ship(u->type)) {
+        /* A boat: wooden hull, player-coloured deck, and a sail
+           (white for fishing ships, red for war galleys). */
+        float s = size_mult;
+        unsigned char a = (unsigned char)alpha;
+        Color hull = CLITERAL(Color){90, 62, 38, a};
+        DrawEllipse((int)p.x, (int)p.y, 13.0f * s, 6.0f * s, hull);
+        DrawEllipse((int)p.x, (int)(p.y - 2.0f * s), 9.5f * s, 3.6f * s,
+                    CLITERAL(Color){mc.r, mc.g, mc.b, a});
+        DrawRectangle((int)(p.x - 1.0f), (int)(p.y - 16.0f * s),
+                      2, (int)(14.0f * s), CLITERAL(Color){60, 45, 30, a});
+        Color sail = (u->type == UNIT_WAR_GALLEY)
+                   ? CLITERAL(Color){205, 60, 50, a}
+                   : CLITERAL(Color){235, 235, 225, a};
+        DrawRectangle((int)(p.x + 1.0f), (int)(p.y - 15.0f * s),
+                      (int)(8.0f * s), (int)(10.0f * s), sail);
+        DrawRectangleLines((int)(p.x + 1.0f), (int)(p.y - 15.0f * s),
+                      (int)(8.0f * s), (int)(10.0f * s), CLITERAL(Color){0,0,0,a/3});
     } else {
         float box_w = 8.0f * size_mult;
         float box_h = 8.0f * size_mult;
@@ -461,7 +504,7 @@ static void draw_unit(GameState *gs, UIState *ui, Unit *u, float t){
                      dc, dc);
     }
 
-    if(u->type==UNIT_VILLAGER && u->carry_amt>0){
+    if((u->type==UNIT_VILLAGER || unit_is_ship(u->type)) && u->carry_amt>0){
         Color rc;
         switch(u->carry_type){
             case RES_FOOD:  rc=CLITERAL(Color){100,200,50,255}; break;
@@ -633,7 +676,7 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
     int lp = net_get_local_player();
     for (int p = 0; p < pt_count; p++) {
         int tx = pts_x[p], ty = pts_y[p];
-        bool valid = map_is_buildable(gs, tx, ty, tw, th) &&
+        bool valid = map_buildable_for(gs, gs->build_mode.type, tx, ty, tw, th) &&
                      res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));
 
         float px=(float)(tx*TILE_SIZE),py=(float)(ty*TILE_SIZE);
@@ -744,6 +787,13 @@ static void draw_build_ghost(GameState *gs, UIState *ui){
                     float s_y = monastery_target_height / (float)tex.height;
                     sc = s_x < s_y ? s_x : s_y;
                     y_offset += 22.0f;
+                } else if (gs->build_mode.type == BLD_FARM) {
+                    const float farm_target_width = 185.0f;
+                    const float farm_target_height = 185.0f;
+                    float s_x = farm_target_width / (float)tex.width;
+                    float s_y = farm_target_height / (float)tex.height;
+                    sc = s_x < s_y ? s_x : s_y;
+                    y_offset += 30.0f;
                 } else if (gs->build_mode.type == BLD_CASTLE) {
                     const float castle_target_width = 285.0f;
                     const float castle_target_height = 310.0f;

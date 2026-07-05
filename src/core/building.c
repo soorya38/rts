@@ -7,6 +7,7 @@
  * castle auto-attack), technology research, and destruction.
  *=============================================================*/
 #include "game.h"
+#include "threadpool.h"
 #include <stdio.h>
 
 /* Deterministic visual variant for houses (other buildings use variant 0). */
@@ -132,23 +133,32 @@ bool building_supports_rally(BldType type){
     }
 }
 
+bool building_prereq_met(GameState *gs, int player, BldType type)
+{
+    /* Farms can only be raised once the player has a completed Mill. */
+    if (type == BLD_FARM) {
+        return building_find(gs, player, BLD_MILL, true) >= 0;
+    }
+    return true;
+}
+
 int building_place(GameState *gs, int player, BldType type, int tx, int ty)
 {
     int width  = building_tw(type);
     int height = building_th(type);
 
-    if (!map_is_buildable(gs, tx, ty, width, height)) {
-        printf("building_place failed: map not buildable\n");
+    if (!map_buildable_for(gs, type, tx, ty, width, height)) {
         return -1;
     }
     if (gs->res[player].age < building_age_required(type)) {
-        printf("building_place failed: age requirement not met\n");
+        return -1;
+    }
+    if (!building_prereq_met(gs, player, type)) {
         return -1;
     }
 
     Cost cost = building_cost(type);
     if (!res_can_afford(&gs->res[player], cost)) {
-        printf("building_place failed: insufficient resources\n");
         return -1;
     }
 
@@ -158,7 +168,6 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty)
         if (!gs->buildings[i].active) { slot = i; break; }
     }
     if (slot < 0) {
-        printf("building_place failed: no free slots\n");
         return -1;
     }
 
@@ -190,7 +199,6 @@ int building_place(GameState *gs, int player, BldType type, int tx, int ty)
     map_place_building(gs, tx, ty, width, height, slot);
     if (slot >= gs->bld_count) gs->bld_count = slot + 1;
 
-    printf("building_place success: bid=%d\n", slot);
     return slot;
 }
 
@@ -310,21 +318,63 @@ void building_enqueue_unit(GameState *gs, Building *bld, UnitType unit_type)
 
 
 
+/* ── Parallel tower/castle target acquisition ─────────────────
+ * The nearest-enemy scan is O(buildings×units) and read-only,
+ * so it runs as a parallel pre-pass over the start-of-frame
+ * snapshot.  Each job item writes only its own cache slot, so
+ * the result is scheduling-independent (the lockstep sim must
+ * stay deterministic).  building_update consumes the cache. */
+static int bld_target_cache[MAX_BUILDINGS];
+
+static void bld_target_scan_range(int start, int end, void *ctx)
+{
+    GameState *gs = ctx;
+    for (int bi = start; bi < end; bi++) {
+        Building *b = &gs->buildings[bi];
+        bld_target_cache[bi] = -1;
+
+        if (!b->active || !b->complete) continue;
+        if (b->attack_dmg <= 0 || b->attack_range <= 0.0f) continue;
+
+        int target = -1;
+        float best = b->attack_range;
+        float cx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
+        float cy = (b->ty + b->th * 0.5f) * TILE_SIZE;
+        for (int i = 0; i < MAX_UNITS; i++) {
+            Unit *u = &gs->units[i];
+            if (!u->active || u->player == b->player ||
+                u->state == US_DEAD || u->state == US_DYING) continue;
+            float d = dist2f(cx, cy, u->wx, u->wy) / TILE_SIZE;
+            if (d < best) { best = d; target = i; }
+        }
+        bld_target_cache[bi] = target;
+    }
+}
+
 void building_update(GameState *gs, Building *b, float dt){
     if(!b->active||!b->complete) return;
 
     if(b->attack_dmg > 0 && b->attack_range > 0.0f){
         b->attack_timer -= dt;
         if(b->attack_timer <= 0.0f){
-            int target = -1;
-            float best = b->attack_range;
             float cx = (b->tx + b->tw * 0.5f) * TILE_SIZE;
             float cy = (b->ty + b->th * 0.5f) * TILE_SIZE;
-            for(int i=0;i<MAX_UNITS;i++){
-                Unit *u=&gs->units[i];
-                if(!u->active || u->player==b->player || u->state==US_DEAD || u->state==US_DYING) continue;
-                float d = dist2f(cx, cy, u->wx, u->wy) / TILE_SIZE;
-                if(d < best){ best = d; target = i; }
+
+            /* Re-validate the cached target: units updated earlier
+               this frame may have died, converted, or moved out of
+               range since the snapshot scan. */
+            int target = bld_target_cache[b->id];
+            float best = b->attack_range;
+            if(target >= 0){
+                Unit *u = &gs->units[target];
+                if(!u->active || u->player == b->player ||
+                   u->state == US_DEAD || u->state == US_DYING){
+                    target = -1;
+                } else {
+                    float d = dist2f(cx, cy, u->wx, u->wy) / TILE_SIZE;
+                    if(d < b->attack_range) best = d;
+                    else target = -1;
+                }
             }
             if(target >= 0){
                 Unit *u = &gs->units[target];
@@ -375,14 +425,33 @@ void building_update(GameState *gs, Building *b, float dt){
     b->train_timer-=dt;
     if(b->train_timer>0) return;
     UnitType ut=b->queue[0];
-    int spawn_tx = b->tx + b->tw / 2;
-    int spawn_ty = b->ty + b->th + 1;
-    if(!unit_find_free_tile_near(gs, spawn_tx, spawn_ty, NULL, 0, &spawn_tx, &spawn_ty)){
-        spawn_tx = b->rally_tx;
-        spawn_ty = b->rally_ty;
+    int spawn_tx, spawn_ty;
+    if(unit_is_ship(ut)){
+        /* Ships launch onto the nearest open-water tile, expanding
+           outward from the dock so a thin shoreline or a ship parked
+           at the dock doesn't stall production. */
+        int cx=b->tx+b->tw/2, cy=b->ty+b->th/2;
+        long best=-1;
+        for(int r=1;r<=6 && best<0;r++){
+            for(int dy=-r;dy<=r && best<0;dy++) for(int dx=-r;dx<=r;dx++){
+                if(abs(dx)!=r && abs(dy)!=r) continue;  /* ring perimeter */
+                int nx=cx+dx, ny=cy+dy;
+                if(!map_tile_is_water(gs,nx,ny)) continue;
+                if(unit_tile_occupied(gs,nx,ny)) continue;
+                spawn_tx=nx; spawn_ty=ny; best=1; break;
+            }
+        }
+        if(best<0){ b->train_timer=0.5f; return; }
+    } else {
+        spawn_tx = b->tx + b->tw / 2;
+        spawn_ty = b->ty + b->th + 1;
         if(!unit_find_free_tile_near(gs, spawn_tx, spawn_ty, NULL, 0, &spawn_tx, &spawn_ty)){
-            b->train_timer = 0.5f;
-            return;
+            spawn_tx = b->rally_tx;
+            spawn_ty = b->rally_ty;
+            if(!unit_find_free_tile_near(gs, spawn_tx, spawn_ty, NULL, 0, &spawn_tx, &spawn_ty)){
+                b->train_timer = 0.5f;
+                return;
+            }
         }
     }
     float wx=(spawn_tx+0.5f)*TILE_SIZE;
@@ -392,7 +461,15 @@ void building_update(GameState *gs, Building *b, float dt){
         b->train_timer = 0.5f;
         return;
     }
-    if(b->rally_tx != spawn_tx || b->rally_ty != spawn_ty){
+    if(unit_is_ship(ut)){
+        /* Sail a few tiles clear of the dock so the launch tile is
+           free for the next ship (land rally points don't apply). */
+        int cx = b->tx + b->tw/2, cy = b->ty + b->th/2;
+        int sdx = (spawn_tx > cx) - (spawn_tx < cx);
+        int sdy = (spawn_ty > cy) - (spawn_ty < cy);
+        unit_give_move_order(gs, &gs->units[uid],
+                             spawn_tx + sdx*3, spawn_ty + sdy*3);
+    } else if(b->rally_tx != spawn_tx || b->rally_ty != spawn_ty){
         unit_give_move_order(gs, &gs->units[uid], b->rally_tx, b->rally_ty);
     }
     /* Shift queue */
@@ -766,6 +843,15 @@ void building_start_tech(GameState *gs, Building *b, TechType t) {
 
 void buildings_update_all(GameState *gs, float dt)
 {
+    /* Read-only target pre-pass; see bld_target_scan_range.  The
+       scan cost is dominated by the per-tower unit loop, so with
+       few units the pool dispatch costs more than the work. */
+    if (gs->unit_count >= TP_UNIT_SCAN_THRESHOLD) {
+        tp_parallel_for(MAX_BUILDINGS, bld_target_scan_range, gs);
+    } else {
+        bld_target_scan_range(0, MAX_BUILDINGS, gs);
+    }
+
     for (int i = 0; i < MAX_BUILDINGS; i++) {
         building_update(gs, &gs->buildings[i], dt);
     }

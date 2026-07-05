@@ -86,6 +86,48 @@ static inline float dist2f(float ax, float ay, float bx, float by)
     return sqrtf(dx * dx + dy * dy);
 }
 
+/* ─── Deterministic trig ───────────────────────────────────────
+ * libm's sinf/cosf/atan2f are not bit-identical across platforms
+ * (macOS libm vs Android bionic), which would desync cross-
+ * platform lockstep matches.  Simulation code must use these
+ * instead: pure float arithmetic (+ IEEE-exact fabsf/sqrtf), so
+ * results are bit-identical everywhere as long as FP contraction
+ * is off (-ffp-contract=off in all build configs).  Accuracy is
+ * ~1e-3 rad — plenty for facing angles and spread vectors. */
+
+#define DET_PI 3.14159265f
+
+static inline float det_sinf(float x)
+{
+    /* Range-reduce to [-pi, pi]. */
+    const float TWO_PI = 6.28318531f;
+    const float INV_TWO_PI = 0.15915494f;
+    x = x - TWO_PI * (float)(int)(x * INV_TWO_PI + (x >= 0.0f ? 0.5f : -0.5f));
+
+    /* Parabolic approximation refined once (max err ~1e-3). */
+    float y = 1.27323954f * x - 0.40528473f * x * fabsf(x);
+    return 0.775f * y + 0.225f * y * fabsf(y);
+}
+
+static inline float det_cosf(float x)
+{
+    return det_sinf(x + 1.57079633f);
+}
+
+static inline float det_atan2f(float y, float x)
+{
+    if (x == 0.0f && y == 0.0f) return 0.0f;
+
+    float ax = fabsf(x), ay = fabsf(y);
+    /* atan(z) for z in [0,1] via minimax polynomial. */
+    float z = (ax > ay) ? (ay / ax) : (ax / ay);
+    float z2 = z * z;
+    float a = ((0.0776509570f * z2 - 0.2874298430f) * z2 + 0.9951816830f) * z;
+    if (ay > ax) a = 1.57079633f - a;
+    if (x < 0.0f) a = DET_PI - a;
+    return (y < 0.0f) ? -a : a;
+}
+
 /* ─── Isometric Math ──────────────────────────────────────── */
 /* 
  * Isometric projection where:
@@ -253,6 +295,8 @@ typedef enum {
     UNIT_ARCHER,  UNIT_SKIRMISHER, UNIT_CAVALRY_ARCHER,
     UNIT_KNIGHT,  UNIT_MONK,
     UNIT_BATTERING_RAM, UNIT_MANGONEL, UNIT_SCORPION, UNIT_BOMBARD_CANNON,
+    UNIT_FISHING_SHIP,   /* naval: gathers food from fish, drops at dock */
+    UNIT_WAR_GALLEY,     /* naval: ranged warship */
     UNIT_COUNT
 } UnitType;
 
@@ -310,7 +354,9 @@ typedef enum {
     BLD_BLACKSMITH, BLD_MARKET,
     BLD_MILL, BLD_LUMBER_CAMP, BLD_MINING_CAMP,
     BLD_FARM, BLD_WATCH_TOWER, BLD_MONASTERY,
-    BLD_SIEGE_WORKSHOP, BLD_UNIVERSITY, BLD_WALL, BLD_GATE, BLD_CASTLE, BLD_COUNT
+    BLD_SIEGE_WORKSHOP, BLD_UNIVERSITY, BLD_WALL, BLD_GATE, BLD_CASTLE,
+    BLD_DOCK,           /* naval: shore building, trains ships, fish drop-off */
+    BLD_COUNT
 } BldType;
 
 #define BQUEUE_CAP 5
@@ -417,7 +463,6 @@ typedef struct {
     GameMode   mode;
     GamePhase  phase;
     float      game_time;
-    float      game_speed;       /* simulation speed multiplier (1.0 = normal) */
 
     Tile       map[MAP_H][MAP_W];
     Unit       units[MAX_UNITS];
@@ -479,7 +524,13 @@ typedef struct { int food,wood,gold,stone; } Cost;
 void map_init(GameState *gs, int *start_x, int *start_y, int num_players);
 bool map_in_bounds(int x, int y);
 bool map_is_passable(GameState *gs, int x, int y);
+/* Domain-aware passability: water==true ⇒ only open water tiles are
+   passable (ships); water==false ⇒ normal land passability. */
+bool map_is_passable_dom(GameState *gs, int x, int y, bool water);
+bool map_tile_is_water(GameState *gs, int x, int y);
+bool map_is_shore(GameState *gs, int x, int y);  /* land tile next to water */
 bool map_is_buildable(GameState *gs, int tx, int ty, int width, int height);
+bool map_buildable_for(GameState *gs, BldType type, int tx, int ty, int width, int height);
 void map_place_building(GameState *gs, int tx, int ty, int width, int height, int bid);
 void map_clear_building(GameState *gs, int tx, int ty, int width, int height);
 void map_update_fog(GameState *gs);
@@ -488,9 +539,15 @@ int  map_find_resource(GameState *gs, int player, ResType res,
 int  map_find_dropoff(GameState *gs, int player, ResType res,
                       float wx, float wy, int *out_tx, int *out_ty);
 int  map_find_passable_near(GameState *gs, int tx, int ty, int *out_x, int *out_y);
+int  map_find_passable_near_dom(GameState *gs, int tx, int ty, bool water,
+                                int *out_x, int *out_y);
 
 /* ── pathfinding.c ─────────────────────────────────────────── */
 
+/* water==true routes over open water (ships); false routes on land. */
+int pathfind_dom(GameState *gs, int sx, int sy, int ex, int ey,
+                 PathCell *out, int max_len, bool water);
+/* Land-domain convenience wrapper (unchanged behaviour). */
 int pathfind(GameState *gs, int sx, int sy, int ex, int ey,
              PathCell *out, int max_len);
 
@@ -507,6 +564,10 @@ void unit_compute_formation_targets(GameState *gs, int anchor_tx, int anchor_ty,
                                     int unit_count, FormationType formation,
                                     PathCell *out_targets);
 void unit_give_move_order(GameState *gs, Unit *unit, int tx, int ty);
+/* Batched group move: one pathfind per unit, fanned out across
+   the thread pool.  dests holds one destination per unit id. */
+void unit_give_move_orders_batch(GameState *gs, const int *unit_ids,
+                                 const PathCell *dests, int count);
 void unit_give_gather_order(GameState *gs, Unit *unit, int tx, int ty);
 void unit_give_dropoff_order(GameState *gs, Unit *unit, int tx, int ty);
 void unit_give_attack_order(GameState *gs, Unit *unit, int target_unit, int target_bld);
@@ -540,6 +601,10 @@ Cost  unit_cost(UnitType type);
 int   unit_age_required(UnitType type);
 int   building_age_required(BldType type);
 bool  building_can_train_unit(BldType bld_type, UnitType unit_type);
+/* True when the player satisfies any structural prerequisites for `type`
+   (e.g. Farms require a completed Mill). Shared by the build menu, build
+   hotkeys, and the core placement path so they never disagree. */
+bool  building_prereq_met(GameState *gs, int player, BldType type);
 const char *unit_name(UnitType type);
 const char *building_name(BldType type);
 
@@ -599,6 +664,16 @@ void game_campaign_advance(GameState *gs);
 bool game_campaign_has_next(const GameState *gs);
 void game_init_sandbox(GameState *gs, uint32_t seed);
 void game_init_osm(GameState *gs, uint32_t seed, const char *location);
+
+/* Simulation-state hash for multiplayer desync detection. */
+uint32_t game_state_checksum(const GameState *gs);
+
+/* Async OSM generation: runs game_init_osm on a background
+   thread so the menu stays responsive during network fetches. */
+enum { OSM_JOB_IDLE = 0, OSM_JOB_RUNNING = 1, OSM_JOB_READY = 2 };
+bool game_osm_start_async(uint32_t seed, const char *location);
+int  game_osm_status(void);
+bool game_osm_apply(GameState *gs);
 void game_update(GameState *gs,float dt);
 void game_set_alert(GameState *gs,const char *msg);
 void game_sandbox_add_resources(GameState *gs, int player, int amount);
@@ -610,6 +685,11 @@ bool game_damage_unit(GameState *gs, int target_unit, int dmg);
 bool game_damage_building(GameState *gs, int target_bld, int dmg);
 bool unit_uses_projectiles(UnitType type);
 bool building_uses_projectiles(BldType type);
+
+/* True for naval units (they move on water, not land). */
+static inline bool unit_is_ship(UnitType t){
+    return t == UNIT_FISHING_SHIP || t == UNIT_WAR_GALLEY;
+}
 void game_spawn_projectile(GameState *gs, int owner_player, ProjectileType type,
                            float sx, float sy, float ex, float ey,
                            int target_unit, int target_bld, int dmg,

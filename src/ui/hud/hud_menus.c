@@ -64,6 +64,7 @@ static void draw_build_menu(GameState *gs, UIState *ui)
         {BLD_BLACKSMITH,    "Smith (K)\n150 Wood",      {0, 150, 0, 0}},
         {BLD_MARKET,        "Market (Y)\n175 Wood",     {0, 175, 0, 0}},
         {BLD_FARM,          "Farm (F)\n60 Wood",        {0, 60,  0, 0}},
+        {BLD_DOCK,          "Dock (D)\n150 Wood",       {0, 150, 0, 0}},
         {BLD_WATCH_TOWER,   "Tower (T)\n125W 125S",     {0, 125, 0, 125}},
         {BLD_MONASTERY,     "Monastery (O)\n175W",      {0, 175, 0, 0}},
         {BLD_SIEGE_WORKSHOP,"Siege (I)\n200W",          {0, 200, 0, 0}},
@@ -177,7 +178,6 @@ static void draw_map_overview(GameState *gs, UIState *ui) {
         }
         ui->osm_tiles_loaded = loaded;
         if (loaded == 0) have_osm = false;
-        printf("DEBUG: lazy load complete. loaded=%d, have_osm=%d\n", loaded, have_osm);
     }
 
     /* Layout: two panels side-by-side if OSM available, else single centered */

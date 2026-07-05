@@ -307,18 +307,22 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
         int ftx = tx, fty = ty;
         map_find_passable_near(gs, tx, ty, &ftx, &fty);
 
-        PathCell formation_targets[64];
-        int move_count = ui->sel_count < 64 ? ui->sel_count : 64;
-        unit_compute_formation_targets(gs, ftx, fty, move_count, ui->formation, formation_targets);
-
-        for (int i = 0; i < ui->sel_count; i++) {
+        /* Attack-move goes through the command pipeline so it is
+           replicated in multiplayer (it used to be issued locally
+           only, which desynced net games). */
+        NetPacket pkt = {0};
+        pkt.type  = PKT_ATTACK_MOVE;
+        pkt.tx    = ftx;
+        pkt.ty    = fty;
+        pkt.extra = (int32_t)ui->formation;
+        for (int i = 0; i < ui->sel_count &&
+                        pkt.unit_count < NET_MAX_UNITS_PER_PACKET; i++) {
             Unit *u = &gs->units[ui->sel_units[i]];
             if (!u->active || u->player != lp || u->type == UNIT_VILLAGER) continue;
-            u->stance_manual = false;  /* aggressive: attack enemies seen en route */
-            u->attack_move = true;
-            int ntx = (i < 64) ? formation_targets[i].x : ftx;
-            int nty = (i < 64) ? formation_targets[i].y : fty;
-            unit_give_move_order(gs, u, ntx, nty);
+            pkt.units[pkt.unit_count++] = (uint16_t)ui->sel_units[i];
+        }
+        if (pkt.unit_count > 0) {
+            net_dispatch_packet(gs, &pkt);
         }
         ui->move_marker_active = true;
         ui->move_marker_tx = (float)ftx;
@@ -414,6 +418,9 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
     } else {
         int lp = net_get_local_player();
         bool issued_plain_move = false;
+        int batch_ids[MAX_UNITS];
+        PathCell batch_dests[MAX_UNITS];
+        int batch_count = 0;
         for (int i = 0; i < ui->sel_count; i++) {
             Unit *u = &gs->units[ui->sel_units[i]];
             if (!u->active || u->player != lp) continue;
@@ -428,16 +435,16 @@ void issue_command_at(GameState *gs, UIState *ui, Vector2 world) {
             } else if (is_resource && u->type == UNIT_VILLAGER) {
                 unit_give_gather_order(gs, u, tx, ty);
             } else {
-                int ntx = ftx;
-                int nty = fty;
-                if (use_formation && i < 64) {
-                    ntx = formation_targets[i].x;
-                    nty = formation_targets[i].y;
-                }
-                unit_give_move_order(gs, u, ntx, nty);
+                /* Collect move orders and issue them as one batch so
+                   the per-unit pathfinds run on the thread pool. */
+                batch_ids[batch_count] = ui->sel_units[i];
+                batch_dests[batch_count].x = (use_formation && i < 64) ? formation_targets[i].x : ftx;
+                batch_dests[batch_count].y = (use_formation && i < 64) ? formation_targets[i].y : fty;
+                batch_count++;
                 if (plain_move) issued_plain_move = true;
             }
         }
+        unit_give_move_orders_batch(gs, batch_ids, batch_dests, batch_count);
         if (issued_plain_move) {
             ui->move_marker_active = true;
             ui->move_marker_tx = (float)ftx;

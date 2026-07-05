@@ -494,11 +494,11 @@ void draw_menu(GameState *gs, UIState *ui){
 
         if(g_local_player_id == 0){  /* I am host */
             if(draw_button("START GAME", bx, by, bw, bh, total > 1)){
-                uint32_t seed = (uint32_t)time(NULL);
-                NetPacket sp = {0}; sp.type = PKT_SYNC_SEED; sp.extra = seed;
-                net_dispatch_packet(gs, &sp);
+                /* The seed rides in the start packet itself so every
+                   machine initialises from the exact same value. */
                 NetPacket start = {0}; start.type = PKT_START_GAME;
                 start.extra = total;
+                start.target_id = (int32_t)(uint32_t)time(NULL);
                 net_dispatch_packet(gs, &start);
             }
         } else {

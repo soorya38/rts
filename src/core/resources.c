@@ -120,6 +120,7 @@ Cost building_cost(BldType type)
         case BLD_WALL:          return (Cost){  0,  20,   0,   0};
         case BLD_GATE:          return (Cost){  0,  35,   0,  15};
         case BLD_CASTLE:        return (Cost){  0,   0,   0, 650};
+        case BLD_DOCK:          return (Cost){  0, 150,   0,   0};
         default:                return (Cost){  0,   0,   0,   0};
     }
 }
@@ -145,6 +146,7 @@ int building_tw(BldType type)
         case BLD_WALL:           return 1;
         case BLD_GATE:           return 1;
         case BLD_CASTLE:         return 4;
+        case BLD_DOCK:           return 3;
         default:                 return 2;
     }
 }
@@ -176,6 +178,7 @@ int building_max_hp(BldType type)
         case BLD_WALL:           return  900;
         case BLD_GATE:           return 1100;
         case BLD_CASTLE:         return 4800;
+        case BLD_DOCK:           return 1800;
         default:                 return  500;
     }
 }
@@ -199,6 +202,8 @@ Cost unit_cost(UnitType type)
         case UNIT_MANGONEL:       return (Cost){ 0, 160, 135, 0};
         case UNIT_SCORPION:       return (Cost){ 0,  75,  75, 0};
         case UNIT_BOMBARD_CANNON: return (Cost){ 0, 225, 225, 0};
+        case UNIT_FISHING_SHIP:   return (Cost){ 0,  75,   0, 0};
+        case UNIT_WAR_GALLEY:     return (Cost){ 0,  90,  30, 0};
         default:                  return (Cost){50,   0,   0, 0};
     }
 }
@@ -220,6 +225,8 @@ float building_train_time(UnitType type)
         case UNIT_MANGONEL:       return 46.0f;
         case UNIT_SCORPION:       return 34.0f;
         case UNIT_BOMBARD_CANNON: return 56.0f;
+        case UNIT_FISHING_SHIP:   return 26.0f;
+        case UNIT_WAR_GALLEY:     return 32.0f;
         default:                  return 25.0f;
     }
 }
@@ -237,6 +244,7 @@ int unit_age_required(UnitType type)
         case UNIT_MANGONEL:
         case UNIT_SCORPION:       return 2;  /* Castle  */
         case UNIT_BOMBARD_CANNON: return 3;  /* Imperial */
+        case UNIT_WAR_GALLEY:     return 1;  /* Feudal   */
         default:                  return 0;  /* Dark Age */
     }
 }
@@ -279,6 +287,9 @@ bool building_can_train_unit(BldType building_type, UnitType unit_type)
                    unit_type == UNIT_MANGONEL       ||
                    unit_type == UNIT_SCORPION        ||
                    unit_type == UNIT_BOMBARD_CANNON;
+        case BLD_DOCK:
+            return unit_type == UNIT_FISHING_SHIP ||
+                   unit_type == UNIT_WAR_GALLEY;
         default:
             return false;
     }
@@ -303,6 +314,8 @@ const char *unit_name(UnitType type)
         case UNIT_MANGONEL:       return "Mangonel";
         case UNIT_SCORPION:       return "Scorpion";
         case UNIT_BOMBARD_CANNON: return "Bombard Cannon";
+        case UNIT_FISHING_SHIP:   return "Fishing Ship";
+        case UNIT_WAR_GALLEY:     return "War Galley";
         default:                  return "Unit";
     }
 }
@@ -329,6 +342,7 @@ const char *building_name(BldType type)
         case BLD_WALL:           return "Mathil";
         case BLD_GATE:           return "Kottai Vaasal";
         case BLD_CASTLE:         return "Kottai";
+        case BLD_DOCK:           return "Thurai";
         default:                 return "Kattidam";
     }
 }

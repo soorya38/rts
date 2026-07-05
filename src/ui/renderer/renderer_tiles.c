@@ -153,6 +153,16 @@ void draw_tile(GameState *gs, UIState *ui, int tile_x, int tile_y)
                               size * 0.6f, size * 0.6f,
                               (Color){255, 255, 255, 40});
             }
+
+            /* Fish shoal marker: water tiles carrying food stock. */
+            if (tile->resource_amt > 0) {
+                Vector2 c = to_rvec2(world_to_iso(px + size * 0.5f, py + size * 0.5f));
+                float bob = sinf(t * 2.0f + (tile_x + tile_y)) * 2.0f;
+                Color fish = (Color){180, 205, 205, 200};
+                DrawCircleV((Vector2){c.x - 4, c.y + bob}, 2.2f, fish);
+                DrawCircleV((Vector2){c.x + 4, c.y - bob}, 2.0f, fish);
+                DrawCircleV((Vector2){c.x, c.y + 3 + bob * 0.5f}, 1.8f, fish);
+            }
             break;
         }
 

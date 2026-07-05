@@ -6,6 +6,7 @@
  * visibility and provides spatial queries for resource gathering.
  *=============================================================*/
 #include "game.h"
+#include "threadpool.h"
 
 /* ── Tile queries ──────────────────────────────────────────── */
 
@@ -42,6 +43,44 @@ bool map_is_passable(GameState *gs, int tile_x, int tile_y)
     return true;
 }
 
+/* True if the tile is open water a ship can occupy. */
+bool map_tile_is_water(GameState *gs, int tile_x, int tile_y)
+{
+    if (!map_in_bounds(tile_x, tile_y)) return false;
+    return gs->map[tile_y][tile_x].type == TILE_WATER;
+}
+
+/* Domain-aware passability.  Ships (water==true) may only move over
+   open water tiles free of buildings; land units keep their normal
+   rules.  A dock occupies shore tiles but leaves its water tiles
+   open, so ships can pass. */
+bool map_is_passable_dom(GameState *gs, int tile_x, int tile_y, bool water)
+{
+    if (!water) return map_is_passable(gs, tile_x, tile_y);
+
+    if (!map_in_bounds(tile_x, tile_y)) return false;
+    Tile *tile = &gs->map[tile_y][tile_x];
+    if (tile->type != TILE_WATER) return false;
+    if (tile->building_id >= 0) {
+        Building *bld = &gs->buildings[tile->building_id];
+        /* Docks sit on the shoreline; their footprint never blocks
+           the water lane, but guard against any other building. */
+        if (bld->active && bld->type != BLD_DOCK) return false;
+    }
+    return true;
+}
+
+/* A passable land tile that is orthogonally adjacent to water —
+   where a dock may be built. */
+bool map_is_shore(GameState *gs, int tile_x, int tile_y)
+{
+    if (!map_is_passable(gs, tile_x, tile_y)) return false;
+    return map_tile_is_water(gs, tile_x + 1, tile_y) ||
+           map_tile_is_water(gs, tile_x - 1, tile_y) ||
+           map_tile_is_water(gs, tile_x, tile_y + 1) ||
+           map_tile_is_water(gs, tile_x, tile_y - 1);
+}
+
 bool map_is_buildable(GameState *gs, int origin_x, int origin_y, int width, int height)
 {
     for (int dy = 0; dy < height; dy++) {
@@ -55,6 +94,26 @@ bool map_is_buildable(GameState *gs, int origin_x, int origin_y, int width, int 
             if (tile->building_id >= 0) return false;
         }
     }
+    return true;
+}
+
+/* A building's footprint borders water (needed to place a dock). */
+static bool footprint_touches_water(GameState *gs, int ox, int oy, int w, int h)
+{
+    for (int dy = -1; dy <= h; dy++) {
+        for (int dx = -1; dx <= w; dx++) {
+            if (dx >= 0 && dx < w && dy >= 0 && dy < h) continue;  /* perimeter only */
+            if (map_tile_is_water(gs, ox + dx, oy + dy)) return true;
+        }
+    }
+    return false;
+}
+
+/* Type-aware buildability: docks must sit on the shoreline. */
+bool map_buildable_for(GameState *gs, BldType type, int ox, int oy, int w, int h)
+{
+    if (!map_is_buildable(gs, ox, oy, w, h)) return false;
+    if (type == BLD_DOCK) return footprint_touches_water(gs, ox, oy, w, h);
     return true;
 }
 
@@ -171,6 +230,28 @@ static void place_water_body(GameState *gs, int cx, int cy, int half_w, int half
             gs->map[y][x].type = TILE_WATER;
             gs->map[y][x].resource_amt = 0;
         }
+    }
+}
+
+/* Stock fish shoals in open water: fish are TILE_WATER tiles that
+   carry a resource_amt (food) which fishing ships harvest. */
+static void stock_fish_shoals(GameState *gs, int count)
+{
+    int placed = 0, guard = 0;
+    while (placed < count && guard++ < 6000) {
+        int x = rng_range(1, MAP_W - 2);
+        int y = rng_range(1, MAP_H - 2);
+        if (gs->map[y][x].type != TILE_WATER || gs->map[y][x].resource_amt > 0) continue;
+        gs->map[y][x].resource_amt = rng_range(240, 360);
+        for (int dy = -1; dy <= 1; dy++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                int nx = x + dx, ny = y + dy;
+                if (!map_in_bounds(nx, ny)) continue;
+                if (gs->map[ny][nx].type == TILE_WATER && gs->map[ny][nx].resource_amt == 0)
+                    gs->map[ny][nx].resource_amt = rng_range(180, 300);
+            }
+        }
+        placed++;
     }
 }
 
@@ -300,8 +381,8 @@ void map_init(GameState *gs, int *start_x, int *start_y, int num_players)
         float angle_offset = rng_frac() * 2.0f * 3.14159265f;
         for (int i = 0; i < num_players; i++) {
             float angle = angle_offset + (2.0f * 3.14159265f * i) / num_players;
-            start_x[i] = clampi(32 + (int)(20.0f * cosf(angle)), 8, MAP_W - 9);
-            start_y[i] = clampi(32 + (int)(20.0f * sinf(angle)), 8, MAP_H - 9);
+            start_x[i] = clampi(32 + (int)(20.0f * det_cosf(angle)), 8, MAP_W - 9);
+            start_y[i] = clampi(32 + (int)(20.0f * det_sinf(angle)), 8, MAP_H - 9);
         }
     }
 
@@ -363,6 +444,21 @@ void map_init(GameState *gs, int *start_x, int *start_y, int num_players)
         place_resource_patch(gs, cx, cy, TILE_BERRIES, 1, rrand(400, 600));
     }
 
+    /* Guarantee coastal access: a small lake a short sail from each
+       base (beyond the cleared start zone) so docks are always
+       buildable.  Placed before start clearing so the 5-tile clear
+       never eats into it. */
+    for (int i = 0; i < num_players; i++) {
+        int dirx = (start_x[i] < MAP_W / 2) ? 1 : -1;
+        int diry = (start_y[i] < MAP_H / 2) ? 1 : -1;
+        int lx = clampi(start_x[i] + dirx * 8, 6, MAP_W - 7);
+        int ly = clampi(start_y[i] + diry * 8, 6, MAP_H - 7);
+        place_water_body(gs, lx, ly, 4, 3);
+    }
+
+    /* Populate all water (natural lakes + guaranteed ones) with fish. */
+    stock_fish_shoals(gs, 16);
+
     /* Clear starter zones and place each player's guaranteed resources. */
     for (int i = 0; i < num_players; i++) {
         clear_zone(gs, start_x[i], start_y[i], 5);
@@ -392,19 +488,22 @@ static void reveal_circle(GameState *gs, int center_x, int center_y,
     }
 }
 
-void map_update_fog(GameState *gs)
+/* Parallel-for jobs: rows are disjoint between chunks, and the
+   reveal pass partitions by player so each thread only touches
+   its own fog[p] bytes — results are scheduling-independent. */
+static void fog_fill_visible_rows(int y0, int y1, void *ctx)
 {
-    /* Sandbox: everything always visible. */
-    if (gs->mode == GAME_MODE_SANDBOX) {
-        for (int y = 0; y < MAP_H; y++)
-            for (int x = 0; x < MAP_W; x++)
-                for (int p = 0; p < NUM_PLAYERS; p++)
-                    gs->map[y][x].fog[p] = FOG_VISIBLE;
-        return;
-    }
+    GameState *gs = ctx;
+    for (int y = y0; y < y1; y++)
+        for (int x = 0; x < MAP_W; x++)
+            for (int p = 0; p < NUM_PLAYERS; p++)
+                gs->map[y][x].fog[p] = FOG_VISIBLE;
+}
 
-    /* Demote VISIBLE → EXPLORED (fog re-covers unseen tiles). */
-    for (int y = 0; y < MAP_H; y++) {
+static void fog_demote_rows(int y0, int y1, void *ctx)
+{
+    GameState *gs = ctx;
+    for (int y = y0; y < y1; y++) {
         for (int x = 0; x < MAP_W; x++) {
             for (int p = 0; p < NUM_PLAYERS; p++) {
                 if (gs->map[y][x].fog[p] == FOG_VISIBLE) {
@@ -413,24 +512,45 @@ void map_update_fog(GameState *gs)
             }
         }
     }
+}
 
-    /* Reveal tiles around each active unit. */
-    for (int i = 0; i < MAX_UNITS; i++) {
-        Unit *unit = &gs->units[i];
-        if (!unit->active || unit->state == US_DEAD) continue;
-        int ux = (int)(unit->wx / TILE_SIZE);
-        int uy = (int)(unit->wy / TILE_SIZE);
-        reveal_circle(gs, ux, uy, (int)unit->vision_range, unit->player);
+static void fog_reveal_players(int p0, int p1, void *ctx)
+{
+    GameState *gs = ctx;
+    for (int p = p0; p < p1; p++) {
+        /* Reveal tiles around each of this player's active units. */
+        for (int i = 0; i < MAX_UNITS; i++) {
+            Unit *unit = &gs->units[i];
+            if (!unit->active || unit->player != p || unit->state == US_DEAD) continue;
+            int ux = (int)(unit->wx / TILE_SIZE);
+            int uy = (int)(unit->wy / TILE_SIZE);
+            reveal_circle(gs, ux, uy, (int)unit->vision_range, p);
+        }
+
+        /* Reveal tiles around each of this player's completed buildings. */
+        for (int i = 0; i < MAX_BUILDINGS; i++) {
+            Building *bld = &gs->buildings[i];
+            if (!bld->active || bld->player != p || !bld->complete) continue;
+            int bx = bld->tx + bld->tw / 2;
+            int by = bld->ty + bld->th / 2;
+            reveal_circle(gs, bx, by, BUILDING_VISION_RANGE, p);
+        }
+    }
+}
+
+void map_update_fog(GameState *gs)
+{
+    /* Sandbox: everything always visible. */
+    if (gs->mode == GAME_MODE_SANDBOX) {
+        tp_parallel_for(MAP_H, fog_fill_visible_rows, gs);
+        return;
     }
 
-    /* Reveal tiles around each completed building. */
-    for (int i = 0; i < MAX_BUILDINGS; i++) {
-        Building *bld = &gs->buildings[i];
-        if (!bld->active || !bld->complete) continue;
-        int bx = bld->tx + bld->tw / 2;
-        int by = bld->ty + bld->th / 2;
-        reveal_circle(gs, bx, by, BUILDING_VISION_RANGE, bld->player);
-    }
+    /* Demote VISIBLE → EXPLORED (fog re-covers unseen tiles). */
+    tp_parallel_for(MAP_H, fog_demote_rows, gs);
+
+    /* Reveal around units and buildings, one fog channel per job item. */
+    tp_parallel_for(NUM_PLAYERS, fog_reveal_players, gs);
 }
 
 /* ── Resource search ───────────────────────────────────────── */
@@ -506,21 +626,25 @@ int map_find_dropoff(GameState *gs, int player, ResType res,
     return found;
 }
 
-int map_find_passable_near(GameState *gs, int tx, int ty, int *out_x, int *out_y)
+int map_find_passable_near_dom(GameState *gs, int tx, int ty, bool water,
+                               int *out_x, int *out_y)
 {
-    if (map_is_passable(gs, tx, ty)) {
+    if (map_is_passable_dom(gs, tx, ty, water)) {
         *out_x = tx;
         *out_y = ty;
         return 1;
     }
 
-    /* Expand outward in rings until a passable tile is found. */
-    for (int radius = 1; radius < 3; radius++) {
+    /* Expand outward in rings until a passable tile is found.  Ships
+       get a wider search so a click near the shoreline still snaps
+       to open water. */
+    int max_radius = water ? 6 : 3;
+    for (int radius = 1; radius < max_radius; radius++) {
         for (int dy = -radius; dy <= radius; dy++) {
             for (int dx = -radius; dx <= radius; dx++) {
                 if (abs(dx) != radius && abs(dy) != radius) continue;
                 int nx = tx + dx, ny = ty + dy;
-                if (map_is_passable(gs, nx, ny)) {
+                if (map_is_passable_dom(gs, nx, ny, water)) {
                     *out_x = nx;
                     *out_y = ny;
                     return 1;
@@ -529,4 +653,9 @@ int map_find_passable_near(GameState *gs, int tx, int ty, int *out_x, int *out_y
         }
     }
     return 0;
+}
+
+int map_find_passable_near(GameState *gs, int tx, int ty, int *out_x, int *out_y)
+{
+    return map_find_passable_near_dom(gs, tx, ty, false, out_x, out_y);
 }

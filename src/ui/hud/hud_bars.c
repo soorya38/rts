@@ -334,8 +334,13 @@ static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_s
         }
     }
 
-    /* Generate button */
-    if (draw_button("Generate Map", gen_btn_x, gen_btn_y, bw, bh, ui->osm_location[0] != '\0')) {
+    /* Generate button — generation runs on a background thread
+       (see game_osm_start_async); main.c applies the result. */
+    bool osm_busy = (game_osm_status() == OSM_JOB_RUNNING);
+    (void)gs;
+    if (draw_button(osm_busy ? "Generating..." : "Generate Map",
+                    gen_btn_x, gen_btn_y, bw, bh,
+                    ui->osm_location[0] != '\0' && !osm_busy)) {
         /* Unload previous OSM tile textures */
         if (ui->osm_tiles_loaded > 0) {
             for (int r = 0; r < 4; r++)
@@ -345,7 +350,7 @@ static void draw_sandbox_tools(GameState *gs, UIState *ui, int panel_w, int by_s
             ui->osm_tiles_loaded = 0;
             memset(ui->tex_osm_tiles, 0, sizeof(ui->tex_osm_tiles));
         }
-        game_init_osm(gs, (uint32_t)time(NULL), ui->osm_location);
+        game_osm_start_async((uint32_t)time(NULL), ui->osm_location);
     }
 }
 
@@ -710,6 +715,27 @@ void draw_bottom_panel(GameState *gs, UIState *ui){
                         pkt.target_id = ui->sel_building; pkt.extra = UNIT_SPEARMAN;
                         net_dispatch_packet(gs, &pkt);
                     } else building_enqueue_unit(gs,b,UNIT_SPEARMAN);
+                }
+                break;
+            }
+            case BLD_DOCK: {
+                int bw2=(int)(96*sc);
+                prefer_side_tech_grid = true;
+                train_area_right = bx + 2*bw2 + btn_gap;
+                if(draw_button("Fishing Ship\n75W",bx,bby,bw2,btn_h,can_queue_unit_now(gs,b,lp,UNIT_FISHING_SHIP))) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_FISHING_SHIP;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_FISHING_SHIP);
+                }
+                if(gs->res[lp].age>=1&&draw_button("War Galley\n90W 30G",bx+bw2+btn_gap,bby,bw2,btn_h,
+                    can_queue_unit_now(gs,b,lp,UNIT_WAR_GALLEY))) {
+                    if (g_net_active) {
+                        NetPacket pkt = {0}; pkt.type = PKT_TRAIN_UNIT; pkt.player = lp;
+                        pkt.target_id = ui->sel_building; pkt.extra = UNIT_WAR_GALLEY;
+                        net_dispatch_packet(gs, &pkt);
+                    } else building_enqueue_unit(gs,b,UNIT_WAR_GALLEY);
                 }
                 break;
             }

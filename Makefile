@@ -1,5 +1,7 @@
 CC      = gcc
-CFLAGS  = -std=c11 -Wall -Wextra -O3 -ffast-math -g
+# -ffp-contract=off (and no -ffast-math): float results must be
+# bit-identical across platforms for lockstep multiplayer.
+CFLAGS  = -std=c11 -Wall -Wextra -O3 -ffp-contract=off -g -pthread
 DEFINES = -DRTS_HAS_CURL=1
 TARGET  = rts
 

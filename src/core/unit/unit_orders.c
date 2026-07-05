@@ -6,6 +6,7 @@
  * formation calculations, and all unit_give_*_order functions.
  *=============================================================*/
 #include "game.h"
+#include "threadpool.h"
 
 /* Map tile type to the resource it yields when gathered. */
 static ResType tile_to_resource(TileType tile_type)
@@ -176,6 +177,8 @@ static const UnitStats STATS[UNIT_COUNT] = {
     /*MANGONEL*/    {60, 35, 0, 7.0f, 8.0f,  58.0f, 4.5f,  0},
     /*SCORPION*/    {55, 16, 1, 6.0f, 8.0f,  62.0f, 3.1f,  0},
     /*BOMBARD*/     {75, 42, 1, 8.5f, 9.0f,  56.0f, 5.0f,  0},
+    /*FISHING_SHIP*/{60,  0, 0, 1.3f, 6.0f,  85.0f, 2.0f, 15},
+    /*WAR_GALLEY*/  {135, 7, 1, 6.0f, 8.0f,  95.0f, 2.4f,  0},
 };
 
 static bool unit_is_infantry(UnitType t){
@@ -498,17 +501,18 @@ static void clear_unit_targets(Unit *unit)
 
 void unit_give_move_order(GameState *gs, Unit *unit, int tx, int ty)
 {
+    bool water = unit_is_ship(unit->type);
     int move_tx = tx;
     int move_ty = ty;
-    if (!map_find_passable_near(gs, tx, ty, &move_tx, &move_ty)) {
+    if (!map_find_passable_near_dom(gs, tx, ty, water, &move_tx, &move_ty)) {
         clear_unit_targets(unit);
         return;
     }
 
     int src_tx = (int)(unit->wx / TILE_SIZE);
     int src_ty = (int)(unit->wy / TILE_SIZE);
-    unit->path_len = pathfind(gs, src_tx, src_ty, move_tx, move_ty,
-                              unit->path, ASTAR_PATH_CAP);
+    unit->path_len = pathfind_dom(gs, src_tx, src_ty, move_tx, move_ty,
+                                  unit->path, ASTAR_PATH_CAP, water);
     unit->path_idx    = 0;
     unit->state       = (unit->path_len > 0) ? US_MOVING : US_IDLE;
     unit->target_unit = -1;
@@ -517,8 +521,60 @@ void unit_give_move_order(GameState *gs, Unit *unit, int tx, int ty)
     unit->gather_tx   = -1;
 }
 
+/* ── Batched group move ───────────────────────────────────────
+ * Issuing a move order to a large selection runs one A* search
+ * per unit in a single frame — the biggest frame spike in the
+ * game.  Each search only reads the map and writes its own
+ * unit's fields (pathfind's workspace is thread-local), so the
+ * batch fans out across the pool.  Per-unit results depend only
+ * on that unit's inputs, keeping the sim deterministic. */
+typedef struct {
+    GameState      *gs;
+    const int      *unit_ids;
+    const PathCell *dests;  /* one destination per unit */
+} MoveBatchCtx;
+
+static void move_batch_range(int start, int end, void *ctx)
+{
+    MoveBatchCtx *mb = ctx;
+    for (int i = start; i < end; i++) {
+        unit_give_move_order(mb->gs, &mb->gs->units[mb->unit_ids[i]],
+                             mb->dests[i].x, mb->dests[i].y);
+    }
+}
+
+void unit_give_move_orders_batch(GameState *gs, const int *unit_ids,
+                                 const PathCell *dests, int count)
+{
+    MoveBatchCtx ctx = { gs, unit_ids, dests };
+    if (count >= 8) {
+        tp_parallel_for(count, move_batch_range, &ctx);
+    } else {
+        move_batch_range(0, count, &ctx);
+    }
+}
+
 void unit_give_gather_order(GameState *gs, Unit *unit, int tx, int ty)
 {
+    /* Fishing ships gather food from fish (water tiles with stock),
+       routing over water and standing on the fish tile itself. */
+    if (unit_is_ship(unit->type)) {
+        if (unit->type != UNIT_FISHING_SHIP) return;
+        if (!map_in_bounds(tx, ty)) return;
+        unit->carry_type = RES_FOOD;
+        unit->gather_tx = tx;
+        unit->gather_ty = ty;
+        int src_tx = (int)(unit->wx / TILE_SIZE);
+        int src_ty = (int)(unit->wy / TILE_SIZE);
+        unit->path_len = pathfind_dom(gs, src_tx, src_ty, tx, ty,
+                                      unit->path, ASTAR_PATH_CAP, true);
+        unit->path_idx    = 0;
+        unit->state       = (unit->path_len > 0) ? US_MOVING : US_GATHERING;
+        unit->target_unit = -1;
+        unit->target_bld  = -1;
+        return;
+    }
+
     if (unit->type != UNIT_VILLAGER) return;
 
     /* Discard carried resources when switching to a different type. */
@@ -596,10 +652,11 @@ void unit_give_attack_order(GameState *gs, Unit *unit,
     unit->build_id    = -1;
     unit->anim_timer  = 1.0f;  /* Allow immediate re-pathfinding. */
 
+    bool water = unit_is_ship(unit->type);
     int dest_tx, dest_ty;
 
     if (target_unit_id >= 0) {
-        /* Pathfind to a tile adjacent to the target unit. */
+        /* Pathfind to a tile adjacent to the target (in our domain). */
         Unit *target = &gs->units[target_unit_id];
         int enemy_tx = (int)(target->wx / TILE_SIZE);
         int enemy_ty = (int)(target->wy / TILE_SIZE);
@@ -613,7 +670,7 @@ void unit_give_attack_order(GameState *gs, Unit *unit,
             for (int dx = -1; dx <= 1; dx++) {
                 int nx = enemy_tx + dx, ny = enemy_ty + dy;
                 if (nx == enemy_tx && ny == enemy_ty) continue;
-                if (!map_in_bounds(nx, ny) || !map_is_passable(gs, nx, ny)) continue;
+                if (!map_in_bounds(nx, ny) || !map_is_passable_dom(gs, nx, ny, water)) continue;
                 int d = (nx - src_tx) * (nx - src_tx) + (ny - src_ty) * (ny - src_ty);
                 if (d < best_dist_sq) {
                     best_dist_sq = d;
@@ -622,12 +679,33 @@ void unit_give_attack_order(GameState *gs, Unit *unit,
                 }
             }
         }
+        /* A ship that can't reach the target's tile (e.g. a land
+           unit inland) still closes to the nearest open water and
+           relies on ranged fire once in range. */
+        if (water && best_dist_sq == 99999 &&
+            !map_find_passable_near_dom(gs, enemy_tx, enemy_ty, true, &dest_tx, &dest_ty)) {
+            unit->path_len = 0;
+            unit->path_idx = 0;
+            unit->state    = US_ATTACKING;
+            return;
+        }
     } else if (target_bld_id >= 0) {
-        /* Pathfind to nearest passable tile adjacent to the building. */
         Building *bld = &gs->buildings[target_bld_id];
-        int adj_x, adj_y;
-        find_adjacent_tile(gs, bld->tx, bld->ty, bld->tw, bld->th,
-                           unit->wx, unit->wy, &adj_x, &adj_y);
+        int adj_x = -1, adj_y = -1;
+        if (water) {
+            /* Nearest open-water tile bordering the building. */
+            long best = -1;
+            for (int dy = -1; dy <= bld->th; dy++)
+                for (int dx = -1; dx <= bld->tw; dx++) {
+                    int nx = bld->tx + dx, ny = bld->ty + dy;
+                    if (!map_tile_is_water(gs, nx, ny)) continue;
+                    long d = (long)(nx*TILE_SIZE - (int)unit->wx)*(nx*TILE_SIZE - (int)unit->wx);
+                    if (best < 0 || d < best) { best = d; adj_x = nx; adj_y = ny; }
+                }
+        } else {
+            find_adjacent_tile(gs, bld->tx, bld->ty, bld->tw, bld->th,
+                               unit->wx, unit->wy, &adj_x, &adj_y);
+        }
         if (adj_x < 0) {
             unit->path_len = 0;
             unit->path_idx = 0;
@@ -643,8 +721,8 @@ void unit_give_attack_order(GameState *gs, Unit *unit,
 
     int src_tx = (int)(unit->wx / TILE_SIZE);
     int src_ty = (int)(unit->wy / TILE_SIZE);
-    unit->path_len = pathfind(gs, src_tx, src_ty, dest_tx, dest_ty,
-                              unit->path, ASTAR_PATH_CAP);
+    unit->path_len = pathfind_dom(gs, src_tx, src_ty, dest_tx, dest_ty,
+                                  unit->path, ASTAR_PATH_CAP, water);
     unit->path_idx = 0;
     unit->state    = (unit->path_len > 0) ? US_MOVING : US_ATTACKING;
 }

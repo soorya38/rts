@@ -42,6 +42,12 @@ static float octile_heuristic(int ax, int ay, int bx, int by)
 int pathfind(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
              PathCell *out, int max_len)
 {
+    return pathfind_dom(gs, start_x, start_y, goal_x, goal_y, out, max_len, false);
+}
+
+int pathfind_dom(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
+                 PathCell *out, int max_len, bool water)
+{
     if (!map_in_bounds(start_x, start_y) || !map_in_bounds(goal_x, goal_y)) {
         return 0;
     }
@@ -49,10 +55,11 @@ int pathfind(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
         return 0;
     }
 
-    /* Static workspace avoids per-call heap allocation and stack overflow. */
-    static float  cost_so_far[GRID_CELL_COUNT];
-    static int    came_from[GRID_CELL_COUNT];
-    static bool   visited[GRID_CELL_COUNT];
+    /* Static workspace avoids per-call heap allocation and stack overflow.
+       _Thread_local so pathfind() is safe to call from worker threads. */
+    static _Thread_local float  cost_so_far[GRID_CELL_COUNT];
+    static _Thread_local int    came_from[GRID_CELL_COUNT];
+    static _Thread_local bool   visited[GRID_CELL_COUNT];
 
     for (int i = 0; i < GRID_CELL_COUNT; i++) {
         cost_so_far[i] = 1e30f;
@@ -62,7 +69,7 @@ int pathfind(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
 
     /* PriorityQueue is ~64 KB — must be static for the same
        stack-safety reason noted above. */
-    static PriorityQueue open_set;
+    static _Thread_local PriorityQueue open_set;
     pq_init(&open_set);
 
     int start_cell = start_y * MAP_W + start_x;
@@ -96,13 +103,13 @@ int pathfind(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
             /* Diagonal moves require both adjacent orthogonal
                tiles to be passable (no corner-cutting). */
             if (dir >= FIRST_DIAGONAL_DIR) {
-                bool side_a = map_is_passable(gs, cell_x + DIRECTION_DX[dir], cell_y);
-                bool side_b = map_is_passable(gs, cell_x, cell_y + DIRECTION_DY[dir]);
+                bool side_a = map_is_passable_dom(gs, cell_x + DIRECTION_DX[dir], cell_y, water);
+                bool side_b = map_is_passable_dom(gs, cell_x, cell_y + DIRECTION_DY[dir], water);
                 if (!side_a || !side_b) continue;
             }
 
             /* Goal tile doesn't need to be passable (attack/gather target). */
-            if (neighbor_cell != goal_cell && !map_is_passable(gs, neighbor_x, neighbor_y)) {
+            if (neighbor_cell != goal_cell && !map_is_passable_dom(gs, neighbor_x, neighbor_y, water)) {
                 continue;
             }
 
@@ -122,7 +129,7 @@ int pathfind(GameState *gs, int start_x, int start_y, int goal_x, int goal_y,
         return 0; /* No path found */
     }
 
-    static int reversed_path[GRID_CELL_COUNT];
+    static _Thread_local int reversed_path[GRID_CELL_COUNT];
     int path_length = 0;
 
     for (int cell = goal_cell;

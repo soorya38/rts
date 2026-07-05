@@ -461,6 +461,11 @@ void ui_state_init(UIState *ui, GameState *gs) {
   ui->tex_env_trees[3] = load_game_texture("assets/buildings/tamil_tree_3.png");
   ui->tex_env_trees[4] = load_game_texture("assets/env/tree.png");
 
+  ui->tex_buildings[BLD_FARM] = load_game_texture("assets/buildings/tamil_farm.png");
+  if (ui->tex_buildings[BLD_FARM].id == 0) {
+    ui->tex_buildings[BLD_FARM] = load_game_texture("assets/buildings/farm.png");
+  }
+
   ui_load_hero_audio(ui);
 }
 

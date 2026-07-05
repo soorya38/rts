@@ -7,6 +7,7 @@
  *=============================================================*/
 #include "game.h"
 #include "net.h"
+#include "threadpool.h"
 #include <stdio.h>
 
 static const float UNIT_PERSONAL_SPACE = 14.0f;
@@ -42,7 +43,7 @@ static void unit_step_path(Unit *u, float dt){
     
     float spd=u->move_speed*dt;
     if(spd>dist) spd=dist;
-    u->facing=atan2f(dy,dx);
+    u->facing=det_atan2f(dy,dx);
     u->wx+=(dx/dist)*spd;
     u->wy+=(dy/dist)*spd;
 }
@@ -63,8 +64,8 @@ static void resolve_unit_overlap(GameState *gs, Unit *a, Unit *b){
     if(dist < 0.001f){
         /* Deterministic nudge if two units land on the exact same point. */
         float angle = (float)(((a->id * 37 + b->id * 17) % 360) * (3.14159265f / 180.0f));
-        dx = cosf(angle);
-        dy = sinf(angle);
+        dx = det_cosf(angle);
+        dy = det_sinf(angle);
         dist = 1.0f;
     } else {
         dx /= dist;
@@ -183,6 +184,94 @@ static int villager_effective_carry_cap(GameState *gs, Unit *u, ResType rt){
         if(pr->tech_unlocked[TECH_HARDWOOD_CARTS]) cap += 2;
     }
     return cap;
+}
+
+/* ─── Naval fishing ──────────────────────────────────────────
+ * Fishing ships mirror the villager gather/return loop but move on
+ * water and deliver food to the nearest dock instead of a land
+ * drop-off. */
+static bool find_fish_tile(GameState *gs, float fx, float fy, int *ox, int *oy){
+    int ux=(int)(fx/TILE_SIZE), uy=(int)(fy/TILE_SIZE);
+    long best=-1; int bx=0,by=0;
+    for(int y=0;y<MAP_H;y++) for(int x=0;x<MAP_W;x++){
+        if(gs->map[y][x].type!=TILE_WATER || gs->map[y][x].resource_amt<=0) continue;
+        long d=(long)(x-ux)*(x-ux)+(long)(y-uy)*(y-uy);
+        if(best<0 || d<best){ best=d; bx=x; by=y; }
+    }
+    if(best<0) return false;
+    *ox=bx; *oy=by; return true;
+}
+
+/* Nearest water tile beside a completed dock owned by `player`. */
+static bool find_dock_water(GameState *gs, int player, float fx, float fy,
+                            int *ox, int *oy){
+    int ux=(int)(fx/TILE_SIZE), uy=(int)(fy/TILE_SIZE);
+    long best=-1; int bx=0,by=0;
+    for(int i=0;i<MAX_BUILDINGS;i++){
+        Building *b=&gs->buildings[i];
+        if(!b->active || !b->complete || b->player!=player || b->type!=BLD_DOCK) continue;
+        for(int dy=-1;dy<=b->th;dy++) for(int dx=-1;dx<=b->tw;dx++){
+            int nx=b->tx+dx, ny=b->ty+dy;
+            if(!map_tile_is_water(gs,nx,ny)) continue;
+            long d=(long)(nx-ux)*(nx-ux)+(long)(ny-uy)*(ny-uy);
+            if(best<0 || d<best){ best=d; bx=nx; by=ny; }
+        }
+    }
+    if(best<0) return false;
+    *ox=bx; *oy=by; return true;
+}
+
+static void unit_do_fish(GameState *gs, Unit *u, float dt){
+    if(!map_in_bounds(u->gather_tx,u->gather_ty)){ u->state=US_IDLE; return; }
+    Tile *t=&gs->map[u->gather_ty][u->gather_tx];
+
+    /* Fish exhausted here — look for another shoal. */
+    if(t->type!=TILE_WATER || t->resource_amt<=0){
+        int nx,ny;
+        if(find_fish_tile(gs,u->wx,u->wy,&nx,&ny)) unit_give_gather_order(gs,u,nx,ny);
+        else u->state=US_IDLE;
+        return;
+    }
+
+    int utx=(int)(u->wx/TILE_SIZE), uty=(int)(u->wy/TILE_SIZE);
+    if(abs(utx-u->gather_tx)>1 || abs(uty-u->gather_ty)>1){
+        unit_give_gather_order(gs,u,u->gather_tx,u->gather_ty);
+        if(u->state==US_GATHERING && u->path_len==0){ u->state=US_IDLE; }
+        return;
+    }
+
+    u->carry_type=RES_FOOD;
+    u->anim_timer += GATHER_RATE[RES_FOOD]*dt;
+    int gained=(int)u->anim_timer;
+    if(gained>0){
+        u->anim_timer-=gained;
+        if(gained>t->resource_amt) gained=t->resource_amt;
+        t->resource_amt-=gained;
+        u->carry_amt+=gained;
+        /* A depleted shoal reverts to plain water (still sailable). */
+    }
+    if(u->carry_amt >= u->carry_cap){
+        int dwx,dwy;
+        if(find_dock_water(gs,u->player,u->wx,u->wy,&dwx,&dwy)){
+            int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
+            u->path_len=pathfind_dom(gs,sx,sy,dwx,dwy,u->path,ASTAR_PATH_CAP,true);
+            u->path_idx=0;
+            if(u->path_len>0){ u->state=US_RETURNING; }
+            else { /* already docked: deposit now */
+                res_add(&gs->res[u->player],RES_FOOD,u->carry_amt);
+                u->carry_amt=0;
+            }
+        } else u->state=US_IDLE;
+    }
+}
+
+static void unit_do_fish_return(GameState *gs, Unit *u){
+    if(u->path_idx<u->path_len) return;
+    res_add(&gs->res[u->player],RES_FOOD,u->carry_amt);
+    u->carry_amt=0;
+    if(map_in_bounds(u->gather_tx,u->gather_ty))
+        unit_give_gather_order(gs,u,u->gather_tx,u->gather_ty);
+    else u->state=US_IDLE;
 }
 
 static void unit_do_gather(GameState *gs, Unit *u, float dt){
@@ -324,10 +413,9 @@ static void unit_do_build(GameState *gs, Unit *u, float dt){
     if(b->construction>=1.0f){
         extern void building_on_complete(GameState *gs, Building *b);
         building_on_complete(gs, b);
-        int old_cap = gs->res[b->player].pop_cap;
         gs->res[b->player].pop_cap=pop_cap_from_buildings(gs,b->player);
-        printf("Building completed for player %d: pop_cap %d -> %d\n", b->player, old_cap, gs->res[b->player].pop_cap);
-        
+
+
         // Auto-find nearest uncompleted foundation to continue building
         int next_bid = -1;
         float best_dist = 4.0f; // search up to a short distance (e.g. 4 tiles)
@@ -467,6 +555,63 @@ static int auto_find_enemy_building(GameState *gs, Unit *unit)
     return found;
 }
 
+/* ── Parallel auto-target acquisition ─────────────────────────
+ * The nearest-enemy scans are O(units²)/O(units×buildings) and
+ * read-only, so they run as a parallel pre-pass over the
+ * start-of-frame snapshot.  Each job item writes only its own
+ * cache slot, keeping the result scheduling-independent (the
+ * lockstep sim must stay deterministic).  The serial state
+ * machine below consumes the cache instead of rescanning. */
+static int auto_target_unit_cache[MAX_UNITS];
+static int auto_target_bld_cache[MAX_UNITS];
+
+static void auto_target_scan_range(int start, int end, void *ctx)
+{
+    GameState *gs = ctx;
+    for (int i = start; i < end; i++) {
+        Unit *u = &gs->units[i];
+        auto_target_unit_cache[i] = -1;
+        auto_target_bld_cache[i]  = -1;
+
+        if (!u->active || u->state == US_DEAD || u->state == US_DYING) continue;
+        if (u->stance_manual) continue;
+
+        /* Only states that would call the auto-find scans this frame. */
+        bool wants = (u->state == US_ATTACKING) ||
+                     (u->type != UNIT_VILLAGER && u->type != UNIT_SCOUT &&
+                      u->type != UNIT_MONK &&
+                      (u->state == US_IDLE ||
+                       (u->state == US_MOVING && u->attack_move)));
+        if (!wants) continue;
+
+        auto_target_unit_cache[i] = auto_find_enemy_unit(gs, u);
+        if (auto_target_unit_cache[i] < 0) {
+            auto_target_bld_cache[i] = auto_find_enemy_building(gs, u);
+        }
+    }
+}
+
+/* Cache reads re-validate because earlier units in the serial
+   pass may have killed or converted the cached target. */
+static int cached_enemy_unit(GameState *gs, Unit *u)
+{
+    int t = auto_target_unit_cache[u->id];
+    if (t < 0) return -1;
+    Unit *e = &gs->units[t];
+    if (!e->active || e->player == u->player ||
+        e->state == US_DEAD || e->state == US_DYING) return -1;
+    return t;
+}
+
+static int cached_enemy_building(GameState *gs, Unit *u)
+{
+    int t = auto_target_bld_cache[u->id];
+    if (t < 0) return -1;
+    Building *b = &gs->buildings[t];
+    if (!b->active || b->player == u->player || !b->complete) return -1;
+    return t;
+}
+
 static void unit_do_attack(GameState *gs,Unit *u,float dt){
     u->attack_timer-=dt;
     if(u->target_unit>=0){
@@ -478,8 +623,8 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
     }
     if(u->target_unit<0&&u->target_bld<0){
         if(!u->stance_manual) {
-            u->target_unit=auto_find_enemy_unit(gs,u);
-            if(u->target_unit<0) u->target_bld=auto_find_enemy_building(gs,u);
+            u->target_unit=cached_enemy_unit(gs,u);
+            if(u->target_unit<0) u->target_bld=cached_enemy_building(gs,u);
         }
         if(u->target_unit<0&&u->target_bld<0){u->state=US_IDLE;return;}
     }
@@ -498,6 +643,7 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
 
         if(allow_repath){
             u->anim_timer = 0.0f;   /* reset cooldown */
+            bool water = unit_is_ship(u->type);
             int tx,ty;
             if(u->target_unit>=0){
                 Unit *t=&gs->units[u->target_unit];
@@ -507,7 +653,7 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                 static const int SDY[8]={-1,-1,-1,0,0,1,1,1};
                 int slot = u->id % 8;
                 int try_tx = etx + SDX[slot], try_ty = ety + SDY[slot];
-                if(map_in_bounds(try_tx,try_ty) && map_is_passable(gs,try_tx,try_ty)){
+                if(map_in_bounds(try_tx,try_ty) && map_is_passable_dom(gs,try_tx,try_ty,water)){
                     tx=try_tx; ty=try_ty;
                 } else {
                     tx=etx; ty=ety;
@@ -524,7 +670,7 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                     int nx=b->tx+dx, ny=b->ty+dy;
                     if(nx>=b->tx&&nx<b->tx+b->tw&&ny>=b->ty&&ny<b->ty+b->th) continue;
                     if(!map_in_bounds(nx,ny)) continue;
-                    if(!map_is_passable(gs,nx,ny)) continue;
+                    if(!map_is_passable_dom(gs,nx,ny,water)) continue;
                     int d=(nx-utx)*(nx-utx)+(ny-uty)*(ny-uty);
                     int effective_d = (idx == skip) ? -1 : d;
                     if(effective_d<best_d){best_d=effective_d;bx=nx;by=ny;}
@@ -533,7 +679,7 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                 if(bx<0){tx=b->tx;ty=b->ty;} else {tx=bx;ty=by;}
             }
             int sx=(int)(u->wx/TILE_SIZE),sy=(int)(u->wy/TILE_SIZE);
-            u->path_len=pathfind(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP);
+            u->path_len=pathfind_dom(gs,sx,sy,tx,ty,u->path,ASTAR_PATH_CAP,water);
             u->path_idx=0;
 
             /* If still blocked after repath, try to attack from current position
@@ -554,8 +700,8 @@ static void unit_do_attack(GameState *gs,Unit *u,float dt){
                         for(int dx2 = -r; dx2 <= r && !escaped; dx2++){
                             if(abs(dx2)!=r && abs(dy2)!=r) continue;
                             int nx2 = cx+dx2, ny2 = cy+dy2;
-                            if(!map_is_passable(gs,nx2,ny2)) continue;
-                            u->path_len = pathfind(gs,sx,sy,nx2,ny2,u->path,ASTAR_PATH_CAP);
+                            if(!map_is_passable_dom(gs,nx2,ny2,water)) continue;
+                            u->path_len = pathfind_dom(gs,sx,sy,nx2,ny2,u->path,ASTAR_PATH_CAP,water);
                             u->path_idx = 0;
                             if(u->path_len > 0){ escaped = true; }
                         }
@@ -671,20 +817,20 @@ void unit_update(GameState *gs, Unit *u, float dt){
                 break;
             }
             if(!u->stance_manual && u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
-                int e=auto_find_enemy_unit(gs,u);
+                int e=cached_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
                 else {
-                    int b=auto_find_enemy_building(gs,u);
+                    int b=cached_enemy_building(gs,u);
                     if(b>=0){u->target_bld=b;u->state=US_ATTACKING;}
                 }
             }
             break;
         case US_MOVING:
             if(u->attack_move && !u->stance_manual && u->type!=UNIT_VILLAGER&&u->type!=UNIT_SCOUT){
-                int e=auto_find_enemy_unit(gs,u);
+                int e=cached_enemy_unit(gs,u);
                 if(e>=0){u->target_unit=e;u->state=US_ATTACKING;}
                 else {
-                    int b=auto_find_enemy_building(gs,u);
+                    int b=cached_enemy_building(gs,u);
                     if(b>=0){u->target_bld=b;u->state=US_ATTACKING;}
                 }
             }
@@ -695,8 +841,14 @@ void unit_update(GameState *gs, Unit *u, float dt){
                 else                           { u->state=US_IDLE; u->attack_move = false; }
             }
             break;
-        case US_GATHERING: unit_do_gather(gs,u,dt); break;
-        case US_RETURNING: unit_do_return(gs,u);    break;
+        case US_GATHERING:
+            if(unit_is_ship(u->type)) unit_do_fish(gs,u,dt);
+            else                      unit_do_gather(gs,u,dt);
+            break;
+        case US_RETURNING:
+            if(unit_is_ship(u->type)) unit_do_fish_return(gs,u);
+            else                      unit_do_return(gs,u);
+            break;
         case US_BUILDING:  unit_do_build(gs,u,dt);  break;
         case US_ATTACKING: unit_do_attack(gs,u,dt); break;
         default: break;
@@ -704,6 +856,20 @@ void unit_update(GameState *gs, Unit *u, float dt){
 }
 
 void units_update_all(GameState *gs, float dt){
+    /* Read-only target pre-pass; see auto_target_scan_range.
+       Slots at or above the unit high-water mark are never read,
+       so the scan only needs to cover [0, unit_count).  The scan
+       is O(unit_count²), so below the threshold the pool dispatch
+       costs more than the work — run it inline instead. */
+    if (gs->unit_count >= TP_UNIT_SCAN_THRESHOLD) {
+        tp_parallel_for(gs->unit_count, auto_target_scan_range, gs);
+    } else {
+        auto_target_scan_range(0, gs->unit_count, gs);
+    }
+
+    /* State machine stays serial: it mutates shared state
+       (damage, resources, tiles) in index order, which the
+       deterministic lockstep sim depends on. */
     for(int i=0;i<MAX_UNITS;i++) unit_update(gs,&gs->units[i],dt);
     unit_apply_separation(gs);
 }

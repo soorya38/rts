@@ -184,7 +184,7 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         } else {
             game_damage_unit(gs, target_unit, final_dmg);
         }
-        gs->hero.shake = 0.15f; // Small recoil
+        gs->hero.shake = HERO_RECOIL_SHAKE; // Small recoil
     } else if (target_bld >= 0) {
         Building *b = &gs->buildings[target_bld];
         int final_dmg = dmg + (ranged ? 0 : 2);
@@ -201,7 +201,7 @@ static void hero_perform_attack(GameState *gs, UIState *ui, Unit *u) {
         } else {
             game_damage_building(gs, target_bld, final_dmg);
         }
-        gs->hero.shake = 0.15f; // Small recoil
+        gs->hero.shake = HERO_RECOIL_SHAKE; // Small recoil
     } else {
         if (ranged) {
             float spawn_x = u->wx + cosf(gs->hero.yaw) * TILE_SIZE * 0.5f;
@@ -359,7 +359,7 @@ static void update_build_mode(GameState *gs, UIState *ui) {
     int lp = net_get_local_player();
     tx -= tw / 2; ty -= th / 2;
     gs->build_mode.ghost_tx = tx; gs->build_mode.ghost_ty = ty;
-    gs->build_mode.valid = map_is_buildable(gs, tx, ty, tw, th) &&
+    gs->build_mode.valid = map_buildable_for(gs, gs->build_mode.type, tx, ty, tw, th) &&
                            res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type));
 
     bool is_wall = building_is_walllike(gs->build_mode.type);
@@ -394,7 +394,7 @@ static void update_build_mode(GameState *gs, UIState *ui) {
 
         for (int p = 0; p < pt_count; p++) {
             int cx = pts_x[p], cy = pts_y[p];
-            if (!map_is_buildable(gs, cx, cy, tw, th) || !res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type))) {
+            if (!map_buildable_for(gs, gs->build_mode.type, cx, cy, tw, th) || !res_can_afford(&gs->res[lp], building_cost(gs->build_mode.type))) {
                 continue;
             }
 
@@ -583,7 +583,11 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         if (IsKeyPressed(KEY_M)) qt = BLD_MILL;
         if (IsKeyPressed(KEY_L)) qt = BLD_LUMBER_CAMP;
         if (IsKeyPressed(KEY_N)) qt = BLD_MINING_CAMP;
-        if (IsKeyPressed(KEY_F)) qt = BLD_FARM;
+        if (IsKeyPressed(KEY_F)) {
+            if (building_prereq_met(gs, lp, BLD_FARM)) qt = BLD_FARM;
+            else game_set_alert(gs, "Farm requires a completed Mill!");
+        }
+        if (IsKeyPressed(KEY_D)) qt = BLD_DOCK;
         if (IsKeyPressed(KEY_T) && cur_age >= 1) qt = BLD_WATCH_TOWER;
         if (IsKeyPressed(KEY_O) && cur_age >= 2) qt = BLD_MONASTERY;
         if (IsKeyPressed(KEY_I) && cur_age >= 2) qt = BLD_SIEGE_WORKSHOP;
@@ -683,20 +687,6 @@ static void update_hotkeys(GameState *gs, UIState *ui) {
         } else {
             game_set_alert(gs, "No military units available.");
         }
-    }
-
-    /* ── Game speed controls (+/- keys) ──────────────────────── */
-    if (IsKeyPressed(KEY_EQUAL) || IsKeyPressed(KEY_KP_ADD)) {  /* + key */
-        gs->game_speed = clampf(gs->game_speed + 0.5f, 0.5f, 3.0f);
-        char msg[32];
-        snprintf(msg, sizeof(msg), "Speed: %.1fx", gs->game_speed);
-        game_set_alert(gs, msg);
-    }
-    if (IsKeyPressed(KEY_MINUS) || IsKeyPressed(KEY_KP_SUBTRACT)) {  /* - key */
-        gs->game_speed = clampf(gs->game_speed - 0.5f, 0.5f, 3.0f);
-        char msg[32];
-        snprintf(msg, sizeof(msg), "Speed: %.1fx", gs->game_speed);
-        game_set_alert(gs, msg);
     }
 
     /* ── Attack-move (A key when military selected, not building) ── */

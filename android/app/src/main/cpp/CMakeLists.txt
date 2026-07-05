@@ -48,8 +48,9 @@ target_compile_definitions(rts PRIVATE
     PLATFORM_ANDROID=1   # explicit platform flag for our ifdefs
 )
 
-# Aggressive optimization for mobile performance
-target_compile_options(rts PRIVATE -O3 -ffast-math)
+# -ffp-contract=off (and no -ffast-math): float results must be
+# bit-identical across platforms for lockstep multiplayer.
+target_compile_options(rts PRIVATE -O3 -ffp-contract=off)
 
 
 # ──────────────────────────────────────────────────────────────
