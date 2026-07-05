@@ -16,7 +16,10 @@ android {
                 cppFlags ""
                 cFlags "-O3 -ffp-contract=off"
                 arguments "-DPLATFORM=Android", "-DANDROID_PLATFORM=android-24"
-                abiFilters 'arm64-v8a', 'armeabi-v7a'
+                /* arm64-v8a only: covers all modern devices (Play Store
+                   requires 64-bit) and avoids Raylib's stb fp16 NEON
+                   intrinsics that don't compile on 32-bit armeabi-v7a. */
+                abiFilters 'arm64-v8a'
             }
         }
     }

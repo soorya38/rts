@@ -24,7 +24,24 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
-#include <unistd.h>
+
+/* Online CPU count: POSIX sysconf isn't available on Windows. */
+#ifdef _WIN32
+  #define WIN32_LEAN_AND_MEAN
+  #include <windows.h>
+  static int tp_cpu_count(void) {
+      SYSTEM_INFO si;
+      GetSystemInfo(&si);
+      int n = (int)si.dwNumberOfProcessors;
+      return n > 0 ? n : 1;
+  }
+#else
+  #include <unistd.h>
+  static int tp_cpu_count(void) {
+      long n = sysconf(_SC_NPROCESSORS_ONLN);
+      return n > 0 ? (int)n : 1;
+  }
+#endif
 
 #define TP_MAX_WORKERS 8
 
@@ -135,8 +152,8 @@ static pthread_once_t tp_once = PTHREAD_ONCE_INIT;
 
 static void tp_init(void)
 {
-    long cores = sysconf(_SC_NPROCESSORS_ONLN);
-    int wanted = (int)cores - 1;  /* the calling thread is a lane too */
+    int cores = tp_cpu_count();
+    int wanted = cores - 1;  /* the calling thread is a lane too */
     if (wanted > TP_MAX_WORKERS) wanted = TP_MAX_WORKERS;
 
     /* RTS_THREADS caps total lanes (workers + caller);
